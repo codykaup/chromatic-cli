@@ -520,6 +520,7 @@ describe('getDependentStoryFiles', () => {
     expect(result).toBeUndefined();
     expect(ctx.turboSnap.bailReason).toEqual({
       changedStorybookFiles: ['path/to/storybook-config/file.js'],
+      bailSubreason: 'configFileChanged',
     });
     expect(ctx.log.warn).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -569,6 +570,7 @@ describe('getDependentStoryFiles', () => {
     expect(result).toBeUndefined();
     expect(ctx.turboSnap.bailReason).toEqual({
       changedStorybookFiles: ['path/to/storybook-config/preview.js'],
+      bailSubreason: 'configFileChanged',
     });
     expect(ctx.log.warn).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -596,6 +598,8 @@ describe('getDependentStoryFiles', () => {
     expect(result).toBeUndefined();
     expect(ctx.turboSnap.bailReason).toEqual({
       changedStorybookFiles: ['path/to/storybook-config/file.js'],
+      bailSubreason: 'configDependencyChanged',
+      triggeringChangedFiles: ['src/styles.js'],
     });
     expect(ctx.log.warn).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -624,6 +628,8 @@ describe('getDependentStoryFiles', () => {
     expect(result).toBeUndefined();
     expect(ctx.turboSnap.bailReason).toEqual({
       changedStorybookFiles: ['path/to/storybook-config/file.js', 'src/styles.js'],
+      bailSubreason: 'configDependencyChanged',
+      triggeringChangedFiles: ['src/styles.js'],
     });
     expect(ctx.log.warn).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -704,6 +710,7 @@ describe('getDependentStoryFiles', () => {
     expect(result).toBeUndefined();
     expect(ctx.turboSnap.bailReason).toEqual({
       changedStorybookFiles: ['.storybook/static/foo.js'],
+      bailSubreason: 'configFileChanged',
     });
     expect(ctx.log.warn).toHaveBeenCalledWith(
       expect.stringContaining(

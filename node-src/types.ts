@@ -516,9 +516,16 @@ export type TurboSnapInvalidChangedFilesSubreason =
   | 'networkError'
   | 'gitCommandFailed';
 
+// Distinguishes whether a `changedStorybookFiles` bail was caused by a user editing a file inside
+// the Storybook config dir, or by an ordinary source file that merely traces up to a config file.
+export type TurboSnapChangedStorybookFilesSubreason =
+  | 'configFileChanged'
+  | 'configDependencyChanged';
+
 export type TurboSnapBailSubreason =
   | TurboSnapChangedPackageFilesSubreason
-  | TurboSnapInvalidChangedFilesSubreason;
+  | TurboSnapInvalidChangedFilesSubreason
+  | TurboSnapChangedStorybookFilesSubreason;
 
 // All additional fields allowed for the `changedPackageFiles` bail reason
 export type ChangedPackageFilesBailReason = TurboSnapBailReasonBase & {
@@ -541,10 +548,14 @@ export type InvalidChangedFilesBailReason = TurboSnapBailReasonBase & {
 export type TurboSnapBailReason =
   | ChangedPackageFilesBailReason
   | InvalidChangedFilesBailReason
-  // All remaining bail reasons
+  // All remaining bail reasons (including `changedStorybookFiles`)
   | (TurboSnapBailReasonBase & {
       changedPackageFiles?: never;
       invalidChangedFiles?: never;
+      bailSubreason?: TurboSnapChangedStorybookFilesSubreason;
+      // The changed non-config file(s) that traced up to a config file, set for the
+      // `configDependencyChanged` subreason only.
+      triggeringChangedFiles?: string[];
     });
 
 export interface TurboSnap {

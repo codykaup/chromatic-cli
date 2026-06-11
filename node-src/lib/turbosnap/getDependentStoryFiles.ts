@@ -1,6 +1,12 @@
 import path from 'path';
 
-import { Context, Module, Reason, Stats } from '../../types';
+import {
+  Context,
+  Module,
+  Reason,
+  Stats,
+  TurboSnapChangedStorybookFilesSubreason,
+} from '../../types';
 import noCSFGlobs from '../../ui/messages/errors/noCSFGlobs';
 import tracedAffectedFiles from '../../ui/messages/info/tracedAffectedFiles';
 import bailFile from '../../ui/messages/warnings/bailFile';
@@ -263,7 +269,39 @@ export async function getDependentStoryFiles(
     };
   }
 
-  function shouldBail(moduleName: string) {
+  const changedFileSet = new Set(tracedFiles);
+
+  // Classify a `changedStorybookFiles` bail without changing whether it bails. The bail fires
+  // whenever a config file (a `files(moduleName)` entry satisfying `isStorybookFile`) is reached.
+  // It's `configFileChanged` when one of those config files is itself in the changed-files set
+  // (the user edited config), otherwise `configDependencyChanged` (a changed non-config file
+  // traced up to a config file). The triggering changed file is either a non-config entry bundled
+  // into the same chunk as the config file, or the root of the trace path that reached it.
+  function classifyStorybookBail(
+    storybookFiles: string[],
+    tracePath: string[]
+  ): { bailSubreason: TurboSnapChangedStorybookFilesSubreason; triggeringChangedFiles?: string[] } {
+    const configFileChanged = storybookFiles.some(
+      (file) => isStorybookFile(file) && changedFileSet.has(file)
+    );
+    if (configFileChanged) {
+      return { bailSubreason: 'configFileChanged' };
+    }
+
+    const tracePathRoot = tracePath[0] && namesById.get(tracePath[0]);
+    const triggeringChangedFiles = [
+      ...storybookFiles.filter((file) => !isStorybookFile(file) && changedFileSet.has(file)),
+      ...(tracePathRoot && changedFileSet.has(tracePathRoot) ? [tracePathRoot] : []),
+    ];
+    return {
+      bailSubreason: 'configDependencyChanged',
+      ...(triggeringChangedFiles.length > 0 && {
+        triggeringChangedFiles: [...new Set(triggeringChangedFiles)],
+      }),
+    };
+  }
+
+  function shouldBail(moduleName: string, tracePath: string[] = []) {
     if (!ctx.turboSnap) ctx.turboSnap = {};
 
     // Check staticDirs before the Storybook config dir so static assets
@@ -275,7 +313,11 @@ export async function getDependentStoryFiles(
     }
 
     if (isStorybookFile(moduleName)) {
-      ctx.turboSnap.bailReason = { changedStorybookFiles: files(moduleName) };
+      const storybookFiles = files(moduleName);
+      ctx.turboSnap.bailReason = {
+        changedStorybookFiles: storybookFiles,
+        ...classifyStorybookBail(storybookFiles, tracePath),
+      };
       return true;
     }
     return false;
@@ -285,12 +327,12 @@ export async function getDependentStoryFiles(
   // eslint-disable-next-line complexity
   function traceName(name: string, tracePath: string[] = []) {
     if (ctx.turboSnap?.bailReason || isCsfGlob(name)) return;
-    if (shouldBail(name)) return;
+    if (shouldBail(name, tracePath)) return;
     const { id } = modulesByName.get(name) || {};
     // eslint-disable-next-line unicorn/no-null
     const normalizedName = namesById.get(id || null);
     if (!normalizedName) return;
-    if (shouldBail(normalizedName)) return;
+    if (shouldBail(normalizedName, tracePath)) return;
 
     if (!id || !reasonsById.get(id) || checkedIds[id]) return;
     // Queue this id for tracing
