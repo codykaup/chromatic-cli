@@ -553,9 +553,6 @@ export type TurboSnapBailReason =
       changedPackageFiles?: never;
       invalidChangedFiles?: never;
       bailSubreason?: TurboSnapChangedStorybookFilesSubreason;
-      // The changed non-config file(s) that traced up to a config file, set for the
-      // `configDependencyChanged` subreason only.
-      triggeringChangedFiles?: string[];
     });
 
 export interface TurboSnap {

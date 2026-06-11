@@ -275,33 +275,18 @@ export async function getDependentStoryFiles(
   // whenever a config file (a `files(moduleName)` entry satisfying `isStorybookFile`) is reached.
   // It's `configFileChanged` when one of those config files is itself in the changed-files set
   // (the user edited config), otherwise `configDependencyChanged` (a changed non-config file
-  // traced up to a config file). The triggering changed file is either a non-config entry bundled
-  // into the same chunk as the config file, or the root of the trace path that reached it.
+  // traced up to a config file). Note the changed file may be bundled into the same chunk as the
+  // config file, so we check config-file membership rather than how the bail was reached.
   function classifyStorybookBail(
-    storybookFiles: string[],
-    tracePath: string[]
-  ): { bailSubreason: TurboSnapChangedStorybookFilesSubreason; triggeringChangedFiles?: string[] } {
+    storybookFiles: string[]
+  ): TurboSnapChangedStorybookFilesSubreason {
     const configFileChanged = storybookFiles.some(
       (file) => isStorybookFile(file) && changedFileSet.has(file)
     );
-    if (configFileChanged) {
-      return { bailSubreason: 'configFileChanged' };
-    }
-
-    const tracePathRoot = tracePath[0] && namesById.get(tracePath[0]);
-    const triggeringChangedFiles = [
-      ...storybookFiles.filter((file) => !isStorybookFile(file) && changedFileSet.has(file)),
-      ...(tracePathRoot && changedFileSet.has(tracePathRoot) ? [tracePathRoot] : []),
-    ];
-    return {
-      bailSubreason: 'configDependencyChanged',
-      ...(triggeringChangedFiles.length > 0 && {
-        triggeringChangedFiles: [...new Set(triggeringChangedFiles)],
-      }),
-    };
+    return configFileChanged ? 'configFileChanged' : 'configDependencyChanged';
   }
 
-  function shouldBail(moduleName: string, tracePath: string[] = []) {
+  function shouldBail(moduleName: string) {
     if (!ctx.turboSnap) ctx.turboSnap = {};
 
     // Check staticDirs before the Storybook config dir so static assets
@@ -316,7 +301,7 @@ export async function getDependentStoryFiles(
       const storybookFiles = files(moduleName);
       ctx.turboSnap.bailReason = {
         changedStorybookFiles: storybookFiles,
-        ...classifyStorybookBail(storybookFiles, tracePath),
+        bailSubreason: classifyStorybookBail(storybookFiles),
       };
       return true;
     }
@@ -327,12 +312,12 @@ export async function getDependentStoryFiles(
   // eslint-disable-next-line complexity
   function traceName(name: string, tracePath: string[] = []) {
     if (ctx.turboSnap?.bailReason || isCsfGlob(name)) return;
-    if (shouldBail(name, tracePath)) return;
+    if (shouldBail(name)) return;
     const { id } = modulesByName.get(name) || {};
     // eslint-disable-next-line unicorn/no-null
     const normalizedName = namesById.get(id || null);
     if (!normalizedName) return;
-    if (shouldBail(normalizedName, tracePath)) return;
+    if (shouldBail(normalizedName)) return;
 
     if (!id || !reasonsById.get(id) || checkedIds[id]) return;
     // Queue this id for tracing

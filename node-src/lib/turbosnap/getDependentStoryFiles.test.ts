@@ -599,7 +599,6 @@ describe('getDependentStoryFiles', () => {
     expect(ctx.turboSnap.bailReason).toEqual({
       changedStorybookFiles: ['path/to/storybook-config/file.js'],
       bailSubreason: 'configDependencyChanged',
-      triggeringChangedFiles: ['src/styles.js'],
     });
     expect(ctx.log.warn).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -629,7 +628,6 @@ describe('getDependentStoryFiles', () => {
     expect(ctx.turboSnap.bailReason).toEqual({
       changedStorybookFiles: ['path/to/storybook-config/file.js', 'src/styles.js'],
       bailSubreason: 'configDependencyChanged',
-      triggeringChangedFiles: ['src/styles.js'],
     });
     expect(ctx.log.warn).toHaveBeenCalledWith(
       expect.stringContaining(
