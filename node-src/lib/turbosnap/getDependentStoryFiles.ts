@@ -271,12 +271,6 @@ export async function getDependentStoryFiles(
 
   const changedFileSet = new Set(tracedFiles);
 
-  // Classify a `changedStorybookFiles` bail without changing whether it bails. The bail fires
-  // whenever a config file (a `files(moduleName)` entry satisfying `isStorybookFile`) is reached.
-  // It's `configFileChanged` when one of those config files is itself in the changed-files set
-  // (the user edited config), otherwise `configDependencyChanged` (a changed non-config file
-  // traced up to a config file). Note the changed file may be bundled into the same chunk as the
-  // config file, so we check config-file membership rather than how the bail was reached.
   function classifyStorybookBail(
     storybookFiles: string[]
   ): TurboSnapChangedStorybookFilesSubreason {
