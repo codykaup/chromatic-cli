@@ -1,17 +1,12 @@
 import path from 'path';
 
-import {
-  Context,
-  Module,
-  Reason,
-  Stats,
-  TurboSnapChangedStorybookFilesSubreason,
-} from '../../types';
+import { Context, Module, Reason, Stats } from '../../types';
 import noCSFGlobs from '../../ui/messages/errors/noCSFGlobs';
 import tracedAffectedFiles from '../../ui/messages/info/tracedAffectedFiles';
 import bailFile from '../../ui/messages/warnings/bailFile';
 import { posix } from '../posix';
 import { isPackageManifestFile, matchesFile } from '../utilities';
+import { classifyChangedStorybookFilesDetail } from './classifyBailDetail';
 import { SUPPORTED_LOCK_FILES } from './findChangedDependencies';
 
 type FilePath = string;
@@ -271,15 +266,6 @@ export async function getDependentStoryFiles(
 
   const changedFileSet = new Set(tracedFiles);
 
-  function classifyStorybookBail(
-    storybookFiles: string[]
-  ): TurboSnapChangedStorybookFilesSubreason {
-    const configFileChanged = storybookFiles.some(
-      (file) => isStorybookFile(file) && changedFileSet.has(file)
-    );
-    return configFileChanged ? 'configFileChanged' : 'configDependencyChanged';
-  }
-
   function shouldBail(moduleName: string) {
     if (!ctx.turboSnap) ctx.turboSnap = {};
 
@@ -295,7 +281,7 @@ export async function getDependentStoryFiles(
       const storybookFiles = files(moduleName);
       ctx.turboSnap.bailReason = {
         changedStorybookFiles: storybookFiles,
-        bailSubreason: classifyStorybookBail(storybookFiles),
+        ...classifyChangedStorybookFilesDetail(storybookFiles, changedFileSet, isStorybookFile),
       };
       return true;
     }

@@ -1,6 +1,10 @@
 import path from 'path';
 
-import { ChangedPackageFilesBailReason, InvalidChangedFilesBailReason } from '../../types';
+import {
+  ChangedPackageFilesBailReason,
+  ChangedStorybookFilesBailReason,
+  InvalidChangedFilesBailReason,
+} from '../../types';
 import {
   AncestorMissingError,
   BaselineCheckoutFailedError,
@@ -72,4 +76,30 @@ export function classifyInvalidChangedFilesDetail(
   if (err instanceof ReplacementFailedError) return { bailSubreason: 'replacementFailed' };
   if (err instanceof GitCommandError) return { bailSubreason: 'gitCommandFailed' };
   return {};
+}
+
+/**
+ * Classify a `changedStorybookFiles` bail as a direct config edit or a config dependency change.
+ * It's `configFileChanged` when one of the matched config files is itself a changed file (the user
+ * edited config), otherwise `configDependencyChanged` (a changed non-config file traced up to a
+ * config file). The changed file may be bundled into the same chunk as the config file, so this
+ * checks config-file membership in the changed set rather than how the bail was reached.
+ *
+ * @param storybookFiles The files backing the bailing module (from `files(moduleName)`).
+ * @param changedFiles The set of changed (git-relative) file paths.
+ * @param isStorybookFile Predicate identifying files inside the Storybook config dir.
+ *
+ * @returns A partial patch object to merge into the bail reason.
+ */
+export function classifyChangedStorybookFilesDetail(
+  storybookFiles: string[],
+  changedFiles: Set<string>,
+  isStorybookFile: (name: string) => unknown
+): Partial<ChangedStorybookFilesBailReason> {
+  const configFileChanged = storybookFiles.some(
+    (file) => isStorybookFile(file) && changedFiles.has(file)
+  );
+  return {
+    bailSubreason: configFileChanged ? 'configFileChanged' : 'configDependencyChanged',
+  };
 }

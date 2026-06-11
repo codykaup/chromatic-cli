@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   classifyChangedPackageFilesDetail,
+  classifyChangedStorybookFilesDetail,
   classifyInvalidChangedFilesDetail,
   detectLockfileKind,
 } from './classifyBailDetail';
@@ -127,5 +128,36 @@ describe('classifyInvalidChangedFilesDetail', () => {
     expect(classifyInvalidChangedFilesDetail(new GitCommandError('git diff'))).toEqual({
       bailSubreason: 'gitCommandFailed',
     });
+  });
+});
+
+const isStorybookFile = (name: string) => name.startsWith('.storybook/');
+
+describe('classifyChangedStorybookFilesDetail', () => {
+  it('classifies "configFileChanged" when a matched config file is itself changed', () => {
+    const changedFiles = new Set(['.storybook/preview.js']);
+    expect(
+      classifyChangedStorybookFilesDetail(['.storybook/preview.js'], changedFiles, isStorybookFile)
+    ).toEqual({ bailSubreason: 'configFileChanged' });
+  });
+
+  it('classifies "configDependencyChanged" when no matched config file is changed', () => {
+    const changedFiles = new Set(['src/styles.js']);
+    expect(
+      classifyChangedStorybookFilesDetail(['.storybook/file.js'], changedFiles, isStorybookFile)
+    ).toEqual({ bailSubreason: 'configDependencyChanged' });
+  });
+
+  it('classifies "configDependencyChanged" when only a non-config chunk sibling is changed', () => {
+    // The config file and the changed source file share a single chunk, so both appear in
+    // `files()`. The changed entry is not a config file, so this is a dependency change.
+    const changedFiles = new Set(['src/styles.js']);
+    expect(
+      classifyChangedStorybookFilesDetail(
+        ['.storybook/file.js', 'src/styles.js'],
+        changedFiles,
+        isStorybookFile
+      )
+    ).toEqual({ bailSubreason: 'configDependencyChanged' });
   });
 });
