@@ -597,8 +597,6 @@ describe('getDependentStoryFiles', () => {
     expect(ctx.turboSnap.bailReason).toEqual({
       changedStorybookFiles: ['path/to/storybook-config/file.js'],
     });
-    // The trace path records the changed file from the `git diff` through to the config file it
-    // is imported by, so the logs make it obvious why we bailed.
     expect(ctx.turboSnap.bailPath).toEqual(['src/styles.js', 'path/to/storybook-config/file.js']);
     expect(ctx.log.warn).toHaveBeenCalledWith(
       expect.stringContaining(
