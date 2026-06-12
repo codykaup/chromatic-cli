@@ -13,6 +13,7 @@ import {
   finalizing,
   initial,
   invalid,
+  publishSkipped,
   starting,
   success,
   uploading,
@@ -80,6 +81,12 @@ export const uploadStorybook = async (ctx: Context, task: Task) => {
   }
 };
 
+export const finishUpload = (ctx: Context, task: Task) => {
+  // The build may have been skipped by the index service during uploadBuild (e.g. TurboSnap
+  // determined no story files were affected), in which case nothing was uploaded.
+  transitionTo(ctx.skip ? publishSkipped : success, true)(ctx, task);
+};
+
 export const waitForSentinels = async (ctx: Context, task: Task) => {
   if (ctx.skip || !ctx.sentinelUrls?.length) return;
   transitionTo(finalizing)(ctx, task);
@@ -116,6 +123,6 @@ export default function main(ctx: Context) {
       if (ctx.options.dryRun) return dryRun(ctx).output;
       return false;
     },
-    steps: [transitionTo(starting), uploadStorybook, transitionTo(success, true)],
+    steps: [transitionTo(starting), uploadStorybook, finishUpload],
   });
 }

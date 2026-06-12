@@ -15,8 +15,15 @@ const UploadBuildMutation = `
     $files: [FileUploadInput!]!
     $zip: Boolean
     $onlyStoryFiles: [String!]
+    $turboSnapStatus: String
   ) {
-    uploadBuild(buildId: $buildId, files: $files, zip: $zip, onlyStoryFiles: $onlyStoryFiles) {
+    uploadBuild(
+      buildId: $buildId
+      files: $files
+      zip: $zip
+      onlyStoryFiles: $onlyStoryFiles
+      turboSnapStatus: $turboSnapStatus
+    ) {
       info {
         sentinelUrls
         targets {
@@ -35,7 +42,6 @@ const UploadBuildMutation = `
         }
       }
       build {
-        # no need for legacy:false on PublishedBuild.status
         status
       }
       userErrors {
@@ -149,10 +155,19 @@ export async function uploadBuild(
   ctx.uploadedBytes = 0;
   ctx.uploadedFiles = 0;
 
-  // onlyStoryFiles may be passed directly, or calculated via --only-changed. We send the TurboSnap
-  // file list to the index service during uploadBuild so it can determine, as early as possible,
-  // whether this build can be skipped entirely (e.g. when no story files were affected).
-  const { onlyStoryFiles = ctx.onlyStoryFiles } = ctx.options;
+  const { turboSnap } = ctx;
+
+  // Only send the TurboSnap file list when TurboSnap actually ran (it populates ctx.onlyStoryFiles
+  // when a trace succeeds). The index service uses it to determine, as early as possible, whether
+  // this build can be skipped entirely (e.g. when no story files were affected).
+  const onlyStoryFiles = turboSnap && !turboSnap.unavailable ? ctx.onlyStoryFiles : undefined;
+
+  // Also report the TurboSnap status (mirroring publishBuild) so the index service can tell a real
+  // TurboSnap run apart from a user manually passing --only-story-files before acting on a skip.
+  let turboSnapStatus = 'UNUSED';
+  if (turboSnap) {
+    turboSnapStatus = turboSnap.bailReason ? 'BAILED' : 'APPLIED';
+  }
 
   const targets: (TargetInfo & FileDesc)[] = [];
   let zipTarget: TargetInfo | undefined;
@@ -187,6 +202,7 @@ export async function uploadBuild(
         })),
         zip: ctx.options.zip,
         ...(onlyStoryFiles && { onlyStoryFiles }),
+        turboSnapStatus,
       }
     );
 

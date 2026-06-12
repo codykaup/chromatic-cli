@@ -66,3 +66,9 @@ export const failed = (ctx: Context, { path }: { path: string }) => ({
   title: `Publishing your built ${buildType(ctx)}`,
   output: `Failed to upload ${path}`,
 });
+
+export const publishSkipped = (ctx: Context) => ({
+  status: 'skipped',
+  title: `Publishing your built ${buildType(ctx)}`,
+  output: 'Build skipped, not publishing',
+});
