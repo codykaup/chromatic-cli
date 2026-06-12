@@ -267,6 +267,86 @@ describe('uploadStorybook', () => {
     expect(ctx.uploadedFiles).toBe(1001);
   });
 
+  it('sends the TurboSnap onlyStoryFiles list to the uploadBuild mutation', async () => {
+    const client = { runQuery: vi.fn() };
+    client.runQuery.mockReturnValue({
+      uploadBuild: {
+        info: {
+          sentinelUrls: [],
+          targets: [
+            {
+              contentType: 'text/html',
+              filePath: 'index.html',
+              formAction: 'https://s3.amazonaws.com/presigned?index.html',
+              formFields: {},
+            },
+          ],
+        },
+        userErrors: [],
+      },
+    });
+
+    createReadStreamMock.mockReturnValue({ pipe: vi.fn() } as any);
+    http.fetch.mockReturnValue({ ok: true });
+
+    const fileInfo = {
+      lengths: [{ knownAs: 'index.html', contentLength: 42 }],
+      paths: ['index.html'],
+      total: 42,
+    };
+    const ctx = {
+      client,
+      env: environment,
+      log,
+      http,
+      sourceDir: '/static/',
+      options: {},
+      fileInfo,
+      announcedBuild: { id: '1' },
+      onlyStoryFiles: ['src/Button.stories.js'],
+    } as any;
+    await uploadStorybook(ctx, {} as any);
+
+    expect(client.runQuery).toHaveBeenCalledWith(expect.stringMatching(/UploadBuildMutation/), {
+      buildId: '1',
+      files: [{ contentHash: undefined, contentLength: 42, filePath: 'index.html' }],
+      onlyStoryFiles: ['src/Button.stories.js'],
+    });
+  });
+
+  it('skips uploading and sets ctx.skip when the build is SKIPPED', async () => {
+    const client = { runQuery: vi.fn() };
+    client.runQuery.mockReturnValue({
+      uploadBuild: {
+        build: { status: 'SKIPPED' },
+        userErrors: [],
+      },
+    });
+
+    const fileInfo = {
+      lengths: [{ knownAs: 'index.html', contentLength: 42 }],
+      paths: ['index.html'],
+      total: 42,
+    };
+    const ctx = {
+      client,
+      env: environment,
+      log,
+      http,
+      sourceDir: '/static/',
+      options: {},
+      fileInfo,
+      announcedBuild: { id: '1' },
+      onlyStoryFiles: [],
+    } as any;
+    await uploadStorybook(ctx, {} as any);
+
+    expect(ctx.skip).toBe(true);
+    expect(http.fetch).not.toHaveBeenCalled();
+    expect(ctx.uploadedFiles).toBe(0);
+    expect(ctx.uploadedBytes).toBe(0);
+  });
+
   describe('with file hashes', () => {
     it('retrieves file upload locations and uploads only returned targets', async () => {
       const client = { runQuery: vi.fn() };

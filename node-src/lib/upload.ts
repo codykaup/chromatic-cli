@@ -10,8 +10,13 @@ import { uploadZip } from './uploadZip';
 const MAX_FILES_PER_REQUEST = 1000;
 
 const UploadBuildMutation = `
-  mutation UploadBuildMutation($buildId: ObjID!, $files: [FileUploadInput!]!, $zip: Boolean) {
-    uploadBuild(buildId: $buildId, files: $files, zip: $zip) {
+  mutation UploadBuildMutation(
+    $buildId: ObjID!
+    $files: [FileUploadInput!]!
+    $zip: Boolean
+    $onlyStoryFiles: [String!]
+  ) {
+    uploadBuild(buildId: $buildId, files: $files, zip: $zip, onlyStoryFiles: $onlyStoryFiles) {
       info {
         sentinelUrls
         targets {
@@ -28,6 +33,10 @@ const UploadBuildMutation = `
           formAction
           formFields
         }
+      }
+      build {
+        # no need for legacy:false on PublishedBuild.status
+        status
       }
       userErrors {
         __typename
@@ -53,6 +62,9 @@ interface UploadBuildMutationResult {
       sentinelUrls: string[];
       targets: TargetInfo[];
       zipTarget?: TargetInfo;
+    };
+    build?: {
+      status: string;
     };
     userErrors: (
       | {
@@ -137,6 +149,11 @@ export async function uploadBuild(
   ctx.uploadedBytes = 0;
   ctx.uploadedFiles = 0;
 
+  // onlyStoryFiles may be passed directly, or calculated via --only-changed. We send the TurboSnap
+  // file list to the index service during uploadBuild so it can determine, as early as possible,
+  // whether this build can be skipped entirely (e.g. when no story files were affected).
+  const { onlyStoryFiles = ctx.onlyStoryFiles } = ctx.options;
+
   const targets: (TargetInfo & FileDesc)[] = [];
   let zipTarget: TargetInfo | undefined;
 
@@ -169,6 +186,7 @@ export async function uploadBuild(
           filePath: targetPath,
         })),
         zip: ctx.options.zip,
+        ...(onlyStoryFiles && { onlyStoryFiles }),
       }
     );
 
@@ -183,6 +201,15 @@ export async function uploadBuild(
         }
       }
       return options.onError?.(new Error('Upload rejected due to user error'));
+    }
+
+    // The index service may decide this build can be skipped (e.g. TurboSnap determined no story
+    // files were affected). In that case there's nothing to upload, so bail out early and let the
+    // remaining tasks (verify, snapshot) skip themselves via ctx.skip.
+    if (uploadBuild.build?.status === 'SKIPPED') {
+      ctx.log.debug('Build skipped by the index service, not uploading files');
+      ctx.skip = true;
+      return;
     }
 
     ctx.sentinelUrls.push(...(uploadBuild.info?.sentinelUrls || []));
