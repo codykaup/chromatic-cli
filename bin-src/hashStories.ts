@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import meow from 'meow';
 import path from 'path';
 import xxHashWasm from 'xxhash-wasm';
@@ -68,15 +68,34 @@ const storiesEntryFileNames = [
   './storybook-config-entry.js',
 ];
 
-const NODE_MODULES_RE = /(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)(?:\/|$)/;
-
-/** Strip webpack's ` + N modules` suffix from a (concatenated) module name. */
+// Strip webpack's ` + N modules` suffix from a (concatenated) module name.
 const baseName = (name: string) => (name ?? '').replace(/\s+\+\s+\d+\s+modules?$/, '');
 
-/** For any path inside node_modules, return the (optionally scoped) package name. */
-const getPackageName = (modulePath: string) => modulePath.match(NODE_MODULES_RE)?.[1];
+// Return the path to the package directory a node_modules file resolves from — everything up to and
+// including the package name, anchored at the LAST `node_modules/` segment. This makes nested
+// (non-hoisted) installs resolve to their own version rather than a hoisted top-level one, e.g.
+// `node_modules/react-dom/node_modules/scheduler` rather than `node_modules/scheduler`.
+const getPackageRoot = (modulePath: string) => {
+  const marker = 'node_modules/';
+  const index = modulePath.lastIndexOf(marker);
+  if (index === -1) return undefined;
+  const after = modulePath.slice(index + marker.length);
+  const parts = after.split('/');
+  const pkg = after.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+  return `${modulePath.slice(0, index)}${marker}${pkg}`;
+};
 
 const isExternal = (name: string) => name.startsWith('external ');
+
+// Whether a module path looks like a CSF story file (matches Storybook's default story glob).
+const isStoryFile = (name: string) => /\.stories\.\w+$|\.mdx$/.test(baseName(name));
+
+// Whether a module enumerates story files: webpack's `storybook-stories.js` /
+// `generated-stories-entry.js`, or the Vite virtual equivalent. Story files are direct children of
+// one of these (webpack additionally inserts a `require.context` glob module in between).
+const isStoriesListModule = (name: string) =>
+  /(^|\/)storybook-stories\.[cm]?js$/.test(name) ||
+  /(^|\/)generated-stories-entry\.[cm]?js$/.test(name);
 
 /**
  * The main entrypoint for `chromatic hash-stories`.
@@ -167,7 +186,9 @@ export async function main(argv: string[]) {
 
   // Forward edges: childrenByName[A] = the set of modules A imports.
   const childrenByName = new Map<string, Set<string>>();
-  const csfGlobs = new Set<string>();
+  // Modules that enumerate stories and act as traversal boundaries: webpack `require.context` globs
+  // and the webpack/Vite stories-list modules. Story files are their direct children.
+  const globBoundaries = new Set<string>();
   const externals = new Set<string>();
 
   for (const module_ of stats.modules) {
@@ -184,31 +205,31 @@ export async function main(argv: string[]) {
       childrenByName.get(parent)?.add(full);
     }
 
-    // A CSF glob is the synthetic `require.context` module that pulls in all matched story files.
-    // It's identifiable by webpack's ` sync `/` lazy ` marker AND by being imported from a stories
-    // entry file. (The production tracer uses a broader test because it post-filters against the
-    // real story index; here we need the precise set, or addon previews imported by the config
-    // entry would be mistaken for stories.)
+    // The webpack `require.context` glob (identified by the ` sync `/` lazy ` marker and a reason
+    // pointing at a stories entry) inserts itself between the stories-list module and the stories.
     const isContextModule = /\s+(sync|lazy)\s+/.test(full);
-    if (
-      !isStorybookFile(full) &&
-      isContextModule &&
-      reasons.some((reason) => storiesEntryFiles.has(baseName(reason)))
-    ) {
-      csfGlobs.add(full);
-    }
+    const fromStoriesEntry = reasons.some(
+      (reason) => storiesEntryFiles.has(baseName(reason)) || isStoriesListModule(reason)
+    );
+    if (!isStorybookFile(full) && isContextModule && fromStoriesEntry) globBoundaries.add(full);
+
+    // The stories-list module itself (webpack `storybook-stories.js`, or the Vite virtual module
+    // which imports the story files directly).
+    if (isStoriesListModule(full)) globBoundaries.add(full);
   }
 
-  // Story files are the source modules imported directly by a CSF glob.
+  // Story files are the children of a glob boundary that look like CSF/MDX files. (For webpack the
+  // stories-list module's only child is the context glob, which isn't a story file and is filtered
+  // out here; the actual stories hang off the context glob.)
   const storyFiles = [
-    ...new Set([...csfGlobs].flatMap((glob) => [...(childrenByName.get(glob) ?? [])])),
+    ...new Set([...globBoundaries].flatMap((glob) => [...(childrenByName.get(glob) ?? [])])),
   ].filter(
     (name) =>
-      !csfGlobs.has(name) &&
+      isStoryFile(name) &&
+      !globBoundaries.has(name) &&
       !isExternal(name) &&
-      !getPackageName(name) &&
-      !isStorybookFile(name) &&
-      !storiesEntryFiles.has(baseName(name))
+      !getPackageRoot(name) &&
+      !isStorybookFile(name)
   );
 
   if (storyFiles.length === 0) {
@@ -216,18 +237,15 @@ export async function main(argv: string[]) {
     throw new Error('No CSF globs found');
   }
 
-  /**
-   * Walk the dependency graph downwards from `start`, collecting a tree. node_modules files collapse
-   * to a single `node_modules/<pkg>` leaf (we compare package versions, not their file contents),
-   * externals collapse to their name, and source files recurse. Untraced files are pruned.
-   *
-   * @param start
-   *
-   * @returns
-   */
+  // Walk the dependency graph downwards from `start`, collecting a tree. node_modules files collapse
+  // to a single leaf keyed by their resolved (possibly nested) location — we compare package
+  // versions, not file contents. Externals collapse to their name, source files recurse, and
+  // untraced files are pruned.
   function trace(start: string) {
     const visited = new Set<string>();
     const sources = new Set<string>();
+    // Keyed by package root path (e.g. `node_modules/react-dom/node_modules/scheduler`), so nested
+    // installs of the same package are tracked—and versioned—separately.
     const packages = new Set<string>();
 
     function walk(name: string): TreeNode | undefined {
@@ -238,10 +256,10 @@ export async function main(argv: string[]) {
         return { name, kind: 'external', children: [] };
       }
 
-      const pkg = getPackageName(name);
-      if (pkg) {
-        packages.add(pkg);
-        return { name: `node_modules/${pkg}`, kind: 'package', pkg, children: [] };
+      const packageRoot = getPackageRoot(baseName(name));
+      if (packageRoot) {
+        packages.add(packageRoot);
+        return { name: packageRoot, kind: 'package', pkg: packageRoot, children: [] };
       }
 
       // Use the bare file path (without webpack's ` + N modules` suffix) for hashing and display,
@@ -253,7 +271,7 @@ export async function main(argv: string[]) {
       visited.add(name);
 
       const children = [...(childrenByName.get(name) ?? [])]
-        .filter((child) => !csfGlobs.has(child))
+        .filter((child) => !globBoundaries.has(child))
         .sort();
       for (const child of children) {
         const childNode = walk(child);
@@ -266,24 +284,29 @@ export async function main(argv: string[]) {
     return { tree, sources, packages };
   }
 
-  // --- Global / shared section: preview config + deps, main config, and all externals ---
+  // --- Global / shared section: preview config + deps, the .storybook config dir, and externals ---
   // A change to any of these should bust every story's hash.
+  const sharedSources = new Set<string>();
+  const sharedPackages = new Set<string>();
+
+  // When the builder includes the preview config in the stats (webpack does; Vite does not), trace
+  // its dependency tree so changes to preview deps propagate too.
   const previewFiles = [...canonicalByAlias.values()].filter((name) =>
     /(^|\/)preview\.(t|j)sx?$/.test(baseName(name))
   );
-  const sharedSources = new Set<string>();
-  const sharedPackages = new Set<string>();
   for (const previewFile of new Set(previewFiles)) {
     const { sources, packages } = trace(previewFile);
     for (const s of sources) sharedSources.add(s);
     for (const p of packages) sharedPackages.add(p);
   }
 
-  // main.* is a node config file and isn't part of the preview bundle, so hash it straight from disk.
-  const mainConfigFiles = ['main.ts', 'main.tsx', 'main.js', 'main.cjs', 'main.mjs']
-    .map((file) => normalize(posix(path.join(flags.storybookConfigDir, file))))
-    .filter((file) => existsSync(path.join(rootPath, file)));
-  for (const file of mainConfigFiles) sharedSources.add(file);
+  // Hash every file in the .storybook config dir straight from disk. This is builder-agnostic and
+  // covers main.* and preview.* (plus any local config/theme files) even when — as with Vite — the
+  // preview config and its deps are absent from the stats file. NOTE: this still misses preview
+  // dependencies that live *outside* the config dir under Vite; see the script docs.
+  for (const file of listConfigDirectoryFiles(rootPath, flags.storybookConfigDir)) {
+    sharedSources.add(file);
+  }
 
   // --- Per-story dependency trees ---
   const storyTrees = storyFiles
@@ -308,17 +331,18 @@ export async function main(argv: string[]) {
     packageVersions.set(pkg, getPackageVersion(rootPath, pkg));
   }
 
-  // Stable token for each tree entry, used both for the document and the final story hash.
+  // Stable token for each tree entry, used both for the document and the final story hash. Package
+  // entries are keyed by their resolved root path and labelled with the installed version.
   const tokenFor = (name: string, kind: TreeNode['kind'], pkg?: string) => {
     if (kind === 'external') return `${name} [external]`;
-    if (kind === 'package') return `node_modules/${pkg} [${packageVersions.get(pkg ?? '') ?? '?'}]`;
+    if (kind === 'package') return `${pkg} [${packageVersions.get(pkg ?? '') ?? '?'}]`;
     return `${name} [${hashFor(name)}]`;
   };
 
   // The shared section lines, computed once and appended to every story's document.
   const sharedLines = [
     ...[...sharedSources].map((file) => tokenFor(file, 'source')),
-    ...[...sharedPackages].map((pkg) => tokenFor(`node_modules/${pkg}`, 'package', pkg)),
+    ...[...sharedPackages].map((pkg) => tokenFor(pkg, 'package', pkg)),
     ...[...externals].map((name) => tokenFor(name, 'external')),
   ]
     .sort()
@@ -329,7 +353,7 @@ export async function main(argv: string[]) {
   const results = storyTrees.map(({ storyFile, sources, packages }) => {
     const storyLines = [
       ...[...sources].map((file) => tokenFor(file, 'source')),
-      ...[...packages].map((pkg) => tokenFor(`node_modules/${pkg}`, 'package', pkg)),
+      ...[...packages].map((pkg) => tokenFor(pkg, 'package', pkg)),
     ]
       .sort()
       .filter((line, index, all) => all.indexOf(line) === index);
@@ -360,17 +384,38 @@ export async function main(argv: string[]) {
 }
 
 /**
- * Read a package's version from its installed package.json, falling back to 'unknown'.
+ * Read the exact installed version from a package's package.json at its resolved (possibly nested)
+ * location on disk, falling back to 'unknown'. Reading the actually-installed version — rather than
+ * the manifest range or a lockfile — means we detect any dependency bump that changes what's really
+ * on disk, regardless of whether package.json itself changed.
  *
- * @param rootPath
- * @param pkg
+ * @param rootPath The repository root.
+ * @param packageRoot The repo-root-relative path to the package directory (e.g.
+ * `node_modules/react-dom/node_modules/scheduler`).
  *
- * @returns
+ * @returns The installed version string, or 'unknown'.
  */
-function getPackageVersion(rootPath: string, pkg: string) {
+/**
+ * Recursively list every file in the Storybook config dir, as repo-root-relative POSIX paths. Used
+ * to fold the whole .storybook config (main, preview, themes, etc.) into the shared section.
+ *
+ * @param rootPath The repository root.
+ * @param configDirectory The Storybook config dir, relative to the repository root.
+ *
+ * @returns A list of repo-root-relative POSIX file paths.
+ */
+function listConfigDirectoryFiles(rootPath: string, configDirectory: string): string[] {
+  const absoluteConfigDirectory = path.join(rootPath, configDirectory);
+  if (!existsSync(absoluteConfigDirectory)) return [];
+  return readdirSync(absoluteConfigDirectory, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => posix(path.relative(rootPath, path.join(entry.parentPath, entry.name))));
+}
+
+function getPackageVersion(rootPath: string, packageRoot: string) {
   try {
     const manifest = JSON.parse(
-      readFileSync(path.join(rootPath, 'node_modules', pkg, 'package.json'), 'utf8')
+      readFileSync(path.join(rootPath, packageRoot, 'package.json'), 'utf8')
     );
     return manifest.version ?? 'unknown';
   } catch {
@@ -381,11 +426,11 @@ function getPackageVersion(rootPath: string, pkg: string) {
 /**
  * Pretty-print the dependency tree for a story (only used in --mode expanded).
  *
- * @param node
- * @param tokenFor
- * @param depth
+ * @param node The tree node to print.
+ * @param tokenFor Formats a node into its `path [hash|version]` token.
+ * @param depth The current indentation depth.
  *
- * @returns
+ * @returns The rendered, indented tree as a string.
  */
 function printTree(
   node: TreeNode,
