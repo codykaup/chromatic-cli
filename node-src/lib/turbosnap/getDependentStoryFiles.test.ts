@@ -650,6 +650,12 @@ describe('getDependentStoryFiles', () => {
         chalk`This was triggered by a change to {bold src/theme.js}, which is imported by {bold path/to/storybook-config/preview.js}`
       )
     );
+    // The full import chain is rendered, including the intermediate file (src/tokens.js).
+    expect(ctx.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        chalk`{dim →} {bold src/theme.js}\n{dim →} {bold src/tokens.js}\n{dim →} {bold path/to/storybook-config/preview.js}`
+      )
+    );
   });
 
   it('bails on changed dependency of config file if it is in a single module chunk', async () => {
