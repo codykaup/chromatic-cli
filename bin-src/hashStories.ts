@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- research/prototype script: trace + hashing + reporting + diff in one file */
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import meow from 'meow';
 import path from 'path';
@@ -29,14 +30,29 @@ import { readStatsFile } from '../node-src/tasks/readStatsFile';
  * we commit to replacing the production implementation. It intentionally lives alongside `trace.ts`
  * and reuses the same normalization logic.
  *
+ * KNOWN LIMITATION — preview dependencies under Vite:
+ *   Webpack's `preview-stats.json` is the real compiler graph, so the preview config and everything
+ *   it imports are present and get folded into the shared section. Vite's stats are synthesized by a
+ *   Rollup plugin that filters out the virtual modules the preview config is wired through, so
+ *   `.storybook/preview.*` and its *external* dependencies (files imported by preview that live
+ *   outside the config dir, e.g. a shared theme in `src/`) are absent from the graph entirely.
+ *   To stay correct we take the same conservative stance the production tracer takes today — where a
+ *   change anywhere in the config dir bails the whole build — by hashing the entire `.storybook`
+ *   config dir from disk into the shared section (see `listConfigDirectoryFiles`). That busts every
+ *   story hash on any in-config change. It does NOT yet catch preview's *external* deps under Vite
+ *   (a pre-existing blind spot in TurboSnap too). Closing that needs a fuller graph — either a
+ *   Chromatic-owned Vite plugin reading Rollup's full module info, or resolving preview's imports
+ *   ourselves (e.g. an esbuild/Vite metafile rooted at the preview entry).
+ *
  * Command:
  *   chromatic hash-stories [-s|--stats-file] [-b|--storybook-base-dir] [-c|--storybook-config-dir]
- *                          [-u|--untraced] [-m|--mode] [--json]
+ *                          [-u|--untraced] [-m|--mode] [--baseline] [--json]
  *
  * Usage example:
  *   npx chromatic hash-stories -s ./storybook-static/preview-stats.json
  *   npx chromatic hash-stories -s ./preview-stats.json --mode expanded   # show the dependency tree
  *   npx chromatic hash-stories -s ./preview-stats.json --json            # machine-readable output
+ *   npx chromatic hash-stories -s ./head.json --baseline ./base.json     # diff against a prior run
  */
 
 const { STORYBOOK_BASE_DIR, STORYBOOK_CONFIG_DIR, WEBPACK_STATS_FILE } = process.env;
@@ -115,6 +131,7 @@ export async function main(argv: string[]) {
       --storybook-config-dir, -c <dirname>  Directory where Storybook configuration lives. (default: '.storybook')
       --untraced, -u <filepath>             Disregard these files and their dependencies. Globs supported via picomatch. Repeatable.
       --mode, -m <mode>                     Set to 'expanded' to print the full dependency tree for each story.
+      --baseline <filepath>                 Path to a previous --json output to diff against; reports the stories that would need re-capture.
       --json                                Print machine-readable JSON instead of a human report.
     `,
     {
@@ -134,6 +151,7 @@ export async function main(argv: string[]) {
         },
         untraced: { type: 'string', alias: 'u', isMultiple: true },
         mode: { type: 'string', alias: 'm' },
+        baseline: { type: 'string' },
         json: { type: 'boolean', default: false },
       },
     }
@@ -365,14 +383,16 @@ export async function main(argv: string[]) {
     return { storyFile, hash, storyLines, document };
   });
 
+  const storyHashes = Object.fromEntries(results.map((r) => [r.storyFile, r.hash]));
+
+  // When a baseline (a prior --json run) is supplied, diff against it: any story whose hash differs
+  // — or that is new — would need re-capture. This is the crux of the hash-based approach.
+  const diff = flags.baseline ? diffBaseline(flags.baseline, storyHashes) : undefined;
+
   if (flags.json) {
     process.stdout.write(
       JSON.stringify(
-        {
-          storyHashes: Object.fromEntries(results.map((r) => [r.storyFile, r.hash])),
-          sharedSection: sharedLines,
-          missingSources,
-        },
+        { storyHashes, sharedSection: sharedLines, missingSources, diff },
         undefined,
         2
       ) + '\n'
@@ -380,21 +400,49 @@ export async function main(argv: string[]) {
     return;
   }
 
-  report({ log, results, storyTrees, sharedLines, missingSources, mode: flags.mode, tokenFor });
+  report({
+    log,
+    results,
+    storyTrees,
+    sharedLines,
+    missingSources,
+    mode: flags.mode,
+    tokenFor,
+    diff,
+  });
+}
+
+interface BaselineDiff {
+  changed: string[];
+  added: string[];
+  removed: string[];
+  unchanged: number;
 }
 
 /**
- * Read the exact installed version from a package's package.json at its resolved (possibly nested)
- * location on disk, falling back to 'unknown'. Reading the actually-installed version — rather than
- * the manifest range or a lockfile — means we detect any dependency bump that changes what's really
- * on disk, regardless of whether package.json itself changed.
+ * Compare current per-story hashes against a baseline (a previous --json output) and report which
+ * stories would need re-capture.
  *
- * @param rootPath The repository root.
- * @param packageRoot The repo-root-relative path to the package directory (e.g.
- * `node_modules/react-dom/node_modules/scheduler`).
+ * @param baselinePath Path to a previous --json output file.
+ * @param current The current map of story file -> hash.
  *
- * @returns The installed version string, or 'unknown'.
+ * @returns The set of changed, added, removed, and unchanged stories.
  */
+function diffBaseline(baselinePath: string, current: Record<string, string>): BaselineDiff {
+  const baseline: Record<string, string> =
+    JSON.parse(readFileSync(baselinePath, 'utf8')).storyHashes ?? {};
+  const common = Object.keys(current).filter((story) => story in baseline);
+  const changed = common.filter((story) => current[story] !== baseline[story]);
+  const added = Object.keys(current).filter((story) => !(story in baseline));
+  const removed = Object.keys(baseline).filter((story) => !(story in current));
+  return {
+    changed: changed.sort(),
+    added: added.sort(),
+    removed: removed.sort(),
+    unchanged: common.length - changed.length,
+  };
+}
+
 /**
  * Recursively list every file in the Storybook config dir, as repo-root-relative POSIX paths. Used
  * to fold the whole .storybook config (main, preview, themes, etc.) into the shared section.
@@ -412,6 +460,18 @@ function listConfigDirectoryFiles(rootPath: string, configDirectory: string): st
     .map((entry) => posix(path.relative(rootPath, path.join(entry.parentPath, entry.name))));
 }
 
+/**
+ * Read the exact installed version from a package's package.json at its resolved (possibly nested)
+ * location on disk, falling back to 'unknown'. Reading the actually-installed version — rather than
+ * the manifest range or a lockfile — means we detect any dependency bump that changes what's really
+ * on disk, regardless of whether package.json itself changed.
+ *
+ * @param rootPath The repository root.
+ * @param packageRoot The repo-root-relative path to the package directory (e.g.
+ * `node_modules/react-dom/node_modules/scheduler`).
+ *
+ * @returns The installed version string, or 'unknown'.
+ */
 function getPackageVersion(rootPath: string, packageRoot: string) {
   try {
     const manifest = JSON.parse(
@@ -450,6 +510,7 @@ interface ReportArguments {
   missingSources: string[];
   mode?: string;
   tokenFor: (name: string, kind: TreeNode['kind'], pkg?: string) => string;
+  diff?: BaselineDiff;
 }
 
 function report({
@@ -460,6 +521,7 @@ function report({
   missingSources,
   mode,
   tokenFor,
+  diff,
 }: ReportArguments) {
   log.info(`Hashed ${results.length} story files:\n`);
 
@@ -484,4 +546,24 @@ function report({
     log.info(`\n${missingSources.length} referenced source files were not found on disk:`);
     for (const file of missingSources) log.info(`  ${file}`);
   }
+
+  if (diff) reportDiff(log, diff);
+}
+
+/**
+ * Print the baseline diff: how many stories would need re-capture and which ones.
+ *
+ * @param log The logger.
+ * @param diff The computed baseline diff.
+ */
+function reportDiff(log: ReturnType<typeof createLogger>, diff: BaselineDiff) {
+  const needCapture = diff.changed.length + diff.added.length;
+  log.info(
+    `\nBaseline diff: ${needCapture} stories need re-capture ` +
+      `(${diff.changed.length} changed, ${diff.added.length} added, ` +
+      `${diff.removed.length} removed, ${diff.unchanged} unchanged).`
+  );
+  for (const story of diff.changed) log.info(`  ~ ${story}`);
+  for (const story of diff.added) log.info(`  + ${story}`);
+  for (const story of diff.removed) log.info(`  - ${story}`);
 }
