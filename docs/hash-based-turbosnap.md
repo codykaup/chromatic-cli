@@ -166,6 +166,29 @@ Whichever the graph comes from, the downstream steps are the same:
    send the shared section as one shared hash + per-story hashes, or fold it into each
    story hash (current prototypes do the latter).
 
+### Benefits and drawbacks by option
+
+> We're willing to take the harder option if it pays off long-term. The dimensions that
+> matter most here are **monorepo robustness** and **debuggability** — the two areas where
+> today's git-diff + lockfile-parsing TurboSnap is most finicky and opaque.
+
+| Option | Benefits | Drawbacks | Effort |
+|---|---|---|---|
+| **A — own-trace (esbuild)** | Builder-agnostic — covers builders we don't own (Rspack) and not-yet-upgraded projects;<br>no builder changes to adopt;<br>already-validated prototype | Must replicate each project's build config (aliases, plugins) → **silent** fidelity drift → **under-capture risk** (skips a real visual change);<br>a second bundler to keep faithful forever;<br>**weakest in monorepos** with varied/custom configs;<br>**hardest to debug** (failures are silent) | Medium to adopt, **high** ongoing fidelity upkeep |
+| **B — module-emit** *(recommended baseline)* | Highest fidelity — resolution, TS type-elision, tree-shaking come from the real build for free;<br>**loud** failure (breaks in CI, never silent);<br>per-module content hashes catch version bumps + `patch-package`;<br>**most debuggable** — exact "story X re-captured because module Y changed" attribution;<br>**monorepo-robust** — no git-baseline fetch, no lockfile parsing | Per-builder plugin to maintain (Vite, webpack5);<br>mild **over-capture** of changed-but-unused exports of used modules;<br>larger stats artifact | **Medium** — Vite done, webpack5 to do |
+| **C — chunk-emit** *(layer on B for max precision)* | **Tree-shake-accurate** by construction — ignores dead-code / unused-export edits B would bust;<br>smaller artifact;<br>uniform chunk format across builders;<br>same monorepo/loud-failure wins as B | Hash **normalization is load-bearing** (hashed filenames cascade through the runtime chunk to every story if not stripped);<br>chunk identity must be stabilized;<br>topology / re-chunk changes can over-bust a batch;<br>**coarser attribution** than B (a chunk bundles many modules) — harder to explain *why* | **Medium-high** — normalization + stable keys; prototype Vite-only |
+
+**Why every hash option helps the monorepo + debugging pain.** All three replace
+git-diffing, shallow-clone-sensitive baseline fetches, and per-ecosystem lockfile parsing
+with a single content-hash compare against the previous build's stored hashes. That removes
+the failure modes that make TurboSnap finicky in monorepos and opaque when it misbehaves.
+**B and C go further on debuggability and safety:** failures are *loud* (a broken extractor
+fails the build in CI instead of silently under-capturing), and B in particular gives a
+direct, per-module answer to "why did this story re-capture?" — which is exactly what's hard
+to get today. The recommendation for the builders we own is therefore **B as the baseline,
+with C layered on where tree-shaking precision is worth the extra normalization work**;
+reserve A for builders we don't own.
+
 ## Key learnings
 
 ### Builder stats are not portable
