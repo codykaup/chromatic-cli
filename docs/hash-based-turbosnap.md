@@ -278,6 +278,37 @@ flowchart TD
    send the shared section as one shared hash + per-story hashes, or fold it into each
    story hash (current prototypes do the latter).
 
+## Performance / scaling
+
+Building the `storybookjs/storybook` monorepo's internal Storybook wasn't practical in the
+research environment (Nx + yarn workspaces, and the esbuild tracer needs the source tree
+*with node_modules installed* to bundle). Instead, scaling was measured with a controlled
+benchmark: N synthetic-but-realistic stories, each importing a component that pulls a real
+node_modules graph (`chalk` + transitive deps, `ts-dedent`) — comparable to the ~11–15
+files per real story observed in this repo. Cold runs, no caching.
+
+| Stories | Single multi-entry build | Per-story loop (current script) |
+|--------:|-------------------------:|--------------------------------:|
+|     115 |     219 ms (1.9 ms/story) |            1,135 ms (9.9 ms/story) |
+|     500 |     840 ms (1.7 ms/story) |            4,753 ms (9.5 ms/story) |
+|   1,000 |   2,880 ms (2.9 ms/story) |           11,015 ms (11.0 ms/story) |
+|   2,000 |  10,644 ms (5.3 ms/story) |           27,613 ms (13.8 ms/story) |
+
+Takeaways:
+
+- **Per-story bundling** (what `hash-stories-esbuild` does today) scales roughly linearly
+  at ~10–14 ms/story: a 2,000-story Storybook traces in ~28 s.
+- **A single multi-entry build is ~2.5–5× faster** and is the production-relevant path
+  (it shares esbuild startup and graph work). 2,000 stories in ~11 s.
+- File hashing (xxhash) is **not** the bottleneck — bundling dominates; the 115-story real
+  run completes in ~2 s including hashing.
+
+Caveats: synthetic stories are smaller than many real-world stories, so real ms/story will
+be higher; node_modules are re-parsed per entry here (a shared module graph / single build
+amortizes that); and these are cold runs. In production we'd run once per build, cache file
+hashes across builds, and only re-bundle changed entries — so steady-state cost is much
+lower than these cold numbers.
+
 ## Open questions
 
 - Fidelity on non-vanilla setups: SVGR, CSS modules, `?raw`/`?url`, Vue/Svelte SFCs.
