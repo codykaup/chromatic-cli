@@ -31,28 +31,42 @@ flowchart LR
   exactly when (and only when) a story's dependencies change — including dependencies
   shared with other stories, and including stories imported by other stories (CSF
   composition).
-- **Prefer an esbuild-based tracer over the builder stats.** The builder's
-  `preview-stats.json` behaves differently across builders (webpack = complete, Vite =
-  lossy) and forces version-sniffing for node_modules. Tracing the graph ourselves with
-  esbuild gives **one consistent behavior across builders**, closes the Vite preview-deps
-  gap, and lets us hash node_modules **files** instead of guessing versions.
-- **Hash node_modules files; don't sniff versions.** Bundling and hashing the real
-  dependency files is more robust and less fragile than reading versions from
-  `node_modules/**/package.json` — it catches version bumps, `patch-package` edits, and
-  changed transitive resolutions alike.
+- **We need a complete, consistent dependency graph — today's stats aren't enough on their
+  own.** The builder's `preview-stats.json` behaves differently across builders (webpack =
+  complete, Vite = lossy and missing the preview's deps) and forces version-sniffing for
+  node_modules. There are two ways to get a full, consistent graph: trace it ourselves with
+  esbuild, or have the builder emit it. **Both were prototyped, and the hashing/diff core is
+  identical either way** — the only real decision is where the graph comes from.
+- **Recommended production path: emit the graph from the builders we own (strategy B).** We
+  maintain **2 of the 3 relevant builders** — Vite and webpack5 (Rspack is community-
+  maintained). For those two, having the builder plugin emit a normalized graph **with
+  per-module content hashes** gives the highest fidelity (resolution, TypeScript type-
+  elision, and tree-shaking come from the real build for free) and a **loud** failure mode
+  (a broken extractor fails in CI) rather than the *silent* fidelity drift of an own-trace.
+  This is the same class of per-builder maintenance TurboSnap already carries.
+- **Use the esbuild own-trace (strategy A) as the validated fallback.** It's builder-
+  agnostic, so it covers builders we don't own (e.g. Rspack) and any project whose builder
+  hasn't been upgraded yet. It's also the prototype that already proved the hashing core is
+  correct and consistent across builders.
+- **Hash module/file contents; don't sniff versions.** Hashing the real dependency files
+  (or builder-emitted per-module hashes) is more robust and less fragile than reading
+  versions from `node_modules/**/package.json` — it catches version bumps, `patch-package`
+  edits, and changed transitive resolutions alike.
 - **A bare resolver (oxc) is not enough.** Resolution-only tracing massively over-captures
   because it can't do TypeScript type-elision or tree-shaking. esbuild does both for free
-  and was perfectly faithful to the builder graph in testing.
+  and was perfectly faithful to the builder graph in testing — which is why strategy A is
+  built on esbuild rather than a plain resolver.
 
 ## The three prototype scripts
 
 All three live in `bin-src/` and are registered as CLI subcommands. They are research
-tools, not shipped features (`esbuild`/`oxc-*` are dynamically imported).
+tools, not shipped features (`esbuild`/`oxc-*` are dynamically imported). Together they
+validate the hashing core and quantify the trade-off between the two graph sources.
 
 | Command | Graph source | node_modules | Vite preview deps | Purpose |
 |---|---|---|---|---|
 | `chromatic hash-stories` | builder `preview-stats.json` | `package [version]` from package.json | missed (conservative fallback) | Hashing on top of the existing stats graph |
-| `chromatic hash-stories-esbuild` | esbuild (own bundle) | actual files hashed | **captured** | Builder-agnostic hashing; the recommended direction |
+| `chromatic hash-stories-esbuild` | esbuild (own bundle) | actual files hashed | **captured** | Builder-agnostic own-trace (strategy A) |
 | `chromatic trace-fidelity` | — | — | — | Measures whether an own-trace matches the builder graph |
 
 ---
@@ -116,13 +130,19 @@ Note the two workflow stories: they `import * as auth from '../tasks/auth.storie
 (CSF composition), so a story file can be a dependency of other stories. The hash
 approach handles this automatically because it traces real dependencies.
 
+**Limitation that motivates the other prototypes:** the stats graph is only as good as the
+builder that produced it. On Vite it's missing the preview's dependencies, and node_modules
+are collapsed to a version string rather than hashed — so this prototype is conservative by
+construction (see [Key learnings](#key-learnings)).
+
 ---
 
-## 2. `hash-stories-esbuild` — own trace with node_modules hashed (recommended direction)
+## 2. `hash-stories-esbuild` — own-trace with node_modules hashed (strategy A)
 
 Bundles each story with esbuild and hashes **every** input file — first-party and
 node_modules — with no version sniffing. Also traces the preview config via esbuild,
-which closes the Vite preview-deps gap.
+which closes the Vite preview-deps gap. This is the builder-agnostic **strategy A**
+prototype: it proves the hashing core works without depending on builder stats.
 
 ```mermaid
 flowchart TD
@@ -155,9 +175,6 @@ node-src/ui/components/icons.stories.ts [1daff1bafa1e960a] — 11 files (9 node_
 Shared section: 13 files (10 node_modules), appended to every story.
 ```
 
-**Performance:** 115 stories hashed in ~2s, 0 bundle failures (per-story esbuild builds;
-a production version would use a single multi-entry build + caching).
-
 **Dependency-change detection** — editing `node_modules/chalk/source/index.js`:
 
 ```
@@ -167,12 +184,17 @@ Baseline diff: 115 need re-capture (115 changed, 0 added, 0 removed, 0 unchanged
 (chalk is used directly by most components and via the preview, so all 115 correctly
 bust.) An unchanged baseline yields `0 need re-capture`.
 
+This prototype bundles **per story**; a production version would use a single multi-entry
+build plus caching. See [Performance / scaling](#performance--scaling-strategy-a-own-trace)
+for what that costs and why it only applies to strategy A.
+
 ---
 
 ## 3. `trace-fidelity` — is an own-trace trustworthy?
 
-Before trusting an own-trace to replace the builder stats, this script quantifies the gap.
-For each story it compares two **first-party source** dependency sets:
+Strategy A only works if an own-trace faithfully reproduces what the builder bundled. This
+script quantifies the gap before we trust it. For each story it compares two **first-party
+source** dependency sets:
 
 - **STATS** — what the builder actually bundled (ground truth).
 - **OWN** — what our tracer (esbuild or oxc) finds.
@@ -213,9 +235,11 @@ in a long tail (median 0/story, max 217). Root causes a bare resolver can't hand
    (`types.ts`) and pulls in the whole app graph (`git/*`, `bin-src/*`, …).
 2. **Tree-shaking** of unused exports (especially through barrel files).
 
-**Conclusion:** an external tracer is viable, but it needs bundler-grade TS elision +
+**Conclusion:** an own-trace is viable, but it needs bundler-grade TS elision +
 tree-shaking. esbuild provides both for free; resolution alone over-captures badly enough
-to defeat TurboSnap's purpose.
+to defeat TurboSnap's purpose. This is why strategy A is built on esbuild — and why, when
+the build already has this information, having the builder emit it (strategy B) is even
+better.
 
 ---
 
@@ -229,8 +253,8 @@ to defeat TurboSnap's purpose.
   that filters out the virtual modules the preview config is wired through. Result:
   `.storybook/preview.*` and its external dependencies are **absent** from the Vite graph.
 
-This is why behavior diverges by builder, and why an own-trace (or a fuller stats file) is
-attractive.
+This is why behavior diverges by builder, and why either a fuller builder-emitted graph
+(strategy B, for the builders we own) or an own-trace (strategy A) is needed.
 
 ### How preview changes are handled today (for context)
 
@@ -246,6 +270,8 @@ esbuild variant improves on it by tracing preview's real graph.
 That works and catches version bumps, but it can't see same-version content changes
 (`patch-package`) and is more moving parts. `hash-stories-esbuild` hashes the actual
 bundled dependency files, so any change that affects the bundle is caught by construction.
+The builder-emitted approach (strategy B) gets the same property from per-module content
+hashes.
 
 ### Stories can depend on stories
 
@@ -255,17 +281,26 @@ dependencies of other stories. A dependency-tracing hash handles this for free; 
 
 ## Recommended path forward
 
-There are two viable strategies, differing only in **where the dependency graph comes
-from**; the hashing/diff core is the same either way:
+Both strategies share the same hashing/diff core; they differ only in **where the
+dependency graph (and per-module content) comes from**:
 
-- **A — Own-trace (esbuild).** Builder-independent core; we trace the graph ourselves.
-  Diagrammed below. Trade-off: must faithfully replicate each project's build config
-  (aliases, plugins), and fidelity drift is *silent* (risk of under-capture).
-- **B — Emit the graph from the builder (preferred when we own the builders).** Builder
-  plugins emit a normalized graph (ideally with per-module content hashes); the CLI does
-  pure rollup + diff. Highest fidelity (resolution/type-elision/tree-shaking come from the
-  real build for free), and breakage is *loud*. See
-  [Preferred direction](#preferred-direction-emit-the-graph-from-the-builder) below.
+- **A — Own-trace (esbuild).** Builder-independent: we trace the graph ourselves.
+  Trade-off: we must faithfully replicate each project's build config (aliases, plugins),
+  and fidelity drift is *silent* (a missed dependency = a real visual change skipped).
+- **B — Emit the graph from the builder.** Builder plugins emit a normalized graph (with
+  per-module content hashes); the CLI does pure rollup + diff. Highest fidelity
+  (resolution / type-elision / tree-shaking come from the real build for free) and
+  breakage is *loud* (a broken extractor fails in CI).
+
+**We own 2 of the 3 relevant builders — Vite and webpack5 (Rspack is community-maintained) —
+so strategy B is the recommended production path for the builders we own, with strategy A as
+the fallback for builders we don't.** See
+[Preferred direction](#preferred-direction-emit-the-graph-from-the-builder) for the plugin
+details.
+
+The diagram below shows the **strategy A (own-trace)** flow; strategy B replaces the
+esbuild front-end with a builder-emitted graph, and everything from "per-story document"
+onward is shared between them.
 
 ```mermaid
 flowchart TD
@@ -280,28 +315,30 @@ flowchart TD
   API --> CMP[backend compares to baseline build, captures mismatches]
 ```
 
-1. **Adopt esbuild as the dependency tracer** (one behavior across builders; closes the
-   Vite gap; hashes node_modules files). Drive it from Storybook's story index rather than
-   the stats for story enumeration.
-2. **Hash node_modules files** rather than sniffing versions.
-3. **Performance:** switch from per-story builds to one multi-entry build, and cache file
-   hashes across builds.
+Concretely:
+
+1. **Emit a normalized graph + per-module content hashes from the builder plugins** for the
+   builders we own; fall back to the esbuild own-trace for builders we don't.
+2. **Hash module/file contents** rather than sniffing versions, regardless of graph source.
+3. **Drive story enumeration from Storybook's story index** rather than the stats.
 4. **`publishBuild` payload:** send the list of `{ storyFile, hash }`. Open question —
    send the shared section as one shared hash + per-story hashes, or fold it into each
    story hash (current prototypes do the latter).
 
 ## Preferred direction: emit the graph from the builder
 
-We maintain Storybook's builders, so keeping per-builder plugins up to date is acceptable —
-which makes strategy **B** attractive. It stays builder-*dependent*, but the coupling is
-isolated to thin per-builder adapters that emit one normalized format; everything
-downstream is a single builder-agnostic algorithm.
+We maintain 2 of the 3 relevant builders (Vite and webpack5), so keeping per-builder
+plugins up to date is acceptable — which makes strategy **B** the preferred production path
+for those builders. It stays builder-*dependent*, but the coupling is isolated to thin
+per-builder adapters that emit one normalized format; everything downstream is a single
+builder-agnostic algorithm. The esbuild own-trace (strategy A) remains the fallback for
+Rspack and any builder we don't own.
 
 ```mermaid
 flowchart TD
   W[webpack stats plugin] --> NG[normalized graph + per-module hash]
   V[vite/rollup stats plugin] --> NG
-  R[rspack stats plugin] --> NG
+  R[rspack: own-trace fallback] -.-> NG
   NG --> RU[CLI: per-story rollup of module hashes]
   CFG[.storybook config dir hashed on disk] --> RU
   RU --> H[per-story hash]
@@ -309,12 +346,13 @@ flowchart TD
 ```
 
 Why builder-dependence is acceptable here: the failure mode is *loud* (extraction fails or
-the format changes — caught in CI), there are only ~2–3 builders (Vite, webpack5, Rspack)
-and they're consolidating toward Vite/Rolldown, and it's the **same class of maintenance
-TurboSnap already carries**. The own-trace alternative trades that for *silent* fidelity
-drift per project (under-capture = a real visual change skipped), which is worse.
+the format changes — caught in CI), there are only 3 relevant builders (Vite, webpack5,
+Rspack) and they're consolidating toward Vite/Rolldown, and it's the **same class of
+maintenance TurboSnap already carries**. The own-trace alternative trades that for *silent*
+fidelity drift per project (under-capture = a real visual change skipped), which is worse —
+so we reserve it for the builders where we have no other option.
 
-### What the plugins need to change
+### What the plugins need to change (Vite and webpack5)
 
 1. **Vite: stop dropping virtual-bridged edges (the preview gap).** In
    `@storybook/builder-vite`, `pluginWebpackStats` gates the graph through `isUserCode`,
@@ -365,7 +403,7 @@ sourcemap comments/inline maps, and be deliberate about `define`/env inlining (e
 affects visuals *should* invalidate; CI-noise env like build IDs should be excluded or
 hashed pre-`define`).
 
-**Where the material already exists** — this is cheap in both builders:
+**Where the material already exists** — this is cheap in both builders we own:
 
 - **Rollup/Vite:** `ModuleInfo.code` is the transformed code per module. At `buildEnd`,
   iterate `getModuleIds()` → `getModuleInfo(id).code`, normalize, hash, emit alongside
@@ -406,7 +444,14 @@ backend rollups and for debuggability ("story X re-captured because module Y cha
 The one subtle thing to get right is the **normalization of transformed code** so the hash
 is deterministic across machines and CI.
 
-## Performance / scaling
+## Performance / scaling (strategy A own-trace)
+
+> **Scope:** these numbers measure the **esbuild own-trace prototype (strategy A)** —
+> specifically the cost of *bundling stories to trace them*. They do **not** apply to the
+> recommended strategy B: there the graph and per-module hashes come out of the build
+> Storybook already runs, so there is no separate trace step and the marginal cost is just
+> hashing + diff. This section sizes the fallback path and motivates a single multi-entry
+> build if/when we ship the own-trace.
 
 Building the `storybookjs/storybook` monorepo's internal Storybook wasn't practical in the
 research environment (Nx + yarn workspaces, and the esbuild tracer needs the source tree
@@ -422,14 +467,15 @@ files per real story observed in this repo. Cold runs, no caching.
 |   1,000 |   2,880 ms (2.9 ms/story) |           11,015 ms (11.0 ms/story) |
 |   2,000 |  10,644 ms (5.3 ms/story) |           27,613 ms (13.8 ms/story) |
 
-Takeaways:
+Takeaways (all specific to the own-trace path):
 
 - **Per-story bundling** (what `hash-stories-esbuild` does today) scales roughly linearly
   at ~10–14 ms/story: a 2,000-story Storybook traces in ~28 s.
-- **A single multi-entry build is ~2.5–5× faster** and is the production-relevant path
-  (it shares esbuild startup and graph work). 2,000 stories in ~11 s.
+- **A single multi-entry build is ~2.5–5× faster** and is the production-relevant path for
+  strategy A (it shares esbuild startup and graph work). 2,000 stories in ~11 s.
 - File hashing (xxhash) is **not** the bottleneck — bundling dominates; the 115-story real
-  run completes in ~2 s including hashing.
+  run completes in ~2 s including hashing. Under strategy B, where bundling isn't a
+  separate step, hashing is the only added cost — so it's effectively free.
 
 Caveats: synthetic stories are smaller than many real-world stories, so real ms/story will
 be higher; node_modules are re-parsed per entry here (a shared module graph / single build
@@ -440,9 +486,10 @@ lower than these cold numbers.
 ## Open questions
 
 - Fidelity on non-vanilla setups: SVGR, CSS modules, `?raw`/`?url`, Vue/Svelte SFCs.
-  `trace-fidelity` is the tool to measure this per project before trusting an own-trace.
-- How to faithfully apply the user's bundler config (aliases, plugins) to the esbuild
-  trace, or whether to read the builder's own module graph instead.
+  `trace-fidelity` is the tool to measure this per project before trusting the own-trace
+  fallback.
+- For the builders we own: confirming webpack's `[contenthash]` module hashes are content-
+  (not identity-) derived and runtime-stable, and finalizing the normalized graph schema.
 - Exact `publishBuild` schema and how the backend stores/compares baseline hashes.
 
 ## Running the scripts
