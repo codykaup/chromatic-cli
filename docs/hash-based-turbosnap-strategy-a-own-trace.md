@@ -167,6 +167,18 @@ amortizes that); and these are cold runs. In production we'd run once per build,
 hashes across builds, and only re-bundle changed entries — so steady-state cost is much
 lower than these cold numbers.
 
+## Effect on bail reasons
+
+See the [main doc's bail-reason table](./hash-based-turbosnap.md#effect-on-turbosnap-bail-reasons)
+for the full picture (the eliminations are shared across A/B/C). A's distinctive points:
+
+- A **eliminates `missingStatsFile`** — the own-trace bundles stories itself, so it doesn't
+  depend on the builder emitting `preview-stats.json`.
+- New: **`ownTraceFailed`** — esbuild can't bundle a story entry because we couldn't replicate
+  the project's aliases/plugins/config. The more dangerous failure is *not* a bail at all —
+  **silent fidelity drift** that under-captures (skips a real visual change). That risk is the
+  core reason A is the fallback, not the primary path.
+
 ## Open questions specific to strategy A
 
 - Fidelity on non-vanilla setups: SVGR, CSS modules, `?raw`/`?url`, Vue/Svelte SFCs.

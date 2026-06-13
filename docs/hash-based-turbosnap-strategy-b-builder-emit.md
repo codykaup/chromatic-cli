@@ -304,6 +304,17 @@ The work here is **path normalization** (match the Vite plugin's `./relative` fo
 **confirming hash stability** (same content ⇒ same hash across machines/runtimes), not graph
 construction — webpack already has the graph.
 
+## Effect on bail reasons
+
+See the [main doc's bail-reason table](./hash-based-turbosnap.md#effect-on-turbosnap-bail-reasons)
+for the full picture. B eliminates every `changedPackageFiles` and `invalidChangedFiles`
+bail (including `nodeModulesMissingInStats`, which the preview-gap fix + node_modules-in-graph
+close by construction). B's one new bail:
+
+- **`graphExtractionFailed`** — the builder plugin fails to emit the module graph or a module
+  hash. By design this is a **loud, CI-visible** failure rather than the *silent* fidelity
+  drift of an own-trace — the deliberate trade-off that makes B the recommended path.
+
 ## Open questions specific to strategy B
 
 - Confirming webpack's `[contenthash]` module hashes are content- (not identity-) derived

@@ -271,6 +271,19 @@ dead-code/unused-export edits; module-diff strictly wins on never-under-capturin
 - **Builder coverage.** Each builder needs a `generateBundle`-time emitter conforming to the
   shared `chunk-graph.json` schema (the prototype covers Vite only).
 
+## Effect on bail reasons
+
+See the [main doc's bail-reason table](./hash-based-turbosnap.md#effect-on-turbosnap-bail-reasons)
+for the full picture (C eliminates the same `changedPackageFiles` / `invalidChangedFiles`
+bails as B). C's distinctive new bails:
+
+- **`chunkTopologyChanged`** — a re-chunk (vendor-split tweak, a new manual chunk) moves many
+  chunk hashes at once. Detect the structural chunk-set change (per the caveats above) and
+  conservatively capture the affected stories rather than mis-attribute.
+- **`chunkGraphExtractionFailed`** — the plugin fails to emit `chunk-graph.json`.
+- Incomplete hash normalization is an over-capture cascade, **not** a bail — but if left
+  unfixed it makes every build look like "everything changed."
+
 ## Open questions specific to strategy C
 
 - Whether to ship C **instead of** or **alongside** B. Alongside keeps module-level precision

@@ -190,6 +190,83 @@ to get today. The recommendation for the builders we own is therefore **B as the
 with C layered on where tree-shaking precision is worth the extra normalization work**;
 reserve A for builders we don't own.
 
+## Effect on TurboSnap bail reasons
+
+A "bail" is TurboSnap giving up on precision and re-capturing **everything**. Today's bail
+reasons (from `TurboSnapBailReason` in `node-src/types.ts`) fall into three buckets:
+git/baseline-diff failures, lockfile/dependency-tracing failures, and conservative blanket
+bails on file categories the tracer can't reason about. The hash approach removes most of
+them — but only under one **assumption**, which is itself an [open question](#open-questions-shared):
+
+> The baseline build stores its per-story (and per-module/chunk) hashes, and the next build
+> compares against *those* — not against a git diff between commits. This is what lets the
+> git- and lockfile-derived bails go away.
+
+Legend: ✅ **eliminated** (no longer possible or needed) · 🔄 **changed** (no longer a blanket
+bail — becomes precise hash invalidation, which may still bust many stories but never blindly
+"capture everything") · ⚠️ **retained** (still required).
+
+| Current bail reason | A | B | C | Why |
+|---|---|---|---|---|
+| `noAncestorBuild` | ⚠️ | ⚠️ | ⚠️ | No baseline build ⇒ nothing to diff. Fundamental. |
+| `rebuild` | ⚠️ | ⚠️ | ⚠️ | Same-commit rebuild policy; unrelated to tracing. |
+| `missingStatsFile` | ✅ | ⚠️\* | ⚠️\* | A bundles stories itself (no builder stats needed). B needs the emitted module graph, C the `chunk-graph.json` (\*renamed to "missing graph artifact"). |
+| `changedStorybookFiles` | 🔄 | 🔄 | 🔄 | `.storybook/preview.*` + addon preview entries are now **in the graph** (B/C via the preview-gap fix; A via the esbuild preview trace) ⇒ precise per-story invalidation, not a blanket bail. `main.*` / manager-side config (never in the preview bundle) stay folded into the shared section as a disk hash. |
+| `changedStaticFiles` | ⚠️ | ⚠️ | ⚠️ | Static assets are copied, not bundled modules ⇒ not in any hash graph. Downgrade to a disk hash of `staticDirs` folded into the shared section, else keep as a bail. |
+| `changedExternalFiles` | ⚠️ | ⚠️ | ⚠️ | User-declared `externals` globs are an out-of-graph escape hatch by definition. |
+| `changedPackageFiles` | ✅ | ✅ | ✅ | No lockfile parsing / snyk / baseline-lockfile fetch — dependencies are hashed by content. |
+| ↳ `baselineCheckoutFailed` | ✅ | ✅ | ✅ | No baseline-lockfile `git show`. |
+| ↳ `lockfileParseFailed` | ✅ | ✅ | ✅ | No lockfile parsing. |
+| ↳ `lockfileSizeExceeded` | ✅ | ✅ | ✅ | No lockfile read / 10 MB cap. |
+| ↳ `nodeModulesMissingInStats` | ✅ | ✅ | ✅ | A bundles node_modules; B/C emit them in the graph — gone by construction. |
+| `invalidChangedFiles` | ✅ | ✅ | ✅ | The diff is per-story hash vs. stored baseline hashes, not a git changed-file computation. |
+| ↳ `ancestorMissing` | ✅ | ✅ | ✅ | No baseline-commit checkout for the trace ⇒ **shallow clones stop mattering**. |
+| ↳ `baselineDirty` | ✅ | ✅ | ✅ | No baseline working-tree comparison. |
+| ↳ `replacementFailed` | ✅ | ✅ | ✅ | No `getChangedFilesWithReplacement`. |
+| ↳ `gitCommandFailed` | ✅ | ✅ | ✅ | No git diff in the trace path. |
+| ↳ `networkError` | ⚠️ | ⚠️ | ⚠️ | Still need to fetch the baseline hash manifest from Chromatic — a transport error, not a precision bail. |
+
+**Net:** every `changedPackageFiles` and `invalidChangedFiles` bail (the bulk of the
+monorepo/shallow-clone pain) is **eliminated for all three options**; `changedStorybookFiles`
+stops being a blanket bail; and only the genuinely out-of-graph categories
+(`changedStaticFiles`, `changedExternalFiles`) plus the fundamental `noAncestorBuild` /
+`rebuild` / `missingStatsFile` remain. The eliminations are nearly identical across A/B/C
+because they share the diff core — the options differ mainly in the **new** bails they
+introduce.
+
+### New bail reasons to consider
+
+**Shared (A/B/C):**
+
+- **`baselineHashesMissing`** — an ancestor build exists but predates hash-TurboSnap (no
+  stored hashes to diff against). A migration-window capture-all; scope it to a version check.
+- **`hashSchemaMismatch`** — baseline hashes use an incompatible schema/version ⇒ can't
+  compare. Version the hash payload so this is detectable rather than silently wrong.
+- **Residual out-of-graph surface** — anything affecting rendering that isn't a module in the
+  graph (static assets, `preview-head.html` global CSS, fonts, runtime-fetched data). This is
+  *why* `changedStaticFiles` / `changedExternalFiles` and the `.storybook`-dir disk hash are
+  retained; the new risk is **forgetting** one of these inputs and silently under-capturing.
+
+**Strategy A (own-trace):**
+
+- **`ownTraceFailed`** — esbuild can't bundle a story entry (alias/plugin/config replication
+  gap). Plus the dangerous non-bail: *silent* fidelity drift ⇒ under-capture (see the
+  [Strategy A doc](./hash-based-turbosnap-strategy-a-own-trace.md)).
+
+**Strategy B (module-emit):**
+
+- **`graphExtractionFailed`** — the builder plugin fails to emit the module graph or a module
+  hash. A *loud*, CI-visible failure (the intended trade-off vs. A's silent drift).
+
+**Strategy C (chunk-diff):**
+
+- **`chunkTopologyChanged`** — a re-chunk (vendor-split tweak, new manual chunk) moves many
+  chunk hashes at once ⇒ detect the structural chunk-set change and conservatively capture the
+  affected stories rather than mis-attribute.
+- **`chunkGraphExtractionFailed`** — the plugin fails to emit `chunk-graph.json`.
+- Incomplete hash normalization is an over-capture cascade, not a bail (see the
+  [Strategy C doc](./hash-based-turbosnap-strategy-c-chunk-diff.md#two-findings-that-decide-whether-this-is-viable)).
+
 ## Key learnings
 
 ### Builder stats are not portable
