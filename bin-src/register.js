@@ -6,12 +6,16 @@ const commands = {
   'generate-manifest': () =>
     import('./generateManifest').then(({ main }) => main(process.argv.slice(3))),
   'hash-stories': () =>
-    import('./hashStories').then(({ main: hashStoriesMain }) => hashStoriesMain(process.argv.slice(3))),
+    import('./hashStories').then(({ main: hashStoriesMain }) =>
+      hashStoriesMain(process.argv.slice(3))
+    ),
   init: () => import('./init').then(({ main: initMain }) => initMain(process.argv.slice(3))),
   main: () => import('./main').then(({ main }) => main(process.argv.slice(2))),
   'react-native-build': () =>
     import('./reactNativeBuild').then(({ main }) => main(process.argv.slice(3))),
   trace: () => import('./trace').then(({ main: traceMain }) => traceMain(process.argv.slice(3))),
+  'trace-fidelity': () =>
+    import('./traceFidelity').then(({ main: fidelityMain }) => fidelityMain(process.argv.slice(3))),
   'trim-stats-file': () =>
     import('./trimStatsFile').then(({ main: trimMain }) => trimMain(process.argv.slice(3))),
 };
