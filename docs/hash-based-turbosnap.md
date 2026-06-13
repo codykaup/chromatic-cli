@@ -255,6 +255,18 @@ dependencies of other stories. A dependency-tracing hash handles this for free; 
 
 ## Recommended path forward
 
+There are two viable strategies, differing only in **where the dependency graph comes
+from**; the hashing/diff core is the same either way:
+
+- **A — Own-trace (esbuild).** Builder-independent core; we trace the graph ourselves.
+  Diagrammed below. Trade-off: must faithfully replicate each project's build config
+  (aliases, plugins), and fidelity drift is *silent* (risk of under-capture).
+- **B — Emit the graph from the builder (preferred when we own the builders).** Builder
+  plugins emit a normalized graph (ideally with per-module content hashes); the CLI does
+  pure rollup + diff. Highest fidelity (resolution/type-elision/tree-shaking come from the
+  real build for free), and breakage is *loud*. See
+  [Preferred direction](#preferred-direction-emit-the-graph-from-the-builder) below.
+
 ```mermaid
 flowchart TD
   E[esbuild: single multi-entry build of all stories + preview] --> M[metafile graph]
@@ -277,6 +289,122 @@ flowchart TD
 4. **`publishBuild` payload:** send the list of `{ storyFile, hash }`. Open question —
    send the shared section as one shared hash + per-story hashes, or fold it into each
    story hash (current prototypes do the latter).
+
+## Preferred direction: emit the graph from the builder
+
+We maintain Storybook's builders, so keeping per-builder plugins up to date is acceptable —
+which makes strategy **B** attractive. It stays builder-*dependent*, but the coupling is
+isolated to thin per-builder adapters that emit one normalized format; everything
+downstream is a single builder-agnostic algorithm.
+
+```mermaid
+flowchart TD
+  W[webpack stats plugin] --> NG[normalized graph + per-module hash]
+  V[vite/rollup stats plugin] --> NG
+  R[rspack stats plugin] --> NG
+  NG --> RU[CLI: per-story rollup of module hashes]
+  CFG[.storybook config dir hashed on disk] --> RU
+  RU --> H[per-story hash]
+  H --> API[publishBuild]
+```
+
+Why builder-dependence is acceptable here: the failure mode is *loud* (extraction fails or
+the format changes — caught in CI), there are only ~2–3 builders (Vite, webpack5, Rspack)
+and they're consolidating toward Vite/Rolldown, and it's the **same class of maintenance
+TurboSnap already carries**. The own-trace alternative trades that for *silent* fidelity
+drift per project (under-capture = a real visual change skipped), which is worse.
+
+### What the plugins need to change
+
+1. **Vite: stop dropping virtual-bridged edges (the preview gap).** In
+   `@storybook/builder-vite`, `pluginWebpackStats` gates the graph through `isUserCode`,
+   which excludes `\0`-prefixed virtual modules unless they're in a small allowlist. The
+   chain to `.storybook/preview.*` and addon `preview` entries runs through the
+   project-annotations / config-entry virtual, which is **not** in that allowlist — so
+   those edges are dropped and `preview.*` is orphaned out of the stats (this is the Vite
+   preview-deps gap from §"Builder stats are not portable"). Fix: build the graph from
+   Rollup's complete module info at `buildEnd` (`getModuleIds()` → `getModuleInfo(id)`),
+   bridging *through* virtual modules (connect a virtual's real importers to its real
+   imports) instead of filtering them out. This brings Vite to parity with webpack.
+2. **Keep node_modules *files* in the graph** (already true for both builders) with stable
+   resolved paths, so dependencies can be hashed at the file level — no version sniffing.
+3. **Emit a stable per-module content hash** (detailed below) — the highest-leverage
+   change.
+4. **Normalize the schema across builders** so the downstream algorithm is single-path,
+   e.g. `{ id, path, kind: 'source' | 'node_module' | 'external', importers: string[],
+   contentHash? }`. Webpack/Rspack stats are already complete; the work is conforming to
+   the schema.
+5. **Out of band:** `.storybook/main.*` and manager/Node-side config never appear in the
+   preview bundle graph, so keep hashing the `.storybook` config dir from disk (or add a
+   separate manager-side stats).
+
+### (3) Per-module content hashing — detail
+
+This is the change that collapses the CLI to a pure graph-rollup and removes every
+fidelity problem. If each module in the graph carries a stable content hash, the CLI no
+longer resolves imports, reads files, runs a second bundler, or sniffs node_modules
+versions. Its whole job becomes:
+
+```
+storyHash(S) = H( sorted [(moduleId, moduleHash) for module in reachable(S)] + sharedSection )
+```
+
+…then diff `storyHash` maps against the baseline build.
+
+**What to hash (the crux).** "Content hash" can mean three things, and the choice
+determines correctness and stability:
+
+| Option | Captures | Risk |
+|---|---|---|
+| Raw on-disk source bytes | source edits | misses config/transform-driven changes (a `define` value, plugin option, alias retarget, SVGR output) |
+| Post-transform module code | the *actual bundled output* (best signal) | machine-dependent noise (absolute paths, sourcemap refs, timestamps) |
+| **Post-transform code, normalized** (recommended) | bundled output | — (noise stripped before hashing) |
+
+Normalize before hashing: strip absolute project/home paths → repo-relative, drop
+sourcemap comments/inline maps, and be deliberate about `define`/env inlining (env that
+affects visuals *should* invalidate; CI-noise env like build IDs should be excluded or
+hashed pre-`define`).
+
+**Where the material already exists** — this is cheap in both builders:
+
+- **Rollup/Vite:** `ModuleInfo.code` is the transformed code per module. At `buildEnd`,
+  iterate `getModuleIds()` → `getModuleInfo(id).code`, normalize, hash, emit alongside
+  `importers`.
+- **webpack:** it already computes content-based module hashes for `[contenthash]`
+  (`chunkGraph.getModuleHash` / `module.buildInfo.hash`); surface those (confirm they're
+  content- not identity-derived, and runtime-stable).
+
+Use xxhash64 (fast, non-crypto; 128-bit if extra collision margin is wanted) — negligible
+cost next to the build.
+
+**Edge cases:**
+
+- **Virtual modules** (no file): hash their *generated* content (the plugin produced it).
+  Desirable — the stories-list virtual changes when stories are added/removed.
+- **node_modules:** hashed like any module → catches version bumps, `patch-package` edits,
+  and changed transitive resolution, with no version string to trust.
+- **Assets / CSS:** hash the transform output (URL, base64, injected CSS) → captures
+  asset/style changes that affect rendering.
+- **Granularity:** hashing the whole module means a change to a tree-shaken-away export of
+  a *used* module still invalidates — mild, safe over-capture; per-export precision isn't
+  worth it.
+
+**Capture characterization:**
+
+- **Under-capture: ~zero.** Any in-graph input whose content changes re-hashes every
+  dependent story.
+- **Over-capture: mild, safe.** Whitespace/comment-only changes, or changes to unused
+  exports of used modules, invalidate without pixel changes.
+- The only under-capture surface is anything affecting rendering that **isn't a module in
+  the graph** — global CSS injected via `preview-head.html`, fonts, runtime-fetched data —
+  which is why the `.storybook` config dir is still folded in (point 5).
+
+**Optional:** the plugin could emit per-story hashes directly, making the CLI a pure
+pass-through to `publishBuild`. Still emit **module-level** hashes too, for flexible
+backend rollups and for debuggability ("story X re-captured because module Y changed").
+
+The one subtle thing to get right is the **normalization of transformed code** so the hash
+is deterministic across machines and CI.
 
 ## Performance / scaling
 
