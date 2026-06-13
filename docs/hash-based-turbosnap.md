@@ -4,13 +4,16 @@
 > Nothing here is wired into the production build or the `publishBuild` mutation yet.
 
 This is the **shared overview**: the goal, the hashing/diff core, the key learnings, and
-the decision between two implementation options. Each option has its own document with the
+the decision between the implementation options. Each option has its own document with the
 details specific to it — read this first, then dive into whichever you're working on:
 
 - **[Strategy A — own-trace (esbuild)](./hash-based-turbosnap-strategy-a-own-trace.md)** —
   builder-agnostic fallback; we trace the graph ourselves.
 - **[Strategy B — emit the graph from the builder](./hash-based-turbosnap-strategy-b-builder-emit.md)**
   — *recommended* for the builders we own (Vite, webpack5).
+- **[Strategy C — chunk-diff (builder-emitted chunk graph)](./hash-based-turbosnap-strategy-c-chunk-diff.md)**
+  — a B-variant that diffs output *chunks* instead of modules; tree-shake-accurate, but needs
+  careful hash normalization.
 
 ## Goal
 
@@ -61,6 +64,12 @@ flowchart LR
   (or builder-emitted per-module hashes) is more robust and less fragile than reading
   versions from `node_modules/**/package.json` — it catches version bumps, `patch-package`
   edits, and changed transitive resolutions alike.
+- **A chunk-level variant ([strategy C](./hash-based-turbosnap-strategy-c-chunk-diff.md))
+  is tree-shake-accurate and can ship alongside B.** Diffing the builder's output *chunks*
+  (instead of modules) ignores dead-code/unused-export edits that module-level conservatively
+  busts — but only once hashed filenames are normalized out, or a single-story edit cascades
+  through the runtime chunk to the whole suite. A head-to-head found B and C agree on every
+  tested edit except tree-shaken dead code.
 
 ## The hashing core, demonstrated (`hash-stories`)
 
@@ -130,23 +139,26 @@ tools, not shipped features (`esbuild`/`oxc-*` are dynamically imported).
 | `chromatic hash-stories-esbuild` | esbuild (own bundle) | [Strategy A](./hash-based-turbosnap-strategy-a-own-trace.md) |
 | `chromatic trace-fidelity` | esbuild / oxc vs. stats | [Strategy A](./hash-based-turbosnap-strategy-a-own-trace.md) |
 
-## The two options
+## The options
 
-Both strategies share the hashing/diff core demonstrated above; they differ only in
-**where the dependency graph (and per-module content) comes from**:
+All strategies share the hashing/diff core demonstrated above; they differ in **where the
+graph comes from** and **what primitive is hashed**:
 
-| | A — own-trace (esbuild) | B — emit from the builder |
-|---|---|---|
-| **Graph source** | We bundle stories ourselves and read the inputs | Builder plugins emit a normalized graph |
-| **Fidelity** | Must replicate each project's build config | Comes from the real build for free |
-| **Failure mode** | *Silent* drift (risk: under-capture) | *Loud* (extractor breaks in CI) |
-| **Best for** | Builders we don't own (e.g. Rspack) | Builders we own (Vite, webpack5) |
-| **Details** | [Strategy A doc](./hash-based-turbosnap-strategy-a-own-trace.md) | [Strategy B doc](./hash-based-turbosnap-strategy-b-builder-emit.md) |
+| | A — own-trace (esbuild) | B — module-emit | C — chunk-emit |
+|---|---|---|---|
+| **Graph source** | We bundle stories ourselves and read the inputs | Builder plugins emit a module graph | Builder plugins emit a chunk graph |
+| **Primitive hashed** | source files | transformed modules | output chunks |
+| **Fidelity** | Must replicate each project's build config | Comes from the real build for free | Comes from the real build for free |
+| **Failure mode** | *Silent* drift (risk: under-capture) | *Loud* (extractor breaks in CI) | *Loud*, but hash needs normalization |
+| **Best for** | Builders we don't own (e.g. Rspack) | Builders we own (Vite, webpack5) | Builders we own; max tree-shake accuracy |
+| **Details** | [Strategy A doc](./hash-based-turbosnap-strategy-a-own-trace.md) | [Strategy B doc](./hash-based-turbosnap-strategy-b-builder-emit.md) | [Strategy C doc](./hash-based-turbosnap-strategy-c-chunk-diff.md) |
 
 **We own 2 of the 3 relevant builders (Vite and webpack5; Rspack is community-maintained),
-so strategy B is the recommended production path for the builders we own, with strategy A as
-the fallback for the rest.** Whichever the graph comes from, the downstream steps are the
-same:
+so a builder-emit path (B, optionally C) is the recommended production path for the builders
+we own, with strategy A as the fallback for the rest.** B and C are not exclusive — the
+builder can emit both (the prototype does), and a [head-to-head shows they agree everywhere
+except tree-shaken dead code](./hash-based-turbosnap-strategy-c-chunk-diff.md#head-to-head-vs-module-level-strategy-b).
+Whichever the graph comes from, the downstream steps are the same:
 
 1. **Hash module/file contents** rather than sniffing versions.
 2. **Drive story enumeration from Storybook's story index** rather than the stats.
