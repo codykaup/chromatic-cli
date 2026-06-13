@@ -1,4 +1,5 @@
-import { existsSync } from 'fs';
+/* eslint-disable max-lines -- research/prototype script: two own-tracers + stats trace + reporting */
+import { existsSync, readFileSync } from 'fs';
 import meow from 'meow';
 import path from 'path';
 
@@ -31,12 +32,26 @@ import { Stats } from '../node-src/types';
  *     snapshots) but are safe.
  *
  * The goal is to quantify how trustworthy an external tracer would be before we commit to replacing
- * the stats-based approach. esbuild stands in for a fast resolver; a production version might use the
- * builder's own resolver, oxc-resolver, etc. — the fidelity question is the same.
+ * the stats-based approach. Two own-tracers are provided via --resolver:
+ *   - 'esbuild' (default): bundle + metafile. esbuild compiles TS and tree-shakes, so it elides
+ *     type-only imports and dead code just like the real builder.
+ *   - 'oxc': oxc-parser (import extraction) + oxc-resolver (resolution). A pure resolver/parser with
+ *     no bundling. Requires `npm i oxc-parser oxc-resolver` (kept out of the shipped CLI).
+ *
+ * FINDINGS (this repo, vs freshly built Vite stats):
+ *   - esbuild: 100% coverage, 0 missed, 0 EXTRA. Faithful.
+ *   - oxc:     100% coverage, 0 missed, but ~9k EXTRA files (massive over-capture) concentrated in a
+ *     long tail (median 0 extra/story, max ~217). Root causes a bare resolver can't handle:
+ *       1. Type-only imports written WITHOUT the `type` keyword, e.g. `import { Context } from
+ *          '../types'` where Context is an interface. esbuild does TS-aware elision and drops it; a
+ *          syntactic tracer follows it into the type barrel and pulls in the whole app graph.
+ *       2. Tree-shaking / dead-code elimination of unused exports (esp. via barrel files).
+ *   Conclusion: an external tracer IS viable, but it needs bundler-grade TS elision + tree-shaking
+ *   (esbuild gives this for free); resolution alone over-captures badly and defeats TurboSnap.
  *
  * Command:
  *   chromatic trace-fidelity [-s|--stats-file] [-b|--storybook-base-dir] [-c|--storybook-config-dir]
- *                            [--limit N] [--worst N] [--json]
+ *                            [--resolver esbuild|oxc] [--limit N] [--worst N] [--json]
  */
 
 const { STORYBOOK_BASE_DIR, STORYBOOK_CONFIG_DIR, WEBPACK_STATS_FILE } = process.env;
@@ -160,7 +175,7 @@ function statsDependencies(stats: Stats, normalize: (p: string) => string) {
  *
  * @returns The own-traced dependency map and the set of stories that failed to resolve.
  */
-async function ownDependencies(rootPath: string, storyFiles: string[]) {
+async function ownDependenciesEsbuild(rootPath: string, storyFiles: string[]) {
   // Dynamic import: esbuild is a research-only dependency, kept out of the shipped CLI bundle.
   const esbuild = await import('esbuild');
   const tsconfig = path.join(rootPath, 'tsconfig.json');
@@ -211,6 +226,136 @@ async function ownDependencies(rootPath: string, storyFiles: string[]) {
   return { depsByStory, failed };
 }
 
+const PARSEABLE = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
+
+interface OxcResolver {
+  sync: (directory: string, specifier: string) => { path?: string };
+}
+
+/**
+ * Extract every module specifier from a parsed source file: static imports, re-exports, and (literal)
+ * dynamic imports. Dynamic imports carry only source offsets, so we slice and strip quotes, skipping
+ * non-literal expressions.
+ *
+ * @param module_ The `module` record from oxc-parser.
+ * @param code The source text (for slicing dynamic-import specifiers).
+ *
+ * @returns The list of import specifiers found.
+ */
+function importSpecifiers(module_: any, code: string): string[] {
+  const fromRequest = (request: { value?: string; start: number; end: number } | undefined) => {
+    if (!request) return undefined;
+    if (request.value !== undefined) return request.value;
+    const raw = code.slice(request.start, request.end).replaceAll(/^['"`]|['"`]$/g, '');
+    return /[$`+\s]/.test(raw) ? undefined : raw; // skip non-literal dynamic imports
+  };
+  // Skip TypeScript type-only imports/re-exports: the bundler strips them, so following them would
+  // drag the whole type graph in and massively over-capture. A static import is a runtime dependency
+  // if it's a bare side-effect import (no bindings) or has at least one value (non-type) binding.
+  const fromImport = (imp: any) =>
+    imp.entries.length === 0 || imp.entries.some((entry: any) => !entry.isType)
+      ? fromRequest(imp.moduleRequest)
+      : undefined;
+  const fromExport = (entry: any) => (entry.isType ? undefined : fromRequest(entry.moduleRequest));
+
+  const specifiers = [
+    ...module_.staticImports.map((imp: any) => fromImport(imp)),
+    ...module_.staticExports.flatMap((exp: any) =>
+      (exp.entries ?? []).map((entry: any) => fromExport(entry))
+    ),
+    ...module_.dynamicImports.map((dyn: any) => fromRequest(dyn.moduleRequest)),
+  ];
+  return specifiers.filter((specifier): specifier is string => !!specifier);
+}
+
+/**
+ * Resolve every import in a single file to its first-party dependencies (node_modules excluded).
+ *
+ * @param parseSync The oxc-parser parse function.
+ * @param resolver The oxc-resolver instance.
+ * @param resolver.sync Resolves a specifier relative to a directory.
+ * @param resolver.sync
+ * @param rootPath The repository root.
+ * @param absolute The absolute path of the file to read and parse.
+ * @param story The repo-root-relative story path (excluded from its own deps).
+ *
+ * @returns Resolved first-party dependencies with their repo-relative path and whether to recurse.
+ */
+function fileDependencies(
+  parseSync: (filename: string, code: string) => { module: any },
+  resolver: OxcResolver,
+  rootPath: string,
+  absolute: string,
+  story: string
+) {
+  const code = readFileSync(absolute, 'utf8');
+  const parsed = parseSync(absolute, code);
+  const dependencies: { relative: string; absolute: string; parseable: boolean }[] = [];
+  for (const specifier of importSpecifiers(parsed.module, code)) {
+    const resolved = resolver.sync(path.dirname(absolute), specifier).path;
+    if (!resolved || isNodeModule(posix(resolved))) continue;
+    const relative = posix(path.relative(rootPath, resolved));
+    if (relative !== story) {
+      dependencies.push({
+        relative,
+        absolute: resolved,
+        parseable: PARSEABLE.has(path.extname(resolved)),
+      });
+    }
+  }
+  return dependencies;
+}
+
+/**
+ * Trace each story's first-party source dependencies independently of the builder, using oxc-parser
+ * (TS/JSX-aware import extraction) + oxc-resolver (resolution honoring tsconfig paths). This is an
+ * own-written resolver — no bundler involved — so it's the closest stand-in for a production tracer.
+ *
+ * @param rootPath The repository root.
+ * @param storyFiles Repo-root-relative story file paths to trace.
+ *
+ * @returns The own-traced dependency map and the set of stories that failed to trace.
+ */
+async function ownDependenciesOxc(rootPath: string, storyFiles: string[]) {
+  // Dynamic imports: oxc-* are research-only dependencies, kept out of the shipped CLI bundle.
+  const { parseSync } = await import('oxc-parser');
+  const { ResolverFactory } = await import('oxc-resolver');
+
+  const resolver = new ResolverFactory({
+    extensions: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json'],
+    conditionNames: ['import', 'browser', 'default'],
+    tsconfig: { configFile: path.join(rootPath, 'tsconfig.json'), references: 'auto' },
+  });
+
+  // DFS one story to its transitive first-party source files (node_modules excluded).
+  const traceStory = (story: string) => {
+    const sources = new Set<string>();
+    const visited = new Set<string>();
+    const stack = [path.join(rootPath, story)];
+    while (stack.length > 0) {
+      const absolute = stack.pop() as string;
+      if (visited.has(absolute)) continue;
+      visited.add(absolute);
+      for (const dep of fileDependencies(parseSync, resolver, rootPath, absolute, story)) {
+        sources.add(dep.relative);
+        if (dep.parseable) stack.push(dep.absolute);
+      }
+    }
+    return sources;
+  };
+
+  const depsByStory = new Map<string, Set<string>>();
+  const failed = new Set<string>();
+  for (const story of storyFiles) {
+    try {
+      depsByStory.set(story, traceStory(story));
+    } catch {
+      failed.add(story);
+    }
+  }
+  return { depsByStory, failed };
+}
+
 interface StoryFidelity {
   story: string;
   missed: string[];
@@ -228,12 +373,13 @@ export async function main(argv: string[]) {
   const { flags } = meow(
     `
     Usage
-      $ chromatic trace-fidelity [-s|--stats-file] [-b|--storybook-base-dir] [-c|--storybook-config-dir] [--limit N] [--worst N] [--json]
+      $ chromatic trace-fidelity [-s|--stats-file] [-b|--storybook-base-dir] [-c|--storybook-config-dir] [--resolver esbuild|oxc] [--limit N] [--worst N] [--json]
 
     Options
       --stats-file, -s <filepath>           Path to preview-stats.json. (default: 'storybook-static/preview-stats.json')
       --storybook-base-dir, -b <dirname>    Relative path from repository root to Storybook project root.
       --storybook-config-dir, -c <dirname>  Storybook config dir. (default: '.storybook')
+      --resolver <name>                     Own-tracer to use: 'esbuild' (bundle+metafile) or 'oxc' (oxc-parser + oxc-resolver). (default: 'esbuild')
       --limit <n>                           Only check the first N stories (faster iteration).
       --worst <n>                           Show the N stories with the most missed dependencies. (default: 10)
       --json                                Print machine-readable JSON.
@@ -253,6 +399,7 @@ export async function main(argv: string[]) {
           alias: 'c',
           default: STORYBOOK_CONFIG_DIR || '.storybook',
         },
+        resolver: { type: 'string', default: 'esbuild' },
         limit: { type: 'number' },
         worst: { type: 'number', default: 10 },
         json: { type: 'boolean', default: false },
@@ -272,7 +419,8 @@ export async function main(argv: string[]) {
   let stories = [...statsDeps.keys()].filter((story) => existsSync(path.join(rootPath, story)));
   if (flags.limit) stories = stories.slice(0, flags.limit);
 
-  const { depsByStory: ownDeps, failed } = await ownDependencies(rootPath, stories);
+  const trace = flags.resolver === 'oxc' ? ownDependenciesOxc : ownDependenciesEsbuild;
+  const { depsByStory: ownDeps, failed } = await trace(rootPath, stories);
 
   const fidelity: StoryFidelity[] = [];
   for (const story of stories) {
@@ -295,6 +443,7 @@ export async function main(argv: string[]) {
       JSON.stringify(
         {
           summary: {
+            resolver: flags.resolver,
             storiesChecked: fidelity.length,
             storiesFailed: [...failed],
             storiesWithMisses: storiesWithMisses.length,
@@ -312,6 +461,7 @@ export async function main(argv: string[]) {
 
   report({
     log,
+    resolver: flags.resolver,
     fidelity,
     failed,
     storiesWithMisses,
@@ -323,6 +473,7 @@ export async function main(argv: string[]) {
 
 interface ReportArguments {
   log: ReturnType<typeof createLogger>;
+  resolver: string;
   fidelity: StoryFidelity[];
   failed: Set<string>;
   storiesWithMisses: StoryFidelity[];
@@ -333,6 +484,7 @@ interface ReportArguments {
 
 function report({
   log,
+  resolver,
   fidelity,
   failed,
   storiesWithMisses,
@@ -340,13 +492,15 @@ function report({
   allMissedFiles,
   worst,
 }: ReportArguments) {
-  log.info(`Checked ${fidelity.length} stories against the builder stats.\n`);
+  log.info(
+    `Checked ${fidelity.length} stories against the builder stats (resolver: ${resolver}).\n`
+  );
   log.info(
     `  Dependency coverage:  ${(coverage * 100).toFixed(1)}% of stats deps found by own-trace`
   );
   log.info(`  Stories with misses:  ${storiesWithMisses.length} / ${fidelity.length}`);
   log.info(`  Unique missed files:  ${allMissedFiles.size}`);
-  log.info(`  Stories esbuild could not resolve: ${failed.size}`);
+  log.info(`  Stories the resolver could not trace: ${failed.size}`);
 
   if (failed.size > 0) {
     log.info(`\nFailed to resolve (own-trace gap):`);
