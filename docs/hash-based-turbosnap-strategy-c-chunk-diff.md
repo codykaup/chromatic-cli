@@ -86,6 +86,102 @@ Implemented in the **Storybook** builder (not the CLI), since that's where the b
 It is emitted *alongside* the strategy-B module graph (`preview-stats.json` + per-module
 `contentHash`) so the two can be diffed head-to-head on the same build.
 
+### Reference implementation (Vite)
+
+The actual emitter. The two non-obvious parts — stable chunk keys (finding 1's companion)
+and filename normalization in `hashChunk` (finding 1) — are what make the chunk hashes
+usable; without them the signal is dominated by routing noise.
+
+```ts
+import { createHash } from 'node:crypto';
+import { relative } from 'node:path';
+
+import slash from 'slash';
+import type { Plugin } from 'vite';
+
+const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/;
+
+export function pluginChunkStats({ workingDir }: { workingDir: string }): Plugin {
+  const normalize = (id: string) => `./${slash(relative(workingDir, id.split('?')[0]))}`;
+
+  // Hash chunk content, normalized so the hash reflects *content* not *routing*:
+  // drop the sourcemap ref and neutralize hashed sibling filenames (`name-A1b2C3d4.js`),
+  // otherwise a leaf chunk's new hash cascades through the runtime chunk to every story.
+  const hashChunk = (code: string) =>
+    createHash('sha256')
+      .update(code.replace(/\n?\/\/# sourceMappingURL=.*$/gm, '').replace(/-[\w-]{8}\.(js|css)/g, '-[hash].$1'))
+      .digest('hex')
+      .slice(0, 16);
+
+  return {
+    name: 'storybook:chunk-graph-stats',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      if (!process.env.STORYBOOK_CHUNK_GRAPH) return;
+
+      // Output filenames embed a content hash and churn on every change. Key each chunk by a
+      // stable identity (hash of its module-id set) so the diff can tell "same chunk, new
+      // content" from re-chunking.
+      const chunkKey = (moduleIds: string[]) =>
+        createHash('sha256').update(moduleIds.slice().sort().join('\n')).digest('hex').slice(0, 16);
+
+      const fileNameToKey = new Map<string, string>();
+      for (const file of Object.values(bundle))
+        if (file.type === 'chunk') fileNameToKey.set(file.fileName, chunkKey(Object.keys(file.modules)));
+
+      const chunks: Record<string, { fileName: string; hash: string; imports: string[]; dynamicImports: string[] }> = {};
+      const moduleToChunk = new Map<string, string>();
+      const entryChunks: string[] = [];
+
+      for (const file of Object.values(bundle)) {
+        if (file.type !== 'chunk') continue;
+        const key = fileNameToKey.get(file.fileName)!;
+        chunks[key] = {
+          fileName: file.fileName,
+          hash: hashChunk(file.code),
+          imports: file.imports.map((f) => fileNameToKey.get(f)!).filter(Boolean),
+          dynamicImports: file.dynamicImports.map((f) => fileNameToKey.get(f)!).filter(Boolean),
+        };
+        if (file.isEntry) entryChunks.push(key);
+        for (const moduleId of Object.keys(file.modules)) moduleToChunk.set(moduleId, key);
+      }
+
+      // Transitive closure over static chunk imports.
+      const reachable = (starts: string[]) => {
+        const seen = new Set<string>();
+        const stack = [...starts];
+        while (stack.length > 0) {
+          const chunk = stack.pop()!;
+          if (!chunk || seen.has(chunk)) continue;
+          seen.add(chunk);
+          stack.push(...(chunks[chunk]?.imports ?? []));
+        }
+        return seen;
+      };
+
+      // Preview-runtime / shared section: every story loads the entry chunk graph.
+      const sharedChunks = reachable(entryChunks);
+
+      const stories: Record<string, { chunks: string[] }> = {};
+      for (const [moduleId, chunkName] of moduleToChunk) {
+        const bare = moduleId.split('?')[0];
+        if (!STORY_FILE.test(bare) || bare.includes('node_modules')) continue;
+        const set = reachable([chunkName]);
+        for (const shared of sharedChunks) set.add(shared);
+        stories[normalize(moduleId)] = { chunks: [...set].sort() };
+      }
+
+      this.emitFile({ type: 'asset', fileName: 'chunk-graph.json', source: JSON.stringify({ stories, chunks }, null, 2) });
+    },
+  };
+}
+```
+
+For webpack5 the equivalent taps `compilation.hooks.afterProcessAssets`, reading
+`compilation.chunks` (each chunk's `contentHash`, its `chunk.getAllReferencedChunks()` for
+the import graph, and `chunkGraph.getChunkModules(chunk)` for the module→chunk map). The
+schema and diff are identical; only the chunk-enumeration API differs.
+
 ## Head-to-head vs. module-level (strategy B)
 
 Measured on this repo's own Storybook (115 stories), building twice per edit with the

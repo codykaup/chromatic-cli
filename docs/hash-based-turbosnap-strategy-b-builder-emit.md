@@ -133,6 +133,177 @@ backend rollups and for debuggability ("story X re-captured because module Y cha
 The one subtle thing to get right is the **normalization of transformed code** so the hash
 is deterministic across machines and CI.
 
+## Reference implementation
+
+### Vite (`@storybook/builder-vite`) — implemented
+
+This is the actual change to `pluginWebpackStats` (Storybook repo, branch
+`claude/vite-plugin-turbosnap-pozq5x`). It moves graph construction to `buildEnd`, bridges
+through the internal `\0` virtual modules so `.storybook/preview.*` is no longer orphaned,
+and attaches a normalized per-module `contentHash`. The existing `{ modules: [{ id, name,
+reasons }] }` shape is preserved for backward compatibility, with `contentHash` added.
+
+```ts
+import { createHash } from 'node:crypto';
+import { homedir } from 'node:os';
+import { relative } from 'node:path';
+
+import type { BuilderStats } from 'storybook/internal/types';
+import slash from 'slash';
+import type { Plugin } from 'vite';
+
+import { SB_VIRTUAL_FILES, getOriginalVirtualModuleId } from '../virtual-file-names.ts';
+
+interface Reason {
+  moduleName: string;
+}
+interface Module {
+  id: string | number;
+  name: string;
+  reasons?: Reason[];
+  /** Stable hash of this module's normalized, post-transform content (absent for code-less modules). */
+  contentHash?: string;
+}
+
+/**
+ * Modules we keep as nodes: user code, node_modules, and Storybook's own virtual entry files.
+ * Vite/Rollup infrastructure and internal `\0`-prefixed virtuals are not kept — but the graph is
+ * bridged *through* them (see `resolveKeptImports`) so the real modules they connect (notably
+ * `.storybook/preview.*` via the project-annotations virtual) are not orphaned.
+ */
+function isKept(moduleName: string) {
+  if (!moduleName) return false;
+  if (Object.values(SB_VIRTUAL_FILES).includes(getOriginalVirtualModuleId(moduleName))) return true;
+  return Boolean(
+    !moduleName.startsWith('vite/') &&
+      !moduleName.startsWith('\0') &&
+      moduleName !== 'react/jsx-runtime'
+  );
+}
+
+export type WebpackStatsPlugin = Plugin & { storybookGetStats: () => BuilderStats };
+
+export function pluginWebpackStats({ workingDir }: { workingDir: string }): WebpackStatsPlugin {
+  const workingDirSlash = slash(workingDir);
+  const homeDirSlash = slash(homedir());
+
+  // virtual files keep their original id (with a leading slash, for CLI compatibility);
+  // everything else becomes `./path/relative/to/root`.
+  function normalize(filename: string) {
+    if (filename.startsWith('virtual:')) return `/${filename}`;
+    if (Object.values(SB_VIRTUAL_FILES).includes(getOriginalVirtualModuleId(filename)))
+      return `/${getOriginalVirtualModuleId(filename)}`;
+    return `./${slash(relative(workingDir, filename.split('?')[0]))}`;
+  }
+
+  // Deterministic across machines/CI: drop sourcemap refs and rewrite absolute paths.
+  function normalizeCode(code: string) {
+    return slash(code)
+      .replace(/\n?\/\/# sourceMappingURL=.*$/gm, '')
+      .replace(/\/\*# sourceMappingURL=[\s\S]*?\*\//g, '')
+      .split(workingDirSlash)
+      .join('.')
+      .split(homeDirSlash)
+      .join('~');
+  }
+
+  const hashCode = (code: string | null | undefined) =>
+    code == null ? undefined : createHash('sha256').update(normalizeCode(code)).digest('hex').slice(0, 16);
+
+  const statsMap = new Map<string, Module>();
+
+  return {
+    name: 'storybook:rollup-plugin-webpack-stats',
+    enforce: 'post',
+    buildEnd() {
+      const importsOf = (id: string): readonly string[] => {
+        const info = this.getModuleInfo(id);
+        return info ? info.importedIds.concat(info.dynamicallyImportedIds) : [];
+      };
+
+      // The kept modules `id` really imports, bridging through any non-kept modules in between.
+      const resolveKeptImports = (id: string): string[] => {
+        const result = new Set<string>();
+        const visited = new Set<string>();
+        const stack = [...importsOf(id)];
+        while (stack.length > 0) {
+          const dep = stack.pop()!;
+          if (visited.has(dep)) continue;
+          visited.add(dep);
+          if (isKept(dep)) result.add(dep);
+          else stack.push(...importsOf(dep));
+        }
+        return [...result];
+      };
+
+      const ensureModule = (rawId: string): Module => {
+        const name = normalize(rawId);
+        let mod = statsMap.get(name);
+        if (!mod) {
+          mod = { id: name, name, reasons: [], contentHash: hashCode(this.getModuleInfo(rawId)?.code) };
+          statsMap.set(name, mod);
+        }
+        return mod;
+      };
+
+      const addReason = (target: Module, importerName: string) => {
+        if (importerName === target.name) return;
+        if (!target.reasons!.some((r) => r.moduleName === importerName))
+          target.reasons!.push({ moduleName: importerName });
+      };
+
+      for (const id of this.getModuleIds()) {
+        if (!isKept(id)) continue;
+        const importer = ensureModule(id);
+        for (const depId of resolveKeptImports(id)) addReason(ensureModule(depId), importer.name);
+      }
+    },
+
+    storybookGetStats() {
+      const stats = { modules: Array.from(statsMap.values()) };
+      return { ...stats, toJson: () => stats };
+    },
+  };
+}
+```
+
+### webpack5 (`@storybook/builder-webpack5`) — sketch (not yet implemented)
+
+Webpack's stats are already the complete compiler graph, so the only additions are the
+per-module `contentHash` and conforming to the shared schema. Webpack already computes a
+content hash for `[contenthash]`; surface it (confirm it's content- not identity-derived).
+A small plugin tapping `compilation.hooks.afterProcessAssets` (or `done`) can emit the same
+`{ id, name, reasons, contentHash }` shape:
+
+```ts
+import type { Compiler } from 'webpack';
+
+export class StorybookModuleHashPlugin {
+  apply(compiler: Compiler) {
+    compiler.hooks.thisCompilation.tap('SbModuleHash', (compilation) => {
+      compilation.hooks.afterProcessAssets.tap('SbModuleHash', () => {
+        const { chunkGraph, moduleGraph } = compilation;
+        const modules = [...compilation.modules].map((module) => {
+          const name = module.identifier(); // normalize to ./path like the Vite plugin
+          // webpack's own content-based hash, used for [contenthash]
+          const contentHash = chunkGraph.getModuleHash(module, /* runtime */ undefined);
+          const reasons = [...moduleGraph.getIncomingConnections(module)]
+            .map((c) => c.originModule?.identifier())
+            .filter(Boolean)
+            .map((moduleName) => ({ moduleName }));
+          return { id: name, name, reasons, contentHash };
+        });
+        // write `{ modules }` to preview-stats.json (or merge into the existing stats)
+      });
+    });
+  }
+}
+```
+
+The work here is **path normalization** (match the Vite plugin's `./relative` form) and
+**confirming hash stability** (same content ⇒ same hash across machines/runtimes), not graph
+construction — webpack already has the graph.
+
 ## Open questions specific to strategy B
 
 - Confirming webpack's `[contenthash]` module hashes are content- (not identity-) derived
