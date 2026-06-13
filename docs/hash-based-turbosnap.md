@@ -197,6 +197,31 @@ defeats TurboSnap's purpose. This is why the own-trace (strategy A) is built on 
 rather than a plain resolver; the measurements are in the
 [strategy A doc](./hash-based-turbosnap-strategy-a-own-trace.md#trace-fidelity--is-an-own-trace-trustworthy).
 
+### Hashing source files directly isn't sufficient (the original approach)
+
+The original plan — list a story's dependencies and hash each **source file on disk** — is
+correct for the common case (the prototypes do exactly this with xxhash and it holds for
+most stories), but two gaps make raw-file hashing insufficient as the *sole* mechanism.
+Both point to hashing the builder's **transformed module content**, driven by the real
+bundled graph (strategy B), rather than raw files in isolation:
+
+1. **You can't know *which* files to hash without the real bundled graph.** A file list
+   produced by a resolver/parser over-captures badly (see *A bare resolver is not enough* —
+   ~9,200 extra files from type-only imports and missing tree-shaking). The list must come
+   from the post-elision, post-tree-shake build graph.
+2. **Raw on-disk bytes miss build- and transform-driven changes.** A change can alter a
+   story's rendered output *without changing any source file's bytes*:
+   - a `define`/env value that gets inlined,
+   - a Vite/webpack **plugin option** change,
+   - an **alias retarget** (the same import resolves to a different file),
+   - **asset / SVGR / CSS-modules** transform output changing for the same input.
+
+   A raw-file hash sees none of these, so it can **under-capture** — skip a story that
+   actually changed, which is the dangerous direction. Hashing the builder's *transformed*
+   module content catches them because it hashes what was actually bundled. The raw-vs-
+   transformed-vs-normalized trade-off and how to keep transformed hashes deterministic are
+   in the [strategy B doc](./hash-based-turbosnap-strategy-b-builder-emit.md).
+
 ## Open questions (shared)
 
 - Exact `publishBuild` schema and how the backend stores/compares baseline hashes.
