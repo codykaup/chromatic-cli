@@ -200,7 +200,9 @@ them — but only under one **assumption**, which is itself an [open question](#
 
 > The baseline build stores its per-story (and per-module/chunk) hashes, and the next build
 > compares against *those* — not against a git diff between commits. This is what lets the
-> git- and lockfile-derived bails go away.
+> git- and lockfile-derived bails go away. See
+> [What the backend must store](#what-the-backend-must-store-the-contingency) for the
+> concrete requirement.
 
 Legend: ✅ **eliminated** (no longer possible or needed) · 🔄 **changed** (no longer a blanket
 bail — becomes precise hash invalidation, which may still bust many stories but never blindly
@@ -266,6 +268,52 @@ introduce.
 - **`chunkGraphExtractionFailed`** — the plugin fails to emit `chunk-graph.json`.
 - Incomplete hash normalization is an over-capture cascade, not a bail (see the
   [Strategy C doc](./hash-based-turbosnap-strategy-c-chunk-diff.md#two-findings-that-decide-whether-this-is-viable)).
+
+### What the backend must store (the contingency)
+
+The bail eliminations above hold **only if the comparison is hash-vs-stored-baseline-hashes**.
+If the diff still falls back to a git changed-file computation, the `invalidChangedFiles`
+family (shallow clone, dirty baseline, git failures) comes back. So the requirement is: each
+build **persists its own hash manifest**, and the next build fetches the baseline build's
+manifest and diffs maps — no git, no lockfiles. (This is the same direction as the
+"upload baseline manifests as build artifacts" idea.)
+
+**Per build, store a small hash manifest** (KBs even for thousands of stories):
+
+```jsonc
+{
+  "hashSchemaVersion": 2,            // bump when the algorithm/normalization changes
+  "hashAlgo": "xxhash64",            // + normalization id, so mismatches are detectable
+  "sharedSectionHash": "…",          // preview/config/externals folded section
+  "stories": {
+    "src/Button.stories.tsx": "…"    // the per-story rolled-up hash (the diff key)
+  },
+  "modules": {                       // optional but recommended (B): enables flexible
+    "src/Button.tsx": "…"            // backend rollups + "why did story X re-capture?"
+  }
+}
+```
+
+**The diff becomes:** fetch the baseline build's manifest **by the baseline build id the CLI
+already resolves** (no commit checkout), then `changed = stories where hash !== baseline.hash`.
+That's it — the inputs that determined the result are stored, not recomputed from git.
+
+**The backend/CLI must then handle:**
+
+- **Baseline selection** stays as-is (server-authoritative, by build id) — it does *not* need
+  a git diff, which is what retires the shallow-clone bails.
+- **No baseline manifest** (ancestor predates this feature, or was built by an old
+  CLI/builder) ⇒ `baselineHashesMissing` ⇒ capture all. Gate on `hashSchemaVersion` presence.
+- **Schema/algo mismatch** between builds ⇒ `hashSchemaMismatch` ⇒ capture all (don't compare
+  hashes computed by different normalization).
+- **Multiple ancestors** (merge commits): decide the policy — diff against each and union the
+  changed sets (conservative) or intersect (aggressive). Document it; it replaces today's
+  git-ancestry logic.
+- **Client-side residue:** `untraced`, `externals`, and the out-of-graph static/config disk
+  hashes are applied where the manifest is produced, so they're baked into the stored hashes.
+
+The remaining decision is the **`publishBuild` schema** itself (per-story only, shared +
+per-story, or module/chunk-level too) — tracked in [Open questions](#open-questions-shared).
 
 ## Key learnings
 
