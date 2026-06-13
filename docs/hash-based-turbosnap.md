@@ -13,7 +13,8 @@ details specific to it — read this first, then dive into whichever you're work
   — *recommended* for the builders we own (Vite, webpack5).
 - **[Strategy C — chunk-diff (builder-emitted chunk graph)](./hash-based-turbosnap-strategy-c-chunk-diff.md)**
   — a B-variant that diffs output *chunks* instead of modules; tree-shake-accurate, but needs
-  careful hash normalization.
+  careful hash normalization. Sourced from the internal "chunk-diff" proposal — that doc
+  [tracks our findings against it](./hash-based-turbosnap-strategy-c-chunk-diff.md#relationship-to-the-chunk-diff-proposal-notion).
 
 ## Goal
 

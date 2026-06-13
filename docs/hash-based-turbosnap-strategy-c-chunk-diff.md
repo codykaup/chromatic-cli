@@ -24,6 +24,29 @@ flowchart TD
   ENT[entry / preview-runtime chunk] -. folded into every story .-> CG
 ```
 
+## Relationship to the chunk-diff proposal (Notion)
+
+This strategy is **sourced from the internal proposal**, not an independent alternative to
+it: *Exploration of TurboSnap optimization angles* → "Idea 2 — Chunk-diff replaces
+source-file tracing"
+([Notion](https://app.notion.com/p/chromatic-ui/Exploration-of-TurboSnap-optimization-angles-3606e8162034814a92f2d15319dd41a7)).
+The artifact (`chunk-graph.json`), the diff algorithm, and the preview-runtime-as-shared
+section are taken directly from that proposal. What this doc adds is a concrete
+Storybook/Vite implementation plus the empirical findings from running it — including two
+points the proposal left as open caveats.
+
+**Findings tracked against the proposal:**
+
+| Proposal (Idea 2) | What we found / changed when implementing it |
+|---|---|
+| Builder emits `chunk-graph.json` (`stories`→chunks, `chunks`→`{hash, imports}`); diff hashes + per-story closure | **Confirmed & implemented** as `pluginChunkStats` (Vite). Same shape, same diff. |
+| Chunks keyed by stable ids with a separate `hash` (e.g. `s-button.abc.js`) | Real Vite filenames **embed** the content hash, so they aren't stable. We key each chunk by a **hash of its module-id set** so the diff isn't fooled by filename churn (distinguishes "same chunk, new content" from re-chunking). |
+| Caveat #1: "chunk-hash stability (`moduleIds: deterministic`)" | **This is load-bearing, not a footnote.** Hashing the shipped chunk code as-is busts **all 115** stories on a *single-story* edit — the runtime `importFn` references hashed sibling filenames, so one leaf change cascades through the runtime chunk (which is folded into every story). Fix = **normalize hashed filename refs out before hashing**; the same edit then drops to a precise **3**. |
+| "Tree-shake aware by construction" | **Confirmed empirically.** A change to an *unused/dead* dependency export → **0** stories (the export is tree-shaken out), vs. module-level's safe over-capture of 1. A *used/side-effecting* dependency change → caught (**1**). |
+| Framed as **replacing** source-file tracing / `findChangedDependencies` | We position it as a **variant of Strategy B that can ship alongside** module-level hashing. Chunk attribution is **coarser** (a chunk bundles many modules), so B stays the precise, debuggable "why did this story re-capture?" layer; C adds tree-shake accuracy. |
+| Caveat: topology change (vendor-split tweak) moves many hashes at once | Carried forward — the diff flags a **structural chunk-set change** separately rather than silently mis-attributing (see caveats below). |
+| Caveats: CSS/asset chunks, dynamic-`import()` blind spot, per-builder coverage, silent migration, symbol-level as a later layer | Unchanged from the proposal; carried into the caveats section below. |
+
 ## How it relates to strategies A and B
 
 | | A — own-trace | B — module-emit | **C — chunk-emit** |
