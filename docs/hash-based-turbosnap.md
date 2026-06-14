@@ -74,7 +74,7 @@ flowchart LR
 
 ## The hashing core, demonstrated (`hash-stories`)
 
-The `hash-stories` prototype hashes on top of the existing builder `preview-stats.json`
+The [`hash-stories`](../bin-src/hashStories.ts) prototype hashes on top of the existing builder `preview-stats.json`
 (the same data the production tracer uses). It's the simplest of the three scripts and the
 best illustration of the **shared mechanics both strategies build on** — per-story
 hashing, the shared section, baseline diffing, and CSF composition.
@@ -131,14 +131,16 @@ rather than hashing them. Both options below exist to fix exactly those gaps.
 
 ## The prototype scripts
 
-All three live in `bin-src/` and are registered as CLI subcommands. They are research
-tools, not shipped features (`esbuild`/`oxc-*` are dynamically imported).
+These live in `bin-src/` and are registered as CLI subcommands (except the hybrid, a standalone
+analysis script). They are research tools, not shipped features (`esbuild`/`oxc-*` are
+dynamically imported).
 
-| Command | Graph source | Covered in |
+| Command / script | Graph source | Covered in |
 |---|---|---|
-| `chromatic hash-stories` | builder `preview-stats.json` | this doc (shared core demo) |
-| `chromatic hash-stories-esbuild` | esbuild (own bundle) | [Strategy A](./hash-based-turbosnap-strategy-a-own-trace.md) |
-| `chromatic trace-fidelity` | esbuild / oxc vs. stats | [Strategy A](./hash-based-turbosnap-strategy-a-own-trace.md) |
+| [`chromatic hash-stories`](../bin-src/hashStories.ts) | builder `preview-stats.json` | this doc (shared core demo) |
+| [`chromatic hash-stories-esbuild`](../bin-src/hashStoriesEsbuild.ts) | esbuild (own bundle) | [Strategy A](./hash-based-turbosnap-strategy-a-own-trace.md) |
+| [`chromatic trace-fidelity`](../bin-src/traceFidelity.ts) | esbuild / oxc vs. stats | [Strategy A](./hash-based-turbosnap-strategy-a-own-trace.md) |
+| [`hashStoriesHybrid.mjs`](../bin-src/hashStoriesHybrid.mjs) | builder module graph ∩ chunk graph | [Hybrid](#hybrid-combine-b-and-c-intersection) |
 
 ## The options
 
@@ -215,7 +217,8 @@ byte-identical, so its snapshot can't change. The two only *disagree* in the ove
 (barrel/dead-code: B over-flags, C correct; add/remove: C over-flags, B correct), and AND resolves
 each to the correct, minimal answer.
 
-**Measured across the full matrix** (this repo's 115-story Storybook; `bin-src/hashStoriesHybrid.mjs`):
+**Measured across the full matrix** (this repo's 115-story Storybook;
+[`bin-src/hashStoriesHybrid.mjs`](../bin-src/hashStoriesHybrid.mjs)):
 
 | Edit | B | C | **B ∩ C (hybrid)** | Ideal |
 |---|---|---|---|---|
@@ -456,4 +459,7 @@ chromatic hash-stories-esbuild -s storybook-static/preview-stats.json [--mode ex
 
 # 3. fidelity check (strategy A; oxc resolver requires: npm i oxc-parser oxc-resolver)
 chromatic trace-fidelity -s storybook-static/preview-stats.json --resolver esbuild|oxc [--worst N] [--json]
+
+# 4. hybrid B∩C diff (needs preview-stats.json + chunk-graph.json from a baseline and current build)
+node bin-src/hashStoriesHybrid.mjs <baseline-stats> <current-stats> <baseline-chunks> <current-chunks>
 ```

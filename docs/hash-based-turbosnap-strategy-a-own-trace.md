@@ -16,6 +16,8 @@ see the [main doc](./hash-based-turbosnap.md#the-two-options).)
 
 ## `hash-stories-esbuild` — own-trace with node_modules hashed
 
+> Script: [`bin-src/hashStoriesEsbuild.ts`](../bin-src/hashStoriesEsbuild.ts).
+
 Bundles each story with esbuild and hashes **every** input file — first-party and
 node_modules — with no version sniffing. Also traces the preview config via esbuild,
 which closes the Vite preview-deps gap from the own-trace side.
@@ -64,6 +66,8 @@ This prototype bundles **per story**; a production version would use a single mu
 build plus caching (see [Performance / scaling](#performance--scaling) below).
 
 ## `trace-fidelity` — is an own-trace trustworthy?
+
+> Script: [`bin-src/traceFidelity.ts`](../bin-src/traceFidelity.ts).
 
 Strategy A only works if an own-trace faithfully reproduces what the builder bundled. This
 script quantifies the gap before we trust it. For each story it compares two **first-party
