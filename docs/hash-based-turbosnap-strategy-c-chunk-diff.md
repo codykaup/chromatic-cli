@@ -217,14 +217,38 @@ modified `@storybook/builder-vite` and diffing each signal against the baseline 
 | dependency change — **unused / dead code** | 1 | **0** |
 | dependency change — **used / side-effecting** | 1 | 1 |
 | `.storybook/preview.ts` (substantive) | 115 | 115 |
+| **edit an _unused_ barrel re-export sibling** | **1 (over-captures)** | **0 (correct)** |
 | **add 1 story** | +1 added, 0 changed | +1 added, **115 changed** |
 | **remove 1 story** | −1 removed, 0 changed | −1 removed, **114 changed** |
 | `README.md` | 0 | 0 |
 
 Both signals are reproducible (0 changes between two identical builds), and `chunk-graph.json`
-is smaller than the module stats (≈88 KB vs ≈180 KB here). The two agree on edits to existing
-stories/deps **except tree-shaken dead code** (C more precise) — but **diverge sharply on
-adding/removing a story** (C over-captures the whole suite; see below).
+is smaller than the module stats (≈88 KB vs ≈180 KB here). The two diverge in **opposite
+directions**: C over-captures on story add/remove (loader churn, below), while B over-captures
+on **barrel files** and tree-shaken dead code — C is correct on both because it hashes
+tree-shaken output.
+
+### Barrel files
+
+A story that imports one symbol from a barrel (`import { Used } from './components'`) should
+not re-capture when an *unused* sibling re-export (`Unused`) changes. Measured by editing only
+the unused sibling:
+
+- **C → not re-flagged (correct).** Tree-shaking drops the unused sibling from the bundled
+  output, so it's not in the story's chunks.
+- **B → re-flagged (over-captures).** B builds its graph from the *static* import graph
+  (`getModuleInfo().importedIds`), so the barrel lists **both** re-exports and the unused
+  sibling is reachable from the story; whole-module content hashing then rolls its change into
+  the story's hash.
+
+This is the mirror image of the add/remove finding: hashing bundled output makes C
+tree-shake-accurate through barrels where B is blunt. The fix for B is **symbol-level barrel
+resolution** — resolve which exported *symbols* the story actually pulls through the barrel and
+depend only on those modules (the [Storybook change-detection](https://github.com/storybookjs/storybook)
+`followBarrel` approach; "reform H" in the optimization-angles exploration). That's a real
+extension to B, not something whole-module hashing gives for free. (C's correctness here is
+bounded by chunk granularity: if the "unused" sibling is used by *another* story and
+co-bundled into a shared chunk, C can still over-capture.)
 
 ### Adding or removing a story
 

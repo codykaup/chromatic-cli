@@ -315,6 +315,23 @@ close by construction). B's one new bail:
   hash. By design this is a **loud, CI-visible** failure rather than the *silent* fidelity
   drift of an own-trace — the deliberate trade-off that makes B the recommended path.
 
+## Known over-capture: barrel files
+
+B builds its graph from the **static** import graph (`getModuleInfo().importedIds`), so a story
+that imports one symbol from a barrel still reaches **every** module the barrel re-exports.
+Whole-module content hashing then re-captures the story when an *unused* re-export sibling
+changes — measured directly (editing an unused sibling re-flagged the importing story, while
+the chunk-level signal correctly ignored it; see the
+[Strategy C head-to-head](./hash-based-turbosnap-strategy-c-chunk-diff.md#barrel-files)). This
+is safe (over-capture, never under-capture) but is the main precision gap of pure module-level
+hashing.
+
+Two ways to close it: **symbol-level barrel resolution** (resolve which exported symbols the
+story pulls through the barrel and depend only on those modules — the Storybook
+change-detection `followBarrel` approach, "reform H"), or pairing B with the tree-shake-accurate
+chunk signal ([Strategy C](./hash-based-turbosnap-strategy-c-chunk-diff.md)) so the chunk side
+vetoes barrel over-capture.
+
 ## Open questions specific to strategy B
 
 - Confirming webpack's `[contenthash]` module hashes are content- (not identity-) derived
