@@ -228,6 +228,8 @@ each to the correct, minimal answer.
 | dependency — unused / dead code | 1 | 0 | **0** | 0 |
 | dependency — used / side-effecting | 1 | 1 | **1** | 1 |
 | `.storybook/preview.ts` | 115 | 115 | **115** | 115 (global) |
+| preview *dependency* (substantive) | 115 | 115 | **115** | 115 (global) |
+| preview *dependency* (comment-only, plain-JS node_module) | **115** | 0 | **0** | 0 |
 | add 1 story | +1 added | +1 added, **115 changed** | **+1 added, 0 changed** | +1 added |
 | remove 1 story | −1 removed | −1 removed, **114 changed** | **−1 removed, 0 changed** | −1 removed |
 | edit unused barrel sibling | **1** | 0 | **0** | 0 |
@@ -237,6 +239,21 @@ The hybrid lands on the **minimal correct set in every tested scenario** — B's
 add/remove, C's precision on barrels and dead code, and agreement everywhere they already agree.
 It is the only one of the four (A/B/C/hybrid) with no measured over-capture outside the genuinely
 global `preview.ts` case.
+
+**Preview dependencies (files imported by `preview.*`).** These are in the graph (preview-gap
+fix), folded into the shared section, so a real change to one re-captures **every** story under B,
+C, and the hybrid — verified (`ansi-html` substantive edit → 115/115/115). We *figure out* the
+affected set; it's just genuinely "all," because preview config is global and static analysis
+can't prove a story is unaffected. This is **not a bail** — it's content-driven (a no-output edit
+costs nothing) and never under-captures, and it closes the old Vite blind spot where preview's
+external deps were orphaned.
+
+**Comments in untransformed node_modules — a B over-capture the hybrid fixes.** B's
+comment/whitespace immunity only holds for files that go through the TS/JSX transform. A plain-JS
+`node_module` isn't transformed, so its comments survive into the module code: a *comment-only*
+edit to such a dep re-captures under **B (115)**. C strips them via minification (**0**), so the
+**hybrid → 0**. (For transformed source — story/component files — comments are already gone before
+B hashes, so B alone is fine there.)
 
 **Cost / caveats.** Emit and store *both* artifacts (module graph + chunk graph) and intersect on
 the backend — more storage and two per-builder extractors to maintain. Residual over-capture
