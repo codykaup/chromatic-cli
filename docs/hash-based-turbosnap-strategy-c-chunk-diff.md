@@ -233,17 +233,27 @@ difference is the **collateral**:
 
 - **B touches nothing else** — existing stories don't import the new one, and no existing
   module's content changed, so every other per-story hash is byte-identical.
-- **C re-flags the entire suite.** The iframe entry statically imports the **importFn routing
-  map** (the `storybook-stories` virtual, `{ storyId → () => import('…') }`), and C folds the
-  entry graph into *every* story's chunk set. Adding/removing a story adds/removes a real
-  **entry** in that map, so the shared chunk's content genuinely changes for all stories.
+- **C re-flags the entire suite.** The entry chunk (folded into every story's set) carries the
+  bundler's **loading machinery**, and adding/removing a story perturbs it for *all* stories.
 
-This is **not** the hashed-filename cascade (finding 1) — normalization can't fix it, because
-the routing map changed by gaining/losing a route, not just a filename hash. It's a concrete
-instance of the shared-section-selection caveat below: the routing map is a *loading* concern,
-not a *rendering* input, so folding it into every story is the over-capture. Mitigation:
-exclude the importFn/routing chunk from the shared section and fold in only the
-preview-runtime/annotations chunk — that brings C's add/remove behavior back in line with B.
+**This is hard to fix — we tried and it didn't work.** The obvious mitigation — exclude the
+`storybook-stories` importFn map from the shared hash — is **insufficient**. Diffing the actual
+built chunks showed the real driver is **Vite's `__vite__mapDeps` preload array**: a flat list
+of *every* async chunk filename, injected into the entry chunk, with consumer chunks
+referencing **indices** into it. Adding one story inserts an entry and **re-indexes** the array,
+so the change ripples across multiple shared chunks (e.g. the entry, the renderer, and shared
+component chunks all moved hash in our test — not just the importFn module). It is **not** the
+hashed-filename cascade (finding 1); normalization of filenames doesn't remove the added array
+element or the shifted indices.
+
+A robust fix would mean **neutralizing the bundler's loader/preload internals** out of the hash
+(fragile and Vite-version-specific — whack-a-mole as Vite's codegen evolves) or **building the
+signal with `build.modulePreload` disabled** (changes the real output, so not viable for the
+production build Chromatic consumes). Neither is the clean, low-effort change first assumed.
+**Takeaway:** this is a structural cost of hashing *output chunks* — module-level (B) doesn't
+have it, because it hashes modules *before* the bundler injects its loading/preload glue. It is
+the strongest argument for using B as the primary signal and treating C as a tree-shaking
+refinement layer rather than a stand-alone primitive.
 
 ## Two findings that decide whether this is viable
 
@@ -284,14 +294,12 @@ dead-code/unused-export edits; module-diff strictly wins on never-under-capturin
   tweak, a new manual chunk), many chunk sets shift at once and the diff conservatively busts
   the affected stories. The structural-set check above flags these rather than silently
   mis-attributing.
-- **Shared-section selection.** Folding the *whole* entry chunk in is correct but coarse: the
-  `importFn` routing map lives in the runtime chunk too, so adding/removing stories perturbs
-  it — **measured as the whole suite re-flagged on a single add/remove** (see the head-to-head
-  table). Normalization (finding 1) keeps a content-only edit from leaking through, but
-  story-set changes still move it because the map gains/loses a real route. Mitigation: a finer
-  split that excludes the routing chunk from the shared section and folds in only the
-  preview-runtime/annotations chunk (the routing map is a *loading* concern, not a *rendering*
-  input).
+- **Bundler loading machinery leaks into the hash.** The entry chunk (folded into every story)
+  carries Vite's `__vite__mapDeps` preload array and dep-index references; adding/removing a
+  story re-indexes it and **re-flags the whole suite** (see *Adding or removing a story* above —
+  excluding the importFn module was tried and is insufficient). This is the deepest C-specific
+  problem: it can only be addressed by stripping bundler loader internals (fragile) or disabling
+  `modulePreload` (changes output), and is the main reason C isn't a safe stand-alone primitive.
 - **Builder coverage.** Each builder needs a `generateBundle`-time emitter conforming to the
   shared `chunk-graph.json` schema (the prototype covers Vite only).
 
