@@ -13,6 +13,10 @@ const commands = {
     import('./hashStoriesEsbuild').then(({ main: hashEsbuildMain }) =>
       hashEsbuildMain(process.argv.slice(3))
     ),
+  'hash-stories-hybrid': () =>
+    import('./hashStoriesHybrid').then(({ main: hashHybridMain }) =>
+      hashHybridMain(process.argv.slice(3))
+    ),
   init: () => import('./init').then(({ main: initMain }) => initMain(process.argv.slice(3))),
   main: () => import('./main').then(({ main }) => main(process.argv.slice(2))),
   'react-native-build': () =>
