@@ -157,9 +157,10 @@ graph comes from** and **what primitive is hashed**:
 **We own 2 of the 3 relevant builders (Vite and webpack5; Rspack is community-maintained),
 so a builder-emit path (B, optionally C) is the recommended production path for the builders
 we own, with strategy A as the fallback for the rest.** B and C are not exclusive — the
-builder can emit both (the prototype does), and a [head-to-head shows they agree everywhere
-except tree-shaken dead code](./hash-based-turbosnap-strategy-c-chunk-diff.md#head-to-head-vs-module-level-strategy-b).
-Whichever the graph comes from, the downstream steps are the same:
+builder can emit both (the prototype does), and a [head-to-head shows they over-capture in
+opposite directions](./hash-based-turbosnap-strategy-c-chunk-diff.md#head-to-head-vs-module-level-strategy-b).
+Intersecting them ([**B ∩ C hybrid**](#hybrid-combine-b-and-c-intersection)) is near-ideal in
+every tested scenario. Whichever the graph comes from, the downstream steps are the same:
 
 1. **Hash module/file contents** rather than sniffing versions.
 2. **Drive story enumeration from Storybook's story index** rather than the stats.
@@ -189,6 +190,57 @@ direct, per-module answer to "why did this story re-capture?" — which is exact
 to get today. The recommendation for the builders we own is therefore **B as the baseline,
 with C layered on where tree-shaking precision is worth the extra normalization work**;
 reserve A for builders we don't own.
+
+## Hybrid: combine B and C (intersection)
+
+"B baseline + C layered" has a concrete form: emit **both** signals and re-capture a story only
+when **both** flag it. B and C over-capture in *opposite* directions, so intersecting lets each
+veto the other:
+
+```
+recapture(story) =
+  story is added            (no baseline hash — from B's per-story set)
+  OR ( B.changed(story)  AND  C.changed(story) )
+```
+
+- **B** (module-level): the story's rolled-up hash over its reachable *modules* + shared section.
+- **C** (chunk-level): a chunk in the story's set changed content hash (or set membership).
+- **Added / removed** come from B, which is authoritative and precise on the story set.
+
+**Why the intersection is safe (no new under-capture).** AND only drops a story when *one* side
+says "unchanged." If **B** says unchanged, no module the story reaches changed content (any real
+change must be out-of-graph — static assets, `preview-head.html` — which both miss and the shared
+section / static bail still covers). If **C** says unchanged, the story's bundled output is
+byte-identical, so its snapshot can't change. The two only *disagree* in the over-capture cases
+(barrel/dead-code: B over-flags, C correct; add/remove: C over-flags, B correct), and AND resolves
+each to the correct, minimal answer.
+
+**Measured across the full matrix** (this repo's 115-story Storybook; `bin-src/hashStoriesHybrid.mjs`):
+
+| Edit | B | C | **B ∩ C (hybrid)** | Ideal |
+|---|---|---|---|---|
+| rebuild, no edit | 0 | 0 | **0** | 0 |
+| `auth.stories.ts` (substantive) | 3 | 3 | **3** | 3 |
+| `auth.stories.ts` (comment-only) | 0 | 0 | **0** | 0 |
+| dependency — unused / dead code | 1 | 0 | **0** | 0 |
+| dependency — used / side-effecting | 1 | 1 | **1** | 1 |
+| `.storybook/preview.ts` | 115 | 115 | **115** | 115 (global) |
+| add 1 story | +1 added | +1 added, **115 changed** | **+1 added, 0 changed** | +1 added |
+| remove 1 story | −1 removed | −1 removed, **114 changed** | **−1 removed, 0 changed** | −1 removed |
+| edit unused barrel sibling | **1** | 0 | **0** | 0 |
+| `README.md` | 0 | 0 | **0** | 0 |
+
+The hybrid lands on the **minimal correct set in every tested scenario** — B's precision on
+add/remove, C's precision on barrels and dead code, and agreement everywhere they already agree.
+It is the only one of the four (A/B/C/hybrid) with no measured over-capture outside the genuinely
+global `preview.ts` case.
+
+**Cost / caveats.** Emit and store *both* artifacts (module graph + chunk graph) and intersect on
+the backend — more storage and two per-builder extractors to maintain. Residual over-capture
+remains where C itself can't be precise (an "unused" barrel sibling that is *co-bundled* into a
+shared chunk with a used one), and the out-of-graph surface (static/fonts/`preview-head.html`) is
+still covered by the shared section, not the hashes. Net: the hybrid buys near-ideal precision at
+the cost of running both pipelines.
 
 ## Effect on TurboSnap bail reasons
 
