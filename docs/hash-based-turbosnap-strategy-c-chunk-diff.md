@@ -217,12 +217,33 @@ modified `@storybook/builder-vite` and diffing each signal against the baseline 
 | dependency change — **unused / dead code** | 1 | **0** |
 | dependency change — **used / side-effecting** | 1 | 1 |
 | `.storybook/preview.ts` (substantive) | 115 | 115 |
+| **add 1 story** | +1 added, 0 changed | +1 added, **115 changed** |
+| **remove 1 story** | −1 removed, 0 changed | −1 removed, **114 changed** |
 | `README.md` | 0 | 0 |
 
 Both signals are reproducible (0 changes between two identical builds), and `chunk-graph.json`
-is smaller than the module stats (≈88 KB vs ≈180 KB here). The two agree everywhere **except
-tree-shaken dead code**, where chunk-level is more precise and module-level is more
-conservative.
+is smaller than the module stats (≈88 KB vs ≈180 KB here). The two agree on edits to existing
+stories/deps **except tree-shaken dead code** (C more precise) — but **diverge sharply on
+adding/removing a story** (C over-captures the whole suite; see below).
+
+### Adding or removing a story
+
+Adding or removing a story is correctly reported as `added` / `removed` by both. The
+difference is the **collateral**:
+
+- **B touches nothing else** — existing stories don't import the new one, and no existing
+  module's content changed, so every other per-story hash is byte-identical.
+- **C re-flags the entire suite.** The iframe entry statically imports the **importFn routing
+  map** (the `storybook-stories` virtual, `{ storyId → () => import('…') }`), and C folds the
+  entry graph into *every* story's chunk set. Adding/removing a story adds/removes a real
+  **entry** in that map, so the shared chunk's content genuinely changes for all stories.
+
+This is **not** the hashed-filename cascade (finding 1) — normalization can't fix it, because
+the routing map changed by gaining/losing a route, not just a filename hash. It's a concrete
+instance of the shared-section-selection caveat below: the routing map is a *loading* concern,
+not a *rendering* input, so folding it into every story is the over-capture. Mitigation:
+exclude the importFn/routing chunk from the shared section and fold in only the
+preview-runtime/annotations chunk — that brings C's add/remove behavior back in line with B.
 
 ## Two findings that decide whether this is viable
 
@@ -265,9 +286,12 @@ dead-code/unused-export edits; module-diff strictly wins on never-under-capturin
   mis-attributing.
 - **Shared-section selection.** Folding the *whole* entry chunk in is correct but coarse: the
   `importFn` routing map lives in the runtime chunk too, so adding/removing stories perturbs
-  it. Normalization (finding 1) keeps a content-only edit from leaking through, but
-  story-set changes still move it. A finer split (preview-annotations chunk vs. routing chunk)
-  would tighten this.
+  it — **measured as the whole suite re-flagged on a single add/remove** (see the head-to-head
+  table). Normalization (finding 1) keeps a content-only edit from leaking through, but
+  story-set changes still move it because the map gains/loses a real route. Mitigation: a finer
+  split that excludes the routing chunk from the shared section and folds in only the
+  preview-runtime/annotations chunk (the routing map is a *loading* concern, not a *rendering*
+  input).
 - **Builder coverage.** Each builder needs a `generateBundle`-time emitter conforming to the
   shared `chunk-graph.json` schema (the prototype covers Vite only).
 
