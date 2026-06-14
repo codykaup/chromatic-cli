@@ -370,6 +370,42 @@ That's it — the inputs that determined the result are stored, not recomputed f
 The remaining decision is the **`publishBuild` schema** itself (per-story only, shared +
 per-story, or module/chunk-level too) — tracked in [Open questions](#open-questions-shared).
 
+#### Optional: store only rolled-up per-story hashes (2 hashes/story)
+
+Both signals can be reduced to **one hash per story**, so the backend stores just **two hashes
+per story** (a B hash and a C hash) and the hybrid is a pure hash compare:
+
+```
+B.hash[story] = H( sorted (moduleId, moduleHash) over the story's reachable modules + shared )
+C.hash[story] = H( sorted chunk content-hashes over the story's chunk set )
+recapture(story) = (B.hash != baseline) AND (C.hash != baseline)
+```
+
+The module graph, per-chunk hashes, and per-story chunk sets become **build-time intermediates**
+used only to compute those two hashes — never persisted. At ~10k stories that's ~20k hashes
+instead of (every module + every chunk + per-story membership lists). The rolled-up C hash also
+needs **no stable chunk keys** (it digests chunk *content* hashes directly), sidestepping the
+cross-machine keying concern.
+
+**Downsides — this is a real loss, not just a size win:**
+
+- **No attribution / debuggability.** You can answer *whether* a story changed, never *why*. The
+  "story X re-captured because module Y changed" answer — one of the biggest wins over today's
+  opaque TurboSnap — is gone. A mis-fire (unexpected re-capture, or a suspected miss) can't be
+  diagnosed without rebuilding with the detailed hashes.
+- **Diff policy is frozen at build time.** `untraced`, symbol-level barrel resolution, or any
+  server-side re-rollup need the *graph*, not a baked per-story hash. Storing only rolled-up
+  hashes means changing the policy requires a rebuild, not a re-diff.
+- **No cross-build analytics** (which dependency churns most, hotspot stories, etc.) — there's
+  nothing to aggregate but opaque digests.
+- **Bumping the rollup/normalization version invalidates every baseline** (full re-capture
+  until both sides re-emit) — true of any rolled-up hash, but the blast radius is total.
+
+**Recommended middle ground:** keep the rolled-up hashes on the **hot comparison path** (cheap,
+fast diff) *and* emit the detailed per-module/per-chunk hashes in the build artifact for
+**on-demand** debugging — without putting them in the stored comparison payload. You pay the
+storage only where you need the "why".
+
 ## Key learnings
 
 ### Builder stats are not portable
