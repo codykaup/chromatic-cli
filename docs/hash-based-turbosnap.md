@@ -261,6 +261,26 @@ shared chunk with a used one), and the out-of-graph surface (static/fonts/`previ
 still covered by the shared section, not the hashes. Net: the hybrid buys near-ideal precision at
 the cost of running both pipelines.
 
+**Try it end-to-end.** The hybrid is a registered subcommand,
+[`chromatic hash-stories-hybrid`](../bin-src/hashStoriesHybrid.ts), that diffs two builds' local
+artifacts (no backend needed):
+
+```bash
+# Baseline: build with both signals, then save the two artifacts
+STORYBOOK_CHUNK_GRAPH=1 yarn build-storybook        # storybook build --stats-json
+cp storybook-static/preview-stats.json /tmp/base-stats.json
+cp storybook-static/chunk-graph.json   /tmp/base-chunks.json
+
+# Make a change, rebuild, then diff current (storybook-static/*) against the baseline
+STORYBOOK_CHUNK_GRAPH=1 yarn build-storybook
+chromatic hash-stories-hybrid --baseline-stats /tmp/base-stats.json --baseline-chunks /tmp/base-chunks.json
+```
+
+It prints the `changed` / `added` / `removed` stories (and how many over-captures each signal
+would have made alone, which the other vetoed), or machine-readable `--json`. Requires the
+[Vite builder changes](./hash-based-turbosnap-strategy-c-chunk-diff.md#prototype) so the build
+emits `chunk-graph.json`.
+
 ## Effect on TurboSnap bail reasons
 
 A "bail" is TurboSnap giving up on precision and re-capturing **everything**. Today's bail
