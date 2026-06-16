@@ -473,6 +473,12 @@ export interface Module {
   name: string;
   modules?: Pick<Module, 'name'>[];
   reasons?: Reason[];
+  /**
+   * Stable hash of this module's normalized, post-transform content, emitted by the builder plugin
+   * (e.g. `@storybook/builder-vite`). Hash-based TurboSnap rolls a story up to a single hash from
+   * the hashes of its reachable modules instead of git-diffing. Absent for code-less modules.
+   */
+  contentHash?: string;
 }
 
 export interface Stats {
