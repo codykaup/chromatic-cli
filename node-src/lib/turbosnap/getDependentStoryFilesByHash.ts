@@ -89,22 +89,32 @@ function indexModules(stats: Stats, normalize: HashComparisonOptions['normalize'
 }
 
 // Story files are the modules imported by a CSF glob aggregator, which is itself a module imported
-// directly by a stories entry (e.g. the Vite builder's `storybook-stories.js`).
-function findStoryFiles(byName: Map<string, GraphNode>, options: HashComparisonOptions) {
+// directly by a stories entry (e.g. the Vite builder's `storybook-stories.js`). The preview
+// subgraph is excluded: project-annotations is also imported by the entry, so without this it would
+// be treated as a glob and its preview modules misclassified as story files.
+function findStoryFiles(
+  byName: Map<string, GraphNode>,
+  previewSubgraph: Set<string>,
+  options: HashComparisonOptions
+) {
   const { storiesEntryFiles, isStorybookFile } = options;
   const isEntry = (reasonName: string) =>
     storiesEntryFiles.some((entry) => reasonName.startsWith(entry));
 
   const csfGlobs = new Set<string>();
   for (const [name, node] of byName) {
-    if (!isStorybookFile(name) && node.importers.some((importer) => isEntry(importer))) {
+    if (
+      !isStorybookFile(name) &&
+      !previewSubgraph.has(name) &&
+      node.importers.some((importer) => isEntry(importer))
+    ) {
       csfGlobs.add(name);
     }
   }
 
   const storyFiles = new Set<string>();
   for (const [name, node] of byName) {
-    if (node.importers.some((importer) => csfGlobs.has(importer))) {
+    if (!previewSubgraph.has(name) && node.importers.some((importer) => csfGlobs.has(importer))) {
       storyFiles.add(name);
     }
   }
@@ -114,8 +124,14 @@ function findStoryFiles(byName: Map<string, GraphNode>, options: HashComparisonO
 // Build the lookup structures the comparison needs from a builder stats object.
 function buildGraph(stats: Stats, options: HashComparisonOptions): StoryGraph {
   const { byName, forward } = indexModules(stats, options.normalize);
-  const storyFiles = findStoryFiles(byName, options);
-  const previewSubgraph = forwardReachable(forward, options.normalize(PROJECT_ANNOTATIONS_NAME));
+  const projectAnnotations = options.normalize(PROJECT_ANNOTATIONS_NAME);
+  // Include project-annotations itself so it counts as preview config (e.g. addon changes) and is
+  // never classified as a story glob.
+  const previewSubgraph = forwardReachable(forward, projectAnnotations);
+  if (byName.has(projectAnnotations)) {
+    previewSubgraph.add(projectAnnotations);
+  }
+  const storyFiles = findStoryFiles(byName, previewSubgraph, options);
   return { byName, forward, storyFiles, previewSubgraph };
 }
 
