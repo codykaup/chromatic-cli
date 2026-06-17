@@ -473,6 +473,12 @@ export interface Module {
   name: string;
   modules?: Pick<Module, 'name'>[];
   reasons?: Reason[];
+  /**
+   * Stable hash of the module's normalized, post-transform content, emitted by builders that
+   * support hash-based TurboSnap. Absent for older builders and for modules with no code; the
+   * hash-based comparison only runs when these are present in the build output.
+   */
+  contentHash?: string;
 }
 
 export interface Stats {
@@ -561,6 +567,11 @@ export interface TurboSnap {
   changedManifestFiles?: Set<string>;
   affectedModuleIds?: Set<string | number>;
   bailReason?: TurboSnapBailReason;
+  /**
+   * Stats from the baseline build, used by the hash-based comparison when both builds emit
+   * per-module `contentHash`es. When absent, TurboSnap falls back to git-diff tracing.
+   */
+  baselineStats?: Stats;
 }
 
 export { type Configuration } from './lib/getConfiguration';
