@@ -19,8 +19,14 @@ import { Module, Stats } from '../node-src/types';
  * module graph in `preview-stats.json` where every module carries a normalized, post-transform
  * `contentHash`. The CLI's whole job is then a graph rollup:
  *
- *   storyHash(S) = H( sorted (moduleId, contentHash) over modules reachable from S + the shared
+ *   storyHash(S) = H( sorted contentHashes of the modules reachable from S + the shared
  *                     preview section )
+ *
+ * Only the modules' content hashes are hashed — not their paths. The module graph (and the story's
+ * own path) is used to decide *which* modules a story reaches and *which* story changed, but the
+ * path is never an input to the hash that decides *whether* it changed. So a path that shifts
+ * without a content change (e.g. a global Yarn PnP cache at a different absolute location across
+ * machines) doesn't spuriously re-capture.
  *
  * The shared section is everything reachable from `.storybook/preview.*` (preview config and the
  * files it imports). Because it is folded into every story, changing a shared dependency busts every
@@ -118,17 +124,26 @@ function reach(start: string, forward: Map<string, Set<string>>): Set<string> {
 }
 
 /**
- * A canonical, order-independent digest of a set of (module, contentHash) pairs.
+ * A canonical, order-independent digest of a set of modules' *content* hashes.
  *
- * @param names The module names to include.
+ * Only the content hashes are hashed — deliberately not the module paths. A story re-captures when
+ * the content of its reachable modules changes (or a module is added/removed), but not when a
+ * module's path merely shifts on disk with identical content (e.g. a global Yarn PnP cache
+ * resolving to a different absolute location across machines). That keeps the per-story hash
+ * deterministic across machines/CI; the path stays the diff key and an attribution aid, never an
+ * input to the hash that decides whether a story changed. Content hashes are sorted
+ * (order-independent) and duplicates kept (a multiset), so two distinct modules with identical
+ * content both count.
+ *
+ * @param names The module names whose content hashes to include.
  * @param hashOf A map from module name to its content hash.
  *
  * @returns A short, stable hex digest.
  */
 function digest(names: Iterable<string>, hashOf: Map<string, string | undefined>): string {
   const document = [...names]
+    .map((name) => hashOf.get(name) ?? '')
     .sort()
-    .map((name) => `${name}:${hashOf.get(name) ?? ''}`)
     .join('\n');
   return createHash('sha256').update(document).digest('hex').slice(0, 16);
 }

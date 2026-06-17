@@ -32,9 +32,14 @@ module graph in `preview-stats.json` where every module carries a normalized, po
 `contentHash`. The CLI's whole job is a graph rollup:
 
 ```
-storyHash(S) = H( sorted (moduleId, contentHash) over modules reachable from S + shared section )
+storyHash(S) = H( sorted contentHashes of modules reachable from S + shared section )
 ```
 
+- **Only content hashes are hashed, not module paths.** The graph (and the story's own path) decides
+  *which* modules a story reaches and *which* story changed, but the path is never an input to the
+  hash that decides *whether* it changed. So a dependency path that shifts without a content change —
+  e.g. a global Yarn PnP cache at a different absolute location across machines — doesn't spuriously
+  re-capture. (Paths are still kept as the diff key and for attribution.)
 - **Module graph + content hashes come from the real build**, so resolution, TypeScript
   type-elision, and tree-shaking are accounted for free — no second bundler to keep faithful.
 - **Hashing content beats sniffing versions.** A per-module content hash catches version bumps,

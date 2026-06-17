@@ -101,6 +101,37 @@ describe('computeStoryHashes', () => {
     expect(storyHashes).toEqual({});
     expect(sharedSection.modules).toEqual([]);
   });
+
+  it('is unaffected by a dependency path changing when its content is identical', () => {
+    // Same story, same dependency content — only the dependency's path differs (e.g. a global Yarn
+    // PnP cache resolving to a different absolute location across machines). The story hash must not
+    // change, because the path is not an input to the hash.
+    const withNodeModules = statsFrom({
+      [VITE_APP]: { imports: ['./src/S.stories.tsx'] },
+      './src/S.stories.tsx': { imports: ['./node_modules/x/index.js'], contentHash: 'story' },
+      './node_modules/x/index.js': { contentHash: 'dep-content' },
+    });
+    const withGlobalCache = statsFrom({
+      [VITE_APP]: { imports: ['./src/S.stories.tsx'] },
+      './src/S.stories.tsx': {
+        imports: ['~/.yarn/berry/cache/x.zip/node_modules/x/index.js'],
+        contentHash: 'story',
+      },
+      '~/.yarn/berry/cache/x.zip/node_modules/x/index.js': { contentHash: 'dep-content' },
+    });
+
+    const a = computeStoryHashes(withNodeModules).storyHashes['./src/S.stories.tsx'];
+    const b = computeStoryHashes(withGlobalCache).storyHashes['./src/S.stories.tsx'];
+    expect(a).toBe(b);
+
+    // ...but a real content change to that dependency still re-captures.
+    const changed = statsFrom({
+      [VITE_APP]: { imports: ['./src/S.stories.tsx'] },
+      './src/S.stories.tsx': { imports: ['./node_modules/x/index.js'], contentHash: 'story' },
+      './node_modules/x/index.js': { contentHash: 'dep-content-v2' },
+    });
+    expect(computeStoryHashes(changed).storyHashes['./src/S.stories.tsx']).not.toBe(a);
+  });
 });
 
 describe('diffBaseline', () => {
