@@ -45,17 +45,24 @@ export interface HashComparisonOptions {
   normalize: (posixPath: string) => string;
   /** Normalized stories-entry file names (the builder's entry modules). */
   storiesEntryFiles: string[];
-  isStorybookFile: (name: string) => boolean;
+  /** Predicate for `.storybook` config files; matches the loose return of the caller's helper. */
+  isStorybookFile: (name: string) => unknown;
 }
 
-/** Whether a stats object carries per-module content hashes (i.e. the builder supports them). */
+/**
+ * Whether a stats object carries per-module content hashes, i.e. the builder supports hash-based
+ * TurboSnap.
+ *
+ * @param stats The builder stats to inspect.
+ *
+ * @returns True if at least one module has a `contentHash`.
+ */
 export function hasContentHashes(stats: Stats): boolean {
   return stats.modules.some((module_) => typeof module_.contentHash === 'string');
 }
 
-/** Build the lookup structures the comparison needs from a builder stats object. */
-function buildGraph(stats: Stats, options: HashComparisonOptions): StoryGraph {
-  const { normalize, storiesEntryFiles, isStorybookFile } = options;
+// Index modules by normalized name and build the forward (importer -> imported) adjacency.
+function indexModules(stats: Stats, normalize: HashComparisonOptions['normalize']) {
   const byName = new Map<string, GraphNode>();
   const forward = new Map<string, Set<string>>();
 
@@ -78,29 +85,41 @@ function buildGraph(stats: Stats, options: HashComparisonOptions): StoryGraph {
     }
   }
 
-  // CSF glob aggregators are modules imported directly by a stories entry (e.g. the Vite builder's
-  // `storybook-stories.js`); story files are the modules those aggregators import.
+  return { byName, forward };
+}
+
+// Story files are the modules imported by a CSF glob aggregator, which is itself a module imported
+// directly by a stories entry (e.g. the Vite builder's `storybook-stories.js`).
+function findStoryFiles(byName: Map<string, GraphNode>, options: HashComparisonOptions) {
+  const { storiesEntryFiles, isStorybookFile } = options;
   const isEntry = (reasonName: string) =>
     storiesEntryFiles.some((entry) => reasonName.startsWith(entry));
+
   const csfGlobs = new Set<string>();
   for (const [name, node] of byName) {
     if (!isStorybookFile(name) && node.importers.some((importer) => isEntry(importer))) {
       csfGlobs.add(name);
     }
   }
+
   const storyFiles = new Set<string>();
   for (const [name, node] of byName) {
     if (node.importers.some((importer) => csfGlobs.has(importer))) {
       storyFiles.add(name);
     }
   }
+  return storyFiles;
+}
 
-  const previewSubgraph = forwardReachable(forward, normalize(PROJECT_ANNOTATIONS_NAME));
-
+// Build the lookup structures the comparison needs from a builder stats object.
+function buildGraph(stats: Stats, options: HashComparisonOptions): StoryGraph {
+  const { byName, forward } = indexModules(stats, options.normalize);
+  const storyFiles = findStoryFiles(byName, options);
+  const previewSubgraph = forwardReachable(forward, options.normalize(PROJECT_ANNOTATIONS_NAME));
   return { byName, forward, storyFiles, previewSubgraph };
 }
 
-/** All names reachable by following forward edges from `start` (excluding `start` itself). */
+// All names reachable by following forward edges from `start` (excluding `start` itself).
 function forwardReachable(forward: Map<string, Set<string>>, start: string): Set<string> {
   const seen = new Set<string>();
   const stack = [start];
@@ -116,27 +135,25 @@ function forwardReachable(forward: Map<string, Set<string>>, start: string): Set
   return seen;
 }
 
-/**
- * Reduce a story file to a single hash over the sorted multiset of `contentHash`es of itself and
- * its reachable dependencies (excluding the preview subgraph). Keyed on content, not module names,
- * so dependencies that resolve to different absolute paths across machines (e.g. a global package
- * cache) but have identical content do not look changed.
- */
+// Reduce a story file to a single hash over the sorted multiset of `contentHash`es of itself and
+// its reachable dependencies (excluding the preview subgraph). Keyed on content, not module names,
+// so dependencies that resolve to different absolute paths across machines (e.g. a global package
+// cache) but have identical content do not look changed.
 function rolledUpHash(graph: StoryGraph, storyFile: string): string {
   const reachable = forwardReachable(graph.forward, storyFile);
   const hashes = [storyFile, ...reachable]
     .filter((name) => !graph.previewSubgraph.has(name) || name === storyFile)
     .map((name) => graph.byName.get(name)?.contentHash)
-    .filter((hash): hash is string => Boolean(hash))
+    .filter((hash): hash is string => hash !== undefined)
     .sort();
   return createHash('sha256').update(hashes.join('\n')).digest('hex').slice(0, 16);
 }
 
-/** Sorted multiset of preview-subgraph content hashes — its signature for change detection. */
+// Sorted multiset of preview-subgraph content hashes — its signature for change detection.
 function previewSignature(graph: StoryGraph): string {
   return [...graph.previewSubgraph]
     .map((name) => graph.byName.get(name)?.contentHash)
-    .filter((hash): hash is string => Boolean(hash))
+    .filter((hash): hash is string => hash !== undefined)
     .sort()
     .join('\n');
 }
@@ -144,6 +161,12 @@ function previewSignature(graph: StoryGraph): string {
 /**
  * Compare two builds' stats by content hash and determine which story files changed, were added or
  * removed, and whether a preview/global change means everything must be recaptured.
+ *
+ * @param baselineStats Stats from the baseline build.
+ * @param headStats Stats from the current (head) build.
+ * @param options Normalization and classification helpers.
+ *
+ * @returns The changed/added/removed story files and the preview-change flag.
  */
 export function compareStoryHashes(
   baselineStats: Stats,
@@ -177,6 +200,13 @@ export function compareStoryHashes(
  * Hash-based equivalent of `getDependentStoryFiles`: given the baseline and head build stats (both
  * carrying `contentHash`es), return the affected story files keyed by module id, or `undefined`
  * (after recording a bail reason) when a preview/global change requires recapturing everything.
+ *
+ * @param ctx The context set when executing the CLI.
+ * @param baselineStats Stats from the baseline build.
+ * @param headStats Stats from the current (head) build.
+ * @param options Normalization and classification helpers.
+ *
+ * @returns Affected story files keyed by module id, or `undefined` when bailing to a full recapture.
  */
 export function getDependentStoryFilesByHash(
   ctx: Context,

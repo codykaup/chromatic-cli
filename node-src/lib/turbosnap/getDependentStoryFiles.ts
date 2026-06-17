@@ -7,6 +7,7 @@ import bailFile from '../../ui/messages/warnings/bailFile';
 import { posix } from '../posix';
 import { isPackageManifestFile, matchesFile } from '../utilities';
 import { SUPPORTED_LOCK_FILES } from './findChangedDependencies';
+import { getDependentStoryFilesByHash, hasContentHashes } from './getDependentStoryFilesByHash';
 
 type FilePath = string;
 type NormalizedName = string;
@@ -247,7 +248,27 @@ export async function getDependentStoryFiles(
     tracedPaths,
     affectedModuleIds,
     bailReason: undefined,
+    // Preserve the baseline stats provided by the caller for the hash-based comparison below.
+    baselineStats: ctx.turboSnap?.baselineStats,
   };
+
+  // Hash-based path: when both the head and baseline builds emit per-module content hashes, compare
+  // them directly (rolling each story up to a content hash) instead of tracing git-changed files.
+  // Falls back to the git-diff tracing below when hashes or a baseline build's stats are absent.
+  const { baselineStats } = ctx.turboSnap;
+  if (baselineStats && hasContentHashes(stats) && hasContentHashes(baselineStats)) {
+    ctx.log.debug('Using hash-based TurboSnap comparison');
+    const affectedModules = getDependentStoryFilesByHash(ctx, baselineStats, stats, {
+      normalize,
+      storiesEntryFiles,
+      isStorybookFile,
+    });
+    if (ctx.turboSnap.bailReason) {
+      ctx.log.warn(bailFile({ turboSnap: ctx.turboSnap }));
+      return;
+    }
+    return affectedModules;
+  }
 
   const changedPackageLockFiles = tracedFiles.filter((file) => isPackageLockFile(file));
 
