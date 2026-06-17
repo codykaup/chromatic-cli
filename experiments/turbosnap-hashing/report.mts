@@ -114,6 +114,52 @@ function table(mode: string) {
   return `${head}\n${body}`;
 }
 
+// Per-approach verdicts (qualitative, keyed by approach name). Numbers come from scoped-mode rows.
+const VERDICTS: Record<string, { dep: string; fidelity: string; verdict: string }> = {
+  'oxc-parser + oxc-resolver': {
+    dep: 'native (prebuilt binary)',
+    fidelity: 'over-connects (type-only imports kept)',
+    verdict: '⚠️ fastest, but needs usage-based elision to be correct',
+  },
+  'es-module-lexer (+esbuild strip) + oxc-resolver': {
+    dep: 'pure JS + wasm',
+    fidelity: 'matches builder exactly',
+    verdict: '✅ recommended — esbuild strip gives builder-faithful elision',
+  },
+  'typescript (preProcessFile + resolveModuleName)': {
+    dep: 'pure JS (typescript)',
+    fidelity: 'over-connects (syntactic imports)',
+    verdict: '➖ accurate resolution, heavy, still needs type-aware elision',
+  },
+  'vite pluginContainer.resolveId + oxc-parser': {
+    dep: 'the builder itself',
+    fidelity: 'over-connects (resolution was never the issue)',
+    verdict: '❌ heaviest, no fidelity gain, defeats "builder-independent"',
+  },
+  'madge (dependency-tree/precinct)': {
+    dep: 'off-the-shelf',
+    fidelity: 'over-connects (syntactic imports)',
+    verdict: '❌ slowest; same fidelity ceiling as other syntactic tools',
+  },
+};
+
+function scorecard() {
+  const r = rows.filter((x) => x.mode === 'scoped').sort((a, b) => b.precision - a.precision || a.buildMs - b.buildMs);
+  const head =
+    '| approach | recall | precision | speed | memory | dependency | verdict |\n' +
+    '|---|--:|--:|--:|--:|---|---|';
+  const body = r
+    .map((x) => {
+      const v = VERDICTS[x.approach] ?? { dep: '?', fidelity: '?', verdict: '?' };
+      return `| ${x.approach} | ${pct(x.recall)} | ${pct(x.precision)} | ${fmt(x.buildMs)} ms | ${fmt(
+        x.peakRssMb,
+        0
+      )} MB | ${v.dep} | ${v.verdict} |`;
+    })
+    .join('\n');
+  return `${head}\n${body}`;
+}
+
 const md = `# TurboSnap source-graph strategy benchmark
 
 Builder-independent ways to derive the "which source files are linked" graph that TurboSnap needs,
@@ -127,6 +173,23 @@ measured against the **real** \`getDependentStoryFiles\` run on the builder's \`
   - **recall** = fraction of GT-affected stories we caught. \`<100%\` ⇒ **false negatives = missed visual regressions (dangerous)**.
   - **precision** = fraction of our predictions that were real. \`<100%\` ⇒ false positives = wasted snapshots (safe but costly).
 - Node ${process.version}; single-process isolated runs.
+
+## Summary scorecard (preview-scoped mode)
+${scorecard()}
+
+> recall <100% = **misses a changed story (dangerous)**; precision <100% = **extra snapshots (wasteful but safe)**.
+
+## Findings at a glance
+| # | finding | evidence |
+|---|---|---|
+| 1 | The fidelity gap is **type-only import elision**, not parse/resolve | \`fatalError.ts\`: \`import { Context } from '../../..'\` (value syntax, type-only use) → builder drops it; syntactic parsers keep it |
+| 2 | That one missed-elision edge creates a **giant false hub** | the kept edge reaches \`node-src/index.ts\` which imports ~44 error messages → precision ~11% |
+| 3 | **es-module-lexer matches the builder** (100%/100%) | it lexes esbuild-stripped code, inheriting the builder's usage-based elision; lowest memory too |
+| 4 | Stripping \`import type\` is **not enough** | filtering oxc's \`isType\` entries barely moved precision (10.8%); need usage-based elimination or type info |
+| 5 | **ceiling** mode lifts every approach to ~100% precision | restricting to the builder's module set removes the type-barrel hub — confirms universe, not tooling |
+| 6 | Recall is ~99–100% but **not always clean** | esbuild-lexer 100%; oxc/vite 99.4% (a few silently-missed stories — the dangerous direction) |
+| 7 | Parser/resolver = **speed/packaging**, not correctness | oxc fastest (native), TS pure-JS but heavy, Vite heaviest with no fidelity gain, madge slowest |
+| 8 | **Hashing is cheap** (Option C) | ${hashing.ms.toFixed(1)} ms to hash the whole tree (${hashing.mbPerSec.toFixed(0)} MB/s) → incremental graph cache is viable |
 
 ## Modes
 - **whole**: parse the entire source tree, build the full import graph (no builder, no story scoping).
