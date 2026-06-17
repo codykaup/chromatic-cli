@@ -1,0 +1,13 @@
+{
+  "name": "turbosnap-hashing-experiments",
+  "private": true,
+  "type": "module",
+  "description": "Throwaway benchmark harness comparing builder-independent source-graph strategies for TurboSnap.",
+  "devDependencies": {
+    "dependency-cruiser": "^17.4.3",
+    "madge": "^8.0.0",
+    "oxc-parser": "^0.136.0",
+    "oxc-resolver": "^11.21.2",
+    "tsx": "^4.22.4"
+  }
+}

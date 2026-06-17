@@ -1,0 +1,1330 @@
+{
+  "scenarioFiles": [
+    "node-src/lib/e2eUtils.ts",
+    "node-src/lib/react-native/constants.ts",
+    "node-src/lib/setExitCode.ts",
+    "node-src/lib/tasks.ts",
+    "node-src/lib/utilities.ts",
+    "node-src/ui/components/icons.stories.ts",
+    "node-src/ui/components/icons.ts",
+    "node-src/ui/components/link.stories.ts",
+    "node-src/ui/components/link.ts",
+    "node-src/ui/components/task.stories.ts",
+    "node-src/ui/components/task.ts",
+    "node-src/ui/html/metadata.html.stories.ts",
+    "node-src/ui/html/metadata.html.ts",
+    "node-src/ui/messages/errors/brokenStorybook.stories.ts",
+    "node-src/ui/messages/errors/brokenStorybook.ts",
+    "node-src/ui/messages/errors/buildCanceled.stories.ts",
+    "node-src/ui/messages/errors/buildCanceled.ts",
+    "node-src/ui/messages/errors/buildFailed.stories.ts",
+    "node-src/ui/messages/errors/buildFailed.ts",
+    "node-src/ui/messages/errors/buildHasChanges.stories.ts",
+    "node-src/ui/messages/errors/buildHasChanges.ts",
+    "node-src/ui/messages/errors/buildHasErrors.stories.ts",
+    "node-src/ui/messages/errors/buildHasErrors.ts",
+    "node-src/ui/messages/errors/dependentOption.stories.ts",
+    "node-src/ui/messages/errors/dependentOption.ts",
+    "node-src/ui/messages/errors/duplicatePatchBuild.stories.ts",
+    "node-src/ui/messages/errors/duplicatePatchBuild.ts",
+    "node-src/ui/messages/errors/e2eBuildFailed.stories.ts",
+    "node-src/ui/messages/errors/e2eBuildFailed.ts",
+    "node-src/ui/messages/errors/fatalError.stories.ts",
+    "node-src/ui/messages/errors/fatalError.ts",
+    "node-src/ui/messages/errors/fetchError.stories.ts",
+    "node-src/ui/messages/errors/fetchError.ts",
+    "node-src/ui/messages/errors/forksUnsupported.stories.ts",
+    "node-src/ui/messages/errors/forksUnsupported.ts",
+    "node-src/ui/messages/errors/gitNoCommits.stories.ts",
+    "node-src/ui/messages/errors/gitNoCommits.ts",
+    "node-src/ui/messages/errors/gitNotInitialized.stories.ts",
+    "node-src/ui/messages/errors/gitNotInitialized.ts",
+    "node-src/ui/messages/errors/gitNotInstalled.stories.ts",
+    "node-src/ui/messages/errors/gitNotInstalled.ts",
+    "node-src/ui/messages/errors/gitOneCommit.stories.ts",
+    "node-src/ui/messages/errors/gitOneCommit.ts",
+    "node-src/ui/messages/errors/gitUserEmailNotFound.stories.ts",
+    "node-src/ui/messages/errors/gitUserEmailNotFound.ts",
+    "node-src/ui/messages/errors/graphqlError.stories.ts",
+    "node-src/ui/messages/errors/graphqlError.ts",
+    "node-src/ui/messages/errors/incompatibleOptions.stories.ts",
+    "node-src/ui/messages/errors/incompatibleOptions.ts",
+    "node-src/ui/messages/errors/invalidConfigurationFile.stories.ts",
+    "node-src/ui/messages/errors/invalidConfigurationFile.ts",
+    "node-src/ui/messages/errors/invalidExitOnceUploaded.stories.ts",
+    "node-src/ui/messages/errors/invalidExitOnceUploaded.ts",
+    "node-src/ui/messages/errors/invalidOnlyChanged.stories.ts",
+    "node-src/ui/messages/errors/invalidOnlyChanged.ts",
+    "node-src/ui/messages/errors/invalidOnlyStoryNames.stories.ts",
+    "node-src/ui/messages/errors/invalidOnlyStoryNames.ts",
+    "node-src/ui/messages/errors/invalidOwnerName.stories.ts",
+    "node-src/ui/messages/errors/invalidOwnerName.ts",
+    "node-src/ui/messages/errors/invalidPackageJson.stories.ts",
+    "node-src/ui/messages/errors/invalidPackageJson.ts",
+    "node-src/ui/messages/errors/invalidPatchBuild.stories.ts",
+    "node-src/ui/messages/errors/invalidPatchBuild.ts",
+    "node-src/ui/messages/errors/invalidProjectId.stories.ts",
+    "node-src/ui/messages/errors/invalidProjectId.ts",
+    "node-src/ui/messages/errors/invalidProjectToken.stories.ts",
+    "node-src/ui/messages/errors/invalidProjectToken.ts",
+    "node-src/ui/messages/errors/invalidReportPath.stories.ts",
+    "node-src/ui/messages/errors/invalidReportPath.ts",
+    "node-src/ui/messages/errors/invalidRepositorySlug.stories.ts",
+    "node-src/ui/messages/errors/invalidRepositorySlug.ts",
+    "node-src/ui/messages/errors/invalidSingularOptions.stories.ts",
+    "node-src/ui/messages/errors/invalidSingularOptions.ts",
+    "node-src/ui/messages/errors/invalidStorybookBaseDirectory.stories.ts",
+    "node-src/ui/messages/errors/invalidStorybookBaseDirectory.ts",
+    "node-src/ui/messages/errors/maxFileCountExceeded.stories.ts",
+    "node-src/ui/messages/errors/maxFileCountExceeded.ts",
+    "node-src/ui/messages/errors/maxFileSizeExceeded.stories.ts",
+    "node-src/ui/messages/errors/maxFileSizeExceeded.ts",
+    "node-src/ui/messages/errors/mergeBaseNotFound.stories.ts",
+    "node-src/ui/messages/errors/mergeBaseNotFound.ts",
+    "node-src/ui/messages/errors/missingBuildScriptName.stories.ts",
+    "node-src/ui/messages/errors/missingBuildScriptName.ts",
+    "node-src/ui/messages/errors/missingConfigurationFile.stories.ts",
+    "node-src/ui/messages/errors/missingConfigurationFile.ts",
+    "node-src/ui/messages/errors/missingDependency.stories.ts",
+    "node-src/ui/messages/errors/missingDependency.ts",
+    "node-src/ui/messages/errors/missingGitHubInfo.stories.ts",
+    "node-src/ui/messages/errors/missingGitHubInfo.ts",
+    "node-src/ui/messages/errors/missingProjectToken.stories.ts",
+    "node-src/ui/messages/errors/missingProjectToken.ts",
+    "node-src/ui/messages/errors/missingStatsFile.stories.ts",
+    "node-src/ui/messages/errors/missingStatsFile.ts",
+    "node-src/ui/messages/errors/missingStories.stories.ts",
+    "node-src/ui/messages/errors/missingStories.ts",
+    "node-src/ui/messages/errors/missingStorybookBuildDirectory.stories.ts",
+    "node-src/ui/messages/errors/missingStorybookBuildDirectory.ts",
+    "node-src/ui/messages/errors/missingTravisInfo.stories.ts",
+    "node-src/ui/messages/errors/missingTravisInfo.ts",
+    "node-src/ui/messages/errors/noCSFGlobs.stories.ts",
+    "node-src/ui/messages/errors/noCSFGlobs.ts",
+    "node-src/ui/messages/errors/noPackageJson.stories.ts",
+    "node-src/ui/messages/errors/noPackageJson.ts",
+    "node-src/ui/messages/errors/noViewLayerPackage.stories.ts",
+    "node-src/ui/messages/errors/noViewLayerPackage.ts",
+    "node-src/ui/messages/errors/runtimeError.stories.ts",
+    "node-src/ui/messages/errors/runtimeError.ts",
+    "node-src/ui/messages/errors/sentinelFileErrors.stories.ts",
+    "node-src/ui/messages/errors/sentinelFileErrors.ts",
+    "node-src/ui/messages/errors/taskError.stories.ts",
+    "node-src/ui/messages/errors/taskError.ts",
+    "node-src/ui/messages/errors/turboSnapNotAvailableForReactNative.stories.ts",
+    "node-src/ui/messages/errors/turboSnapNotAvailableForReactNative.ts",
+    "node-src/ui/messages/errors/unparseableConfigurationFile.stories.ts",
+    "node-src/ui/messages/errors/unparseableConfigurationFile.ts",
+    "node-src/ui/messages/errors/unsupportedStorybookReactNativeVersion.stories.ts",
+    "node-src/ui/messages/errors/unsupportedStorybookReactNativeVersion.ts",
+    "node-src/ui/messages/errors/uploadFailed.stories.ts",
+    "node-src/ui/messages/errors/uploadFailed.ts",
+    "node-src/ui/messages/errors/workspaceNotClean.stories.ts",
+    "node-src/ui/messages/errors/workspaceNotClean.ts",
+    "node-src/ui/messages/errors/workspaceNotUpToDate.stories.ts",
+    "node-src/ui/messages/errors/workspaceNotUpToDate.ts",
+    "node-src/ui/messages/info/addedScript.stories.ts",
+    "node-src/ui/messages/info/addedScript.ts",
+    "node-src/ui/messages/info/buildPassed.stories.ts",
+    "node-src/ui/messages/info/buildPassed.ts",
+    "node-src/ui/messages/info/buildPassedE2E.stories.ts",
+    "node-src/ui/messages/info/customGitHubAction.stories.ts",
+    "node-src/ui/messages/info/customGitHubAction.ts",
+    "node-src/ui/messages/info/forceRebuildHint.stories.ts",
+    "node-src/ui/messages/info/forceRebuildHint.ts",
+    "node-src/ui/messages/info/intro.stories.ts",
+    "node-src/ui/messages/info/intro.ts",
+    "node-src/ui/messages/info/listingStories.stories.ts",
+    "node-src/ui/messages/info/listingStories.ts",
+    "node-src/ui/messages/info/notAddedScript.stories.ts",
+    "node-src/ui/messages/info/notAddedScript.ts",
+    "node-src/ui/messages/info/replacedBuild.stories.ts",
+    "node-src/ui/messages/info/replacedBuild.ts",
+    "node-src/ui/messages/info/speedUpCI.stories.ts",
+    "node-src/ui/messages/info/speedUpCI.ts",
+    "node-src/ui/messages/info/storybookPublished.stories.ts",
+    "node-src/ui/messages/info/storybookPublished.ts",
+    "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+    "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts",
+    "node-src/ui/messages/info/tracedAffectedFiles.stories.ts",
+    "node-src/ui/messages/info/tracedAffectedFiles.ts",
+    "node-src/ui/messages/info/turboSnapEnabled.stories.ts",
+    "node-src/ui/messages/info/turboSnapEnabled.ts",
+    "node-src/ui/messages/info/uploadingMetadata.stories.ts",
+    "node-src/ui/messages/info/uploadingMetadata.ts",
+    "node-src/ui/messages/info/wroteReport.stories.ts",
+    "node-src/ui/messages/info/wroteReport.ts",
+    "node-src/ui/messages/warnings/bailFile.stories.ts",
+    "node-src/ui/messages/warnings/bailFile.ts",
+    "node-src/ui/messages/warnings/buildLimited.stories.ts",
+    "node-src/ui/messages/warnings/buildLimited.ts",
+    "node-src/ui/messages/warnings/deduplicationFailed.stories.ts",
+    "node-src/ui/messages/warnings/deduplicationFailed.ts",
+    "node-src/ui/messages/warnings/deprecatedOption.stories.ts",
+    "node-src/ui/messages/warnings/deprecatedOption.ts",
+    "node-src/ui/messages/warnings/deviatingOutputDirectory.stories.ts",
+    "node-src/ui/messages/warnings/deviatingOutputDirectory.ts",
+    "node-src/ui/messages/warnings/externalsChanged.stories.ts",
+    "node-src/ui/messages/warnings/externalsChanged.ts",
+    "node-src/ui/messages/warnings/invalidChangedFiles.stories.ts",
+    "node-src/ui/messages/warnings/invalidChangedFiles.ts",
+    "node-src/ui/messages/warnings/isRebuild.stories.ts",
+    "node-src/ui/messages/warnings/isRebuild.ts",
+    "node-src/ui/messages/warnings/noAncestorBuild.stories.ts",
+    "node-src/ui/messages/warnings/noAncestorBuild.ts",
+    "node-src/ui/messages/warnings/noCommitDetails.stories.ts",
+    "node-src/ui/messages/warnings/noCommitDetails.ts",
+    "node-src/ui/messages/warnings/outdatedPackage.stories.ts",
+    "node-src/ui/messages/warnings/outdatedPackage.ts",
+    "node-src/ui/messages/warnings/paymentRequired.stories.ts",
+    "node-src/ui/messages/warnings/paymentRequired.ts",
+    "node-src/ui/messages/warnings/scriptNotFound.stories.ts",
+    "node-src/ui/messages/warnings/scriptNotFound.ts",
+    "node-src/ui/messages/warnings/snapshotQuotaReached.stories.ts",
+    "node-src/ui/messages/warnings/snapshotQuotaReached.ts",
+    "node-src/ui/messages/warnings/travisInternalBuild.stories.ts",
+    "node-src/ui/messages/warnings/travisInternalBuild.ts",
+    "node-src/ui/messages/warnings/turboSnapUnavailable.stories.ts",
+    "node-src/ui/messages/warnings/turboSnapUnavailable.ts",
+    "node-src/ui/messages/warnings/undefinedBranchOwner.stories.ts",
+    "node-src/ui/messages/warnings/undefinedBranchOwner.ts",
+    "node-src/ui/messages/warnings/unsupportedNodeVersion.stories.ts",
+    "node-src/ui/messages/warnings/unsupportedNodeVersion.ts",
+    "node-src/ui/tasks/auth.stories.ts",
+    "node-src/ui/tasks/auth.ts",
+    "node-src/ui/tasks/build.stories.ts",
+    "node-src/ui/tasks/build.ts",
+    "node-src/ui/tasks/buildE2E.stories.ts",
+    "node-src/ui/tasks/buildReactNative.stories.ts",
+    "node-src/ui/tasks/buildReactNative.ts",
+    "node-src/ui/tasks/gitInfo.stories.ts",
+    "node-src/ui/tasks/gitInfo.ts",
+    "node-src/ui/tasks/initialize.stories.ts",
+    "node-src/ui/tasks/initialize.ts",
+    "node-src/ui/tasks/prepare.stories.ts",
+    "node-src/ui/tasks/prepare.ts",
+    "node-src/ui/tasks/prepareE2E.stories.ts",
+    "node-src/ui/tasks/prepareWorkspace.stories.ts",
+    "node-src/ui/tasks/prepareWorkspace.ts",
+    "node-src/ui/tasks/report.stories.ts",
+    "node-src/ui/tasks/report.ts",
+    "node-src/ui/tasks/restoreWorkspace.stories.ts",
+    "node-src/ui/tasks/restoreWorkspace.ts",
+    "node-src/ui/tasks/snapshot.stories.ts",
+    "node-src/ui/tasks/snapshot.ts",
+    "node-src/ui/tasks/snapshotE2E.stories.ts",
+    "node-src/ui/tasks/storybookInfo.stories.ts",
+    "node-src/ui/tasks/storybookInfo.ts",
+    "node-src/ui/tasks/storybookInfoE2E.stories.ts",
+    "node-src/ui/tasks/upload.stories.ts",
+    "node-src/ui/tasks/upload.ts",
+    "node-src/ui/tasks/uploadE2E.stories.ts",
+    "node-src/ui/tasks/utilities.ts",
+    "node-src/ui/tasks/verify.stories.ts",
+    "node-src/ui/tasks/verify.ts",
+    "node-src/ui/tasks/verifyE2E.stories.ts",
+    "node-src/ui/workflows/uploadBuild.stories.ts",
+    "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+  ],
+  "storyFiles": [
+    "node-src/ui/components/icons.stories.ts",
+    "node-src/ui/components/link.stories.ts",
+    "node-src/ui/components/task.stories.ts",
+    "node-src/ui/html/metadata.html.stories.ts",
+    "node-src/ui/messages/errors/brokenStorybook.stories.ts",
+    "node-src/ui/messages/errors/buildCanceled.stories.ts",
+    "node-src/ui/messages/errors/buildFailed.stories.ts",
+    "node-src/ui/messages/errors/buildHasChanges.stories.ts",
+    "node-src/ui/messages/errors/buildHasErrors.stories.ts",
+    "node-src/ui/messages/errors/dependentOption.stories.ts",
+    "node-src/ui/messages/errors/duplicatePatchBuild.stories.ts",
+    "node-src/ui/messages/errors/e2eBuildFailed.stories.ts",
+    "node-src/ui/messages/errors/fatalError.stories.ts",
+    "node-src/ui/messages/errors/fetchError.stories.ts",
+    "node-src/ui/messages/errors/forksUnsupported.stories.ts",
+    "node-src/ui/messages/errors/gitNoCommits.stories.ts",
+    "node-src/ui/messages/errors/gitNotInitialized.stories.ts",
+    "node-src/ui/messages/errors/gitNotInstalled.stories.ts",
+    "node-src/ui/messages/errors/gitOneCommit.stories.ts",
+    "node-src/ui/messages/errors/gitUserEmailNotFound.stories.ts",
+    "node-src/ui/messages/errors/graphqlError.stories.ts",
+    "node-src/ui/messages/errors/incompatibleOptions.stories.ts",
+    "node-src/ui/messages/errors/invalidConfigurationFile.stories.ts",
+    "node-src/ui/messages/errors/invalidExitOnceUploaded.stories.ts",
+    "node-src/ui/messages/errors/invalidOnlyChanged.stories.ts",
+    "node-src/ui/messages/errors/invalidOnlyStoryNames.stories.ts",
+    "node-src/ui/messages/errors/invalidOwnerName.stories.ts",
+    "node-src/ui/messages/errors/invalidPackageJson.stories.ts",
+    "node-src/ui/messages/errors/invalidPatchBuild.stories.ts",
+    "node-src/ui/messages/errors/invalidProjectId.stories.ts",
+    "node-src/ui/messages/errors/invalidProjectToken.stories.ts",
+    "node-src/ui/messages/errors/invalidReportPath.stories.ts",
+    "node-src/ui/messages/errors/invalidRepositorySlug.stories.ts",
+    "node-src/ui/messages/errors/invalidSingularOptions.stories.ts",
+    "node-src/ui/messages/errors/invalidStorybookBaseDirectory.stories.ts",
+    "node-src/ui/messages/errors/maxFileCountExceeded.stories.ts",
+    "node-src/ui/messages/errors/maxFileSizeExceeded.stories.ts",
+    "node-src/ui/messages/errors/mergeBaseNotFound.stories.ts",
+    "node-src/ui/messages/errors/missingBuildScriptName.stories.ts",
+    "node-src/ui/messages/errors/missingConfigurationFile.stories.ts",
+    "node-src/ui/messages/errors/missingDependency.stories.ts",
+    "node-src/ui/messages/errors/missingGitHubInfo.stories.ts",
+    "node-src/ui/messages/errors/missingProjectToken.stories.ts",
+    "node-src/ui/messages/errors/missingStatsFile.stories.ts",
+    "node-src/ui/messages/errors/missingStories.stories.ts",
+    "node-src/ui/messages/errors/missingStorybookBuildDirectory.stories.ts",
+    "node-src/ui/messages/errors/missingTravisInfo.stories.ts",
+    "node-src/ui/messages/errors/noCSFGlobs.stories.ts",
+    "node-src/ui/messages/errors/noPackageJson.stories.ts",
+    "node-src/ui/messages/errors/noViewLayerPackage.stories.ts",
+    "node-src/ui/messages/errors/runtimeError.stories.ts",
+    "node-src/ui/messages/errors/sentinelFileErrors.stories.ts",
+    "node-src/ui/messages/errors/taskError.stories.ts",
+    "node-src/ui/messages/errors/turboSnapNotAvailableForReactNative.stories.ts",
+    "node-src/ui/messages/errors/unparseableConfigurationFile.stories.ts",
+    "node-src/ui/messages/errors/unsupportedStorybookReactNativeVersion.stories.ts",
+    "node-src/ui/messages/errors/uploadFailed.stories.ts",
+    "node-src/ui/messages/errors/workspaceNotClean.stories.ts",
+    "node-src/ui/messages/errors/workspaceNotUpToDate.stories.ts",
+    "node-src/ui/messages/info/addedScript.stories.ts",
+    "node-src/ui/messages/info/buildPassed.stories.ts",
+    "node-src/ui/messages/info/buildPassedE2E.stories.ts",
+    "node-src/ui/messages/info/customGitHubAction.stories.ts",
+    "node-src/ui/messages/info/forceRebuildHint.stories.ts",
+    "node-src/ui/messages/info/intro.stories.ts",
+    "node-src/ui/messages/info/listingStories.stories.ts",
+    "node-src/ui/messages/info/notAddedScript.stories.ts",
+    "node-src/ui/messages/info/replacedBuild.stories.ts",
+    "node-src/ui/messages/info/speedUpCI.stories.ts",
+    "node-src/ui/messages/info/storybookPublished.stories.ts",
+    "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+    "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts",
+    "node-src/ui/messages/info/tracedAffectedFiles.stories.ts",
+    "node-src/ui/messages/info/turboSnapEnabled.stories.ts",
+    "node-src/ui/messages/info/uploadingMetadata.stories.ts",
+    "node-src/ui/messages/info/wroteReport.stories.ts",
+    "node-src/ui/messages/warnings/bailFile.stories.ts",
+    "node-src/ui/messages/warnings/buildLimited.stories.ts",
+    "node-src/ui/messages/warnings/deduplicationFailed.stories.ts",
+    "node-src/ui/messages/warnings/deprecatedOption.stories.ts",
+    "node-src/ui/messages/warnings/deviatingOutputDirectory.stories.ts",
+    "node-src/ui/messages/warnings/externalsChanged.stories.ts",
+    "node-src/ui/messages/warnings/invalidChangedFiles.stories.ts",
+    "node-src/ui/messages/warnings/isRebuild.stories.ts",
+    "node-src/ui/messages/warnings/noAncestorBuild.stories.ts",
+    "node-src/ui/messages/warnings/noCommitDetails.stories.ts",
+    "node-src/ui/messages/warnings/outdatedPackage.stories.ts",
+    "node-src/ui/messages/warnings/paymentRequired.stories.ts",
+    "node-src/ui/messages/warnings/scriptNotFound.stories.ts",
+    "node-src/ui/messages/warnings/snapshotQuotaReached.stories.ts",
+    "node-src/ui/messages/warnings/travisInternalBuild.stories.ts",
+    "node-src/ui/messages/warnings/turboSnapUnavailable.stories.ts",
+    "node-src/ui/messages/warnings/undefinedBranchOwner.stories.ts",
+    "node-src/ui/messages/warnings/unsupportedNodeVersion.stories.ts",
+    "node-src/ui/tasks/auth.stories.ts",
+    "node-src/ui/tasks/build.stories.ts",
+    "node-src/ui/tasks/buildE2E.stories.ts",
+    "node-src/ui/tasks/buildReactNative.stories.ts",
+    "node-src/ui/tasks/gitInfo.stories.ts",
+    "node-src/ui/tasks/initialize.stories.ts",
+    "node-src/ui/tasks/prepare.stories.ts",
+    "node-src/ui/tasks/prepareE2E.stories.ts",
+    "node-src/ui/tasks/prepareWorkspace.stories.ts",
+    "node-src/ui/tasks/report.stories.ts",
+    "node-src/ui/tasks/restoreWorkspace.stories.ts",
+    "node-src/ui/tasks/snapshot.stories.ts",
+    "node-src/ui/tasks/snapshotE2E.stories.ts",
+    "node-src/ui/tasks/storybookInfo.stories.ts",
+    "node-src/ui/tasks/storybookInfoE2E.stories.ts",
+    "node-src/ui/tasks/upload.stories.ts",
+    "node-src/ui/tasks/uploadE2E.stories.ts",
+    "node-src/ui/tasks/verify.stories.ts",
+    "node-src/ui/tasks/verifyE2E.stories.ts",
+    "node-src/ui/workflows/uploadBuild.stories.ts",
+    "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+  ],
+  "affected": {
+    "node-src/lib/e2eUtils.ts": [
+      "node-src/ui/messages/errors/fatalError.stories.ts",
+      "node-src/ui/messages/info/buildPassed.stories.ts",
+      "node-src/ui/messages/info/buildPassedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublished.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts",
+      "node-src/ui/tasks/build.stories.ts",
+      "node-src/ui/tasks/buildE2E.stories.ts",
+      "node-src/ui/tasks/prepare.stories.ts",
+      "node-src/ui/tasks/prepareE2E.stories.ts",
+      "node-src/ui/tasks/snapshot.stories.ts",
+      "node-src/ui/tasks/snapshotE2E.stories.ts",
+      "node-src/ui/tasks/storybookInfo.stories.ts",
+      "node-src/ui/tasks/storybookInfoE2E.stories.ts",
+      "node-src/ui/tasks/upload.stories.ts",
+      "node-src/ui/tasks/uploadE2E.stories.ts",
+      "node-src/ui/tasks/verify.stories.ts",
+      "node-src/ui/tasks/verifyE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/lib/react-native/constants.ts": [
+      "node-src/ui/messages/errors/unsupportedStorybookReactNativeVersion.stories.ts"
+    ],
+    "node-src/lib/setExitCode.ts": [
+      "node-src/ui/tasks/snapshot.stories.ts",
+      "node-src/ui/tasks/snapshotE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/lib/tasks.ts": [
+      "node-src/ui/messages/info/buildPassed.stories.ts",
+      "node-src/ui/messages/info/buildPassedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublished.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts",
+      "node-src/ui/tasks/build.stories.ts",
+      "node-src/ui/tasks/buildE2E.stories.ts",
+      "node-src/ui/tasks/buildReactNative.stories.ts",
+      "node-src/ui/tasks/snapshot.stories.ts",
+      "node-src/ui/tasks/snapshotE2E.stories.ts",
+      "node-src/ui/tasks/upload.stories.ts",
+      "node-src/ui/tasks/uploadE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/lib/utilities.ts": [
+      "node-src/ui/messages/errors/fatalError.stories.ts",
+      "node-src/ui/messages/errors/fetchError.stories.ts",
+      "node-src/ui/messages/info/buildPassed.stories.ts",
+      "node-src/ui/messages/info/buildPassedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublished.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts",
+      "node-src/ui/messages/warnings/bailFile.stories.ts",
+      "node-src/ui/tasks/prepare.stories.ts",
+      "node-src/ui/tasks/prepareE2E.stories.ts",
+      "node-src/ui/tasks/snapshot.stories.ts",
+      "node-src/ui/tasks/snapshotE2E.stories.ts",
+      "node-src/ui/tasks/upload.stories.ts",
+      "node-src/ui/tasks/uploadE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/components/icons.stories.ts": [
+      "node-src/ui/components/icons.stories.ts"
+    ],
+    "node-src/ui/components/icons.ts": [
+      "node-src/ui/components/icons.stories.ts",
+      "node-src/ui/components/task.stories.ts",
+      "node-src/ui/messages/errors/brokenStorybook.stories.ts",
+      "node-src/ui/messages/errors/buildCanceled.stories.ts",
+      "node-src/ui/messages/errors/buildFailed.stories.ts",
+      "node-src/ui/messages/errors/buildHasChanges.stories.ts",
+      "node-src/ui/messages/errors/buildHasErrors.stories.ts",
+      "node-src/ui/messages/errors/dependentOption.stories.ts",
+      "node-src/ui/messages/errors/duplicatePatchBuild.stories.ts",
+      "node-src/ui/messages/errors/e2eBuildFailed.stories.ts",
+      "node-src/ui/messages/errors/fetchError.stories.ts",
+      "node-src/ui/messages/errors/forksUnsupported.stories.ts",
+      "node-src/ui/messages/errors/gitNoCommits.stories.ts",
+      "node-src/ui/messages/errors/gitNotInitialized.stories.ts",
+      "node-src/ui/messages/errors/gitNotInstalled.stories.ts",
+      "node-src/ui/messages/errors/gitOneCommit.stories.ts",
+      "node-src/ui/messages/errors/gitUserEmailNotFound.stories.ts",
+      "node-src/ui/messages/errors/graphqlError.stories.ts",
+      "node-src/ui/messages/errors/incompatibleOptions.stories.ts",
+      "node-src/ui/messages/errors/invalidConfigurationFile.stories.ts",
+      "node-src/ui/messages/errors/invalidExitOnceUploaded.stories.ts",
+      "node-src/ui/messages/errors/invalidOnlyChanged.stories.ts",
+      "node-src/ui/messages/errors/invalidOnlyStoryNames.stories.ts",
+      "node-src/ui/messages/errors/invalidOwnerName.stories.ts",
+      "node-src/ui/messages/errors/invalidPackageJson.stories.ts",
+      "node-src/ui/messages/errors/invalidPatchBuild.stories.ts",
+      "node-src/ui/messages/errors/invalidProjectId.stories.ts",
+      "node-src/ui/messages/errors/invalidProjectToken.stories.ts",
+      "node-src/ui/messages/errors/invalidReportPath.stories.ts",
+      "node-src/ui/messages/errors/invalidRepositorySlug.stories.ts",
+      "node-src/ui/messages/errors/invalidSingularOptions.stories.ts",
+      "node-src/ui/messages/errors/invalidStorybookBaseDirectory.stories.ts",
+      "node-src/ui/messages/errors/maxFileCountExceeded.stories.ts",
+      "node-src/ui/messages/errors/maxFileSizeExceeded.stories.ts",
+      "node-src/ui/messages/errors/mergeBaseNotFound.stories.ts",
+      "node-src/ui/messages/errors/missingBuildScriptName.stories.ts",
+      "node-src/ui/messages/errors/missingConfigurationFile.stories.ts",
+      "node-src/ui/messages/errors/missingDependency.stories.ts",
+      "node-src/ui/messages/errors/missingGitHubInfo.stories.ts",
+      "node-src/ui/messages/errors/missingProjectToken.stories.ts",
+      "node-src/ui/messages/errors/missingStatsFile.stories.ts",
+      "node-src/ui/messages/errors/missingStories.stories.ts",
+      "node-src/ui/messages/errors/missingStorybookBuildDirectory.stories.ts",
+      "node-src/ui/messages/errors/missingTravisInfo.stories.ts",
+      "node-src/ui/messages/errors/noCSFGlobs.stories.ts",
+      "node-src/ui/messages/errors/noPackageJson.stories.ts",
+      "node-src/ui/messages/errors/noViewLayerPackage.stories.ts",
+      "node-src/ui/messages/errors/runtimeError.stories.ts",
+      "node-src/ui/messages/errors/sentinelFileErrors.stories.ts",
+      "node-src/ui/messages/errors/taskError.stories.ts",
+      "node-src/ui/messages/errors/turboSnapNotAvailableForReactNative.stories.ts",
+      "node-src/ui/messages/errors/unparseableConfigurationFile.stories.ts",
+      "node-src/ui/messages/errors/unsupportedStorybookReactNativeVersion.stories.ts",
+      "node-src/ui/messages/errors/uploadFailed.stories.ts",
+      "node-src/ui/messages/errors/workspaceNotClean.stories.ts",
+      "node-src/ui/messages/errors/workspaceNotUpToDate.stories.ts",
+      "node-src/ui/messages/info/addedScript.stories.ts",
+      "node-src/ui/messages/info/buildPassed.stories.ts",
+      "node-src/ui/messages/info/buildPassedE2E.stories.ts",
+      "node-src/ui/messages/info/customGitHubAction.stories.ts",
+      "node-src/ui/messages/info/forceRebuildHint.stories.ts",
+      "node-src/ui/messages/info/listingStories.stories.ts",
+      "node-src/ui/messages/info/notAddedScript.stories.ts",
+      "node-src/ui/messages/info/replacedBuild.stories.ts",
+      "node-src/ui/messages/info/speedUpCI.stories.ts",
+      "node-src/ui/messages/info/storybookPublished.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts",
+      "node-src/ui/messages/info/tracedAffectedFiles.stories.ts",
+      "node-src/ui/messages/info/turboSnapEnabled.stories.ts",
+      "node-src/ui/messages/info/uploadingMetadata.stories.ts",
+      "node-src/ui/messages/info/wroteReport.stories.ts",
+      "node-src/ui/messages/warnings/bailFile.stories.ts",
+      "node-src/ui/messages/warnings/buildLimited.stories.ts",
+      "node-src/ui/messages/warnings/deduplicationFailed.stories.ts",
+      "node-src/ui/messages/warnings/deprecatedOption.stories.ts",
+      "node-src/ui/messages/warnings/deviatingOutputDirectory.stories.ts",
+      "node-src/ui/messages/warnings/externalsChanged.stories.ts",
+      "node-src/ui/messages/warnings/invalidChangedFiles.stories.ts",
+      "node-src/ui/messages/warnings/isRebuild.stories.ts",
+      "node-src/ui/messages/warnings/noAncestorBuild.stories.ts",
+      "node-src/ui/messages/warnings/noCommitDetails.stories.ts",
+      "node-src/ui/messages/warnings/outdatedPackage.stories.ts",
+      "node-src/ui/messages/warnings/paymentRequired.stories.ts",
+      "node-src/ui/messages/warnings/scriptNotFound.stories.ts",
+      "node-src/ui/messages/warnings/snapshotQuotaReached.stories.ts",
+      "node-src/ui/messages/warnings/travisInternalBuild.stories.ts",
+      "node-src/ui/messages/warnings/turboSnapUnavailable.stories.ts",
+      "node-src/ui/messages/warnings/undefinedBranchOwner.stories.ts",
+      "node-src/ui/messages/warnings/unsupportedNodeVersion.stories.ts",
+      "node-src/ui/tasks/auth.stories.ts",
+      "node-src/ui/tasks/build.stories.ts",
+      "node-src/ui/tasks/buildE2E.stories.ts",
+      "node-src/ui/tasks/buildReactNative.stories.ts",
+      "node-src/ui/tasks/gitInfo.stories.ts",
+      "node-src/ui/tasks/initialize.stories.ts",
+      "node-src/ui/tasks/prepare.stories.ts",
+      "node-src/ui/tasks/prepareE2E.stories.ts",
+      "node-src/ui/tasks/prepareWorkspace.stories.ts",
+      "node-src/ui/tasks/report.stories.ts",
+      "node-src/ui/tasks/restoreWorkspace.stories.ts",
+      "node-src/ui/tasks/snapshot.stories.ts",
+      "node-src/ui/tasks/snapshotE2E.stories.ts",
+      "node-src/ui/tasks/storybookInfo.stories.ts",
+      "node-src/ui/tasks/storybookInfoE2E.stories.ts",
+      "node-src/ui/tasks/upload.stories.ts",
+      "node-src/ui/tasks/uploadE2E.stories.ts",
+      "node-src/ui/tasks/verify.stories.ts",
+      "node-src/ui/tasks/verifyE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/components/link.stories.ts": [
+      "node-src/ui/components/link.stories.ts"
+    ],
+    "node-src/ui/components/link.ts": [
+      "node-src/ui/components/link.stories.ts",
+      "node-src/ui/messages/errors/brokenStorybook.stories.ts",
+      "node-src/ui/messages/errors/buildFailed.stories.ts",
+      "node-src/ui/messages/errors/buildHasChanges.stories.ts",
+      "node-src/ui/messages/errors/buildHasErrors.stories.ts",
+      "node-src/ui/messages/errors/fatalError.stories.ts",
+      "node-src/ui/messages/errors/fetchError.stories.ts",
+      "node-src/ui/messages/errors/forksUnsupported.stories.ts",
+      "node-src/ui/messages/errors/gitNotInitialized.stories.ts",
+      "node-src/ui/messages/errors/gitOneCommit.stories.ts",
+      "node-src/ui/messages/errors/gitUserEmailNotFound.stories.ts",
+      "node-src/ui/messages/errors/graphqlError.stories.ts",
+      "node-src/ui/messages/errors/invalidPatchBuild.stories.ts",
+      "node-src/ui/messages/errors/invalidProjectId.stories.ts",
+      "node-src/ui/messages/errors/invalidProjectToken.stories.ts",
+      "node-src/ui/messages/errors/mergeBaseNotFound.stories.ts",
+      "node-src/ui/messages/errors/missingGitHubInfo.stories.ts",
+      "node-src/ui/messages/errors/missingProjectToken.stories.ts",
+      "node-src/ui/messages/errors/missingStories.stories.ts",
+      "node-src/ui/messages/errors/missingTravisInfo.stories.ts",
+      "node-src/ui/messages/errors/noCSFGlobs.stories.ts",
+      "node-src/ui/messages/errors/sentinelFileErrors.stories.ts",
+      "node-src/ui/messages/info/buildPassed.stories.ts",
+      "node-src/ui/messages/info/buildPassedE2E.stories.ts",
+      "node-src/ui/messages/info/customGitHubAction.stories.ts",
+      "node-src/ui/messages/info/speedUpCI.stories.ts",
+      "node-src/ui/messages/info/storybookPublished.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts",
+      "node-src/ui/messages/info/uploadingMetadata.stories.ts",
+      "node-src/ui/messages/warnings/bailFile.stories.ts",
+      "node-src/ui/messages/warnings/buildLimited.stories.ts",
+      "node-src/ui/messages/warnings/deprecatedOption.stories.ts",
+      "node-src/ui/messages/warnings/externalsChanged.stories.ts",
+      "node-src/ui/messages/warnings/invalidChangedFiles.stories.ts",
+      "node-src/ui/messages/warnings/noAncestorBuild.stories.ts",
+      "node-src/ui/messages/warnings/noCommitDetails.stories.ts",
+      "node-src/ui/messages/warnings/paymentRequired.stories.ts",
+      "node-src/ui/messages/warnings/snapshotQuotaReached.stories.ts",
+      "node-src/ui/messages/warnings/travisInternalBuild.stories.ts",
+      "node-src/ui/messages/warnings/turboSnapUnavailable.stories.ts",
+      "node-src/ui/messages/warnings/undefinedBranchOwner.stories.ts",
+      "node-src/ui/messages/warnings/unsupportedNodeVersion.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/components/task.stories.ts": [
+      "node-src/ui/components/task.stories.ts"
+    ],
+    "node-src/ui/components/task.ts": [
+      "node-src/ui/components/task.stories.ts",
+      "node-src/ui/tasks/auth.stories.ts",
+      "node-src/ui/tasks/build.stories.ts",
+      "node-src/ui/tasks/buildE2E.stories.ts",
+      "node-src/ui/tasks/buildReactNative.stories.ts",
+      "node-src/ui/tasks/gitInfo.stories.ts",
+      "node-src/ui/tasks/initialize.stories.ts",
+      "node-src/ui/tasks/prepare.stories.ts",
+      "node-src/ui/tasks/prepareE2E.stories.ts",
+      "node-src/ui/tasks/prepareWorkspace.stories.ts",
+      "node-src/ui/tasks/report.stories.ts",
+      "node-src/ui/tasks/restoreWorkspace.stories.ts",
+      "node-src/ui/tasks/snapshot.stories.ts",
+      "node-src/ui/tasks/snapshotE2E.stories.ts",
+      "node-src/ui/tasks/storybookInfo.stories.ts",
+      "node-src/ui/tasks/storybookInfoE2E.stories.ts",
+      "node-src/ui/tasks/upload.stories.ts",
+      "node-src/ui/tasks/uploadE2E.stories.ts",
+      "node-src/ui/tasks/verify.stories.ts",
+      "node-src/ui/tasks/verifyE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/html/metadata.html.stories.ts": [
+      "node-src/ui/html/metadata.html.stories.ts",
+      "node-src/ui/messages/info/uploadingMetadata.stories.ts"
+    ],
+    "node-src/ui/html/metadata.html.ts": [
+      "node-src/ui/html/metadata.html.stories.ts",
+      "node-src/ui/messages/info/uploadingMetadata.stories.ts"
+    ],
+    "node-src/ui/messages/errors/brokenStorybook.stories.ts": [
+      "node-src/ui/messages/errors/brokenStorybook.stories.ts"
+    ],
+    "node-src/ui/messages/errors/brokenStorybook.ts": [
+      "node-src/ui/messages/errors/brokenStorybook.stories.ts"
+    ],
+    "node-src/ui/messages/errors/buildCanceled.stories.ts": [
+      "node-src/ui/messages/errors/buildCanceled.stories.ts"
+    ],
+    "node-src/ui/messages/errors/buildCanceled.ts": [
+      "node-src/ui/messages/errors/buildCanceled.stories.ts"
+    ],
+    "node-src/ui/messages/errors/buildFailed.stories.ts": [
+      "node-src/ui/messages/errors/buildFailed.stories.ts"
+    ],
+    "node-src/ui/messages/errors/buildFailed.ts": [
+      "node-src/ui/messages/errors/buildFailed.stories.ts"
+    ],
+    "node-src/ui/messages/errors/buildHasChanges.stories.ts": [
+      "node-src/ui/messages/errors/buildHasChanges.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/messages/errors/buildHasChanges.ts": [
+      "node-src/ui/messages/errors/buildHasChanges.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/messages/errors/buildHasErrors.stories.ts": [
+      "node-src/ui/messages/errors/buildHasErrors.stories.ts"
+    ],
+    "node-src/ui/messages/errors/buildHasErrors.ts": [
+      "node-src/ui/messages/errors/buildHasErrors.stories.ts"
+    ],
+    "node-src/ui/messages/errors/dependentOption.stories.ts": [
+      "node-src/ui/messages/errors/dependentOption.stories.ts"
+    ],
+    "node-src/ui/messages/errors/dependentOption.ts": [
+      "node-src/ui/messages/errors/dependentOption.stories.ts"
+    ],
+    "node-src/ui/messages/errors/duplicatePatchBuild.stories.ts": [
+      "node-src/ui/messages/errors/duplicatePatchBuild.stories.ts"
+    ],
+    "node-src/ui/messages/errors/duplicatePatchBuild.ts": [
+      "node-src/ui/messages/errors/duplicatePatchBuild.stories.ts"
+    ],
+    "node-src/ui/messages/errors/e2eBuildFailed.stories.ts": [
+      "node-src/ui/messages/errors/e2eBuildFailed.stories.ts"
+    ],
+    "node-src/ui/messages/errors/e2eBuildFailed.ts": [
+      "node-src/ui/messages/errors/e2eBuildFailed.stories.ts"
+    ],
+    "node-src/ui/messages/errors/fatalError.stories.ts": [
+      "node-src/ui/messages/errors/fatalError.stories.ts"
+    ],
+    "node-src/ui/messages/errors/fatalError.ts": [
+      "node-src/ui/messages/errors/fatalError.stories.ts"
+    ],
+    "node-src/ui/messages/errors/fetchError.stories.ts": [
+      "node-src/ui/messages/errors/fetchError.stories.ts"
+    ],
+    "node-src/ui/messages/errors/fetchError.ts": [
+      "node-src/ui/messages/errors/fetchError.stories.ts"
+    ],
+    "node-src/ui/messages/errors/forksUnsupported.stories.ts": [
+      "node-src/ui/messages/errors/forksUnsupported.stories.ts"
+    ],
+    "node-src/ui/messages/errors/forksUnsupported.ts": [
+      "node-src/ui/messages/errors/forksUnsupported.stories.ts"
+    ],
+    "node-src/ui/messages/errors/gitNoCommits.stories.ts": [
+      "node-src/ui/messages/errors/gitNoCommits.stories.ts"
+    ],
+    "node-src/ui/messages/errors/gitNoCommits.ts": [
+      "node-src/ui/messages/errors/gitNoCommits.stories.ts"
+    ],
+    "node-src/ui/messages/errors/gitNotInitialized.stories.ts": [
+      "node-src/ui/messages/errors/gitNotInitialized.stories.ts"
+    ],
+    "node-src/ui/messages/errors/gitNotInitialized.ts": [
+      "node-src/ui/messages/errors/gitNotInitialized.stories.ts"
+    ],
+    "node-src/ui/messages/errors/gitNotInstalled.stories.ts": [
+      "node-src/ui/messages/errors/gitNotInstalled.stories.ts"
+    ],
+    "node-src/ui/messages/errors/gitNotInstalled.ts": [
+      "node-src/ui/messages/errors/gitNotInstalled.stories.ts"
+    ],
+    "node-src/ui/messages/errors/gitOneCommit.stories.ts": [
+      "node-src/ui/messages/errors/gitOneCommit.stories.ts"
+    ],
+    "node-src/ui/messages/errors/gitOneCommit.ts": [
+      "node-src/ui/messages/errors/gitOneCommit.stories.ts"
+    ],
+    "node-src/ui/messages/errors/gitUserEmailNotFound.stories.ts": [
+      "node-src/ui/messages/errors/gitUserEmailNotFound.stories.ts"
+    ],
+    "node-src/ui/messages/errors/gitUserEmailNotFound.ts": [
+      "node-src/ui/messages/errors/gitUserEmailNotFound.stories.ts"
+    ],
+    "node-src/ui/messages/errors/graphqlError.stories.ts": [
+      "node-src/ui/messages/errors/graphqlError.stories.ts"
+    ],
+    "node-src/ui/messages/errors/graphqlError.ts": [
+      "node-src/ui/messages/errors/graphqlError.stories.ts"
+    ],
+    "node-src/ui/messages/errors/incompatibleOptions.stories.ts": [
+      "node-src/ui/messages/errors/incompatibleOptions.stories.ts"
+    ],
+    "node-src/ui/messages/errors/incompatibleOptions.ts": [
+      "node-src/ui/messages/errors/incompatibleOptions.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidConfigurationFile.stories.ts": [
+      "node-src/ui/messages/errors/invalidConfigurationFile.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidConfigurationFile.ts": [
+      "node-src/ui/messages/errors/invalidConfigurationFile.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidExitOnceUploaded.stories.ts": [
+      "node-src/ui/messages/errors/invalidExitOnceUploaded.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidExitOnceUploaded.ts": [
+      "node-src/ui/messages/errors/invalidExitOnceUploaded.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidOnlyChanged.stories.ts": [
+      "node-src/ui/messages/errors/invalidOnlyChanged.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidOnlyChanged.ts": [
+      "node-src/ui/messages/errors/invalidOnlyChanged.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidOnlyStoryNames.stories.ts": [
+      "node-src/ui/messages/errors/invalidOnlyStoryNames.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidOnlyStoryNames.ts": [
+      "node-src/ui/messages/errors/invalidOnlyStoryNames.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidOwnerName.stories.ts": [
+      "node-src/ui/messages/errors/invalidOwnerName.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidOwnerName.ts": [
+      "node-src/ui/messages/errors/invalidOwnerName.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidPackageJson.stories.ts": [
+      "node-src/ui/messages/errors/invalidPackageJson.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidPackageJson.ts": [
+      "node-src/ui/messages/errors/invalidPackageJson.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidPatchBuild.stories.ts": [
+      "node-src/ui/messages/errors/invalidPatchBuild.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidPatchBuild.ts": [
+      "node-src/ui/messages/errors/invalidPatchBuild.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidProjectId.stories.ts": [
+      "node-src/ui/messages/errors/invalidProjectId.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidProjectId.ts": [
+      "node-src/ui/messages/errors/invalidProjectId.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidProjectToken.stories.ts": [
+      "node-src/ui/messages/errors/invalidProjectToken.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidProjectToken.ts": [
+      "node-src/ui/messages/errors/invalidProjectToken.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidReportPath.stories.ts": [
+      "node-src/ui/messages/errors/invalidReportPath.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidReportPath.ts": [
+      "node-src/ui/messages/errors/invalidReportPath.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidRepositorySlug.stories.ts": [
+      "node-src/ui/messages/errors/invalidRepositorySlug.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidRepositorySlug.ts": [
+      "node-src/ui/messages/errors/invalidRepositorySlug.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidSingularOptions.stories.ts": [
+      "node-src/ui/messages/errors/invalidSingularOptions.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidSingularOptions.ts": [
+      "node-src/ui/messages/errors/invalidSingularOptions.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidStorybookBaseDirectory.stories.ts": [
+      "node-src/ui/messages/errors/invalidStorybookBaseDirectory.stories.ts"
+    ],
+    "node-src/ui/messages/errors/invalidStorybookBaseDirectory.ts": [
+      "node-src/ui/messages/errors/invalidStorybookBaseDirectory.stories.ts"
+    ],
+    "node-src/ui/messages/errors/maxFileCountExceeded.stories.ts": [
+      "node-src/ui/messages/errors/maxFileCountExceeded.stories.ts"
+    ],
+    "node-src/ui/messages/errors/maxFileCountExceeded.ts": [
+      "node-src/ui/messages/errors/maxFileCountExceeded.stories.ts"
+    ],
+    "node-src/ui/messages/errors/maxFileSizeExceeded.stories.ts": [
+      "node-src/ui/messages/errors/maxFileSizeExceeded.stories.ts"
+    ],
+    "node-src/ui/messages/errors/maxFileSizeExceeded.ts": [
+      "node-src/ui/messages/errors/maxFileSizeExceeded.stories.ts"
+    ],
+    "node-src/ui/messages/errors/mergeBaseNotFound.stories.ts": [
+      "node-src/ui/messages/errors/mergeBaseNotFound.stories.ts"
+    ],
+    "node-src/ui/messages/errors/mergeBaseNotFound.ts": [
+      "node-src/ui/messages/errors/mergeBaseNotFound.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingBuildScriptName.stories.ts": [
+      "node-src/ui/messages/errors/missingBuildScriptName.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingBuildScriptName.ts": [
+      "node-src/ui/messages/errors/missingBuildScriptName.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingConfigurationFile.stories.ts": [
+      "node-src/ui/messages/errors/missingConfigurationFile.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingConfigurationFile.ts": [
+      "node-src/ui/messages/errors/missingConfigurationFile.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingDependency.stories.ts": [
+      "node-src/ui/messages/errors/missingDependency.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingDependency.ts": [
+      "node-src/ui/messages/errors/missingDependency.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingGitHubInfo.stories.ts": [
+      "node-src/ui/messages/errors/missingGitHubInfo.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingGitHubInfo.ts": [
+      "node-src/ui/messages/errors/missingGitHubInfo.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingProjectToken.stories.ts": [
+      "node-src/ui/messages/errors/missingProjectToken.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingProjectToken.ts": [
+      "node-src/ui/messages/errors/missingProjectToken.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingStatsFile.stories.ts": [
+      "node-src/ui/messages/errors/missingStatsFile.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingStatsFile.ts": [
+      "node-src/ui/messages/errors/missingStatsFile.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingStories.stories.ts": [
+      "node-src/ui/messages/errors/missingStories.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingStories.ts": [
+      "node-src/ui/messages/errors/missingStories.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingStorybookBuildDirectory.stories.ts": [
+      "node-src/ui/messages/errors/missingStorybookBuildDirectory.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingStorybookBuildDirectory.ts": [
+      "node-src/ui/messages/errors/missingStorybookBuildDirectory.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingTravisInfo.stories.ts": [
+      "node-src/ui/messages/errors/missingTravisInfo.stories.ts"
+    ],
+    "node-src/ui/messages/errors/missingTravisInfo.ts": [
+      "node-src/ui/messages/errors/missingTravisInfo.stories.ts"
+    ],
+    "node-src/ui/messages/errors/noCSFGlobs.stories.ts": [
+      "node-src/ui/messages/errors/noCSFGlobs.stories.ts"
+    ],
+    "node-src/ui/messages/errors/noCSFGlobs.ts": [
+      "node-src/ui/messages/errors/noCSFGlobs.stories.ts"
+    ],
+    "node-src/ui/messages/errors/noPackageJson.stories.ts": [
+      "node-src/ui/messages/errors/noPackageJson.stories.ts"
+    ],
+    "node-src/ui/messages/errors/noPackageJson.ts": [
+      "node-src/ui/messages/errors/noPackageJson.stories.ts"
+    ],
+    "node-src/ui/messages/errors/noViewLayerPackage.stories.ts": [
+      "node-src/ui/messages/errors/noViewLayerPackage.stories.ts"
+    ],
+    "node-src/ui/messages/errors/noViewLayerPackage.ts": [
+      "node-src/ui/messages/errors/noViewLayerPackage.stories.ts"
+    ],
+    "node-src/ui/messages/errors/runtimeError.stories.ts": [
+      "node-src/ui/messages/errors/runtimeError.stories.ts"
+    ],
+    "node-src/ui/messages/errors/runtimeError.ts": [
+      "node-src/ui/messages/errors/runtimeError.stories.ts"
+    ],
+    "node-src/ui/messages/errors/sentinelFileErrors.stories.ts": [
+      "node-src/ui/messages/errors/sentinelFileErrors.stories.ts"
+    ],
+    "node-src/ui/messages/errors/sentinelFileErrors.ts": [
+      "node-src/ui/messages/errors/sentinelFileErrors.stories.ts"
+    ],
+    "node-src/ui/messages/errors/taskError.stories.ts": [
+      "node-src/ui/messages/errors/taskError.stories.ts"
+    ],
+    "node-src/ui/messages/errors/taskError.ts": [
+      "node-src/ui/messages/errors/taskError.stories.ts"
+    ],
+    "node-src/ui/messages/errors/turboSnapNotAvailableForReactNative.stories.ts": [
+      "node-src/ui/messages/errors/turboSnapNotAvailableForReactNative.stories.ts"
+    ],
+    "node-src/ui/messages/errors/turboSnapNotAvailableForReactNative.ts": [
+      "node-src/ui/messages/errors/turboSnapNotAvailableForReactNative.stories.ts"
+    ],
+    "node-src/ui/messages/errors/unparseableConfigurationFile.stories.ts": [
+      "node-src/ui/messages/errors/unparseableConfigurationFile.stories.ts"
+    ],
+    "node-src/ui/messages/errors/unparseableConfigurationFile.ts": [
+      "node-src/ui/messages/errors/unparseableConfigurationFile.stories.ts"
+    ],
+    "node-src/ui/messages/errors/unsupportedStorybookReactNativeVersion.stories.ts": [
+      "node-src/ui/messages/errors/unsupportedStorybookReactNativeVersion.stories.ts"
+    ],
+    "node-src/ui/messages/errors/unsupportedStorybookReactNativeVersion.ts": [
+      "node-src/ui/messages/errors/unsupportedStorybookReactNativeVersion.stories.ts"
+    ],
+    "node-src/ui/messages/errors/uploadFailed.stories.ts": [
+      "node-src/ui/messages/errors/uploadFailed.stories.ts"
+    ],
+    "node-src/ui/messages/errors/uploadFailed.ts": [
+      "node-src/ui/messages/errors/uploadFailed.stories.ts"
+    ],
+    "node-src/ui/messages/errors/workspaceNotClean.stories.ts": [
+      "node-src/ui/messages/errors/workspaceNotClean.stories.ts"
+    ],
+    "node-src/ui/messages/errors/workspaceNotClean.ts": [
+      "node-src/ui/messages/errors/workspaceNotClean.stories.ts"
+    ],
+    "node-src/ui/messages/errors/workspaceNotUpToDate.stories.ts": [
+      "node-src/ui/messages/errors/workspaceNotUpToDate.stories.ts"
+    ],
+    "node-src/ui/messages/errors/workspaceNotUpToDate.ts": [
+      "node-src/ui/messages/errors/workspaceNotUpToDate.stories.ts"
+    ],
+    "node-src/ui/messages/info/addedScript.stories.ts": [
+      "node-src/ui/messages/info/addedScript.stories.ts"
+    ],
+    "node-src/ui/messages/info/addedScript.ts": [
+      "node-src/ui/messages/info/addedScript.stories.ts"
+    ],
+    "node-src/ui/messages/info/buildPassed.stories.ts": [
+      "node-src/ui/messages/info/buildPassed.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts"
+    ],
+    "node-src/ui/messages/info/buildPassed.ts": [
+      "node-src/ui/messages/info/buildPassed.stories.ts",
+      "node-src/ui/messages/info/buildPassedE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/messages/info/buildPassedE2E.stories.ts": [
+      "node-src/ui/messages/info/buildPassedE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/messages/info/customGitHubAction.stories.ts": [
+      "node-src/ui/messages/info/customGitHubAction.stories.ts"
+    ],
+    "node-src/ui/messages/info/customGitHubAction.ts": [
+      "node-src/ui/messages/info/customGitHubAction.stories.ts"
+    ],
+    "node-src/ui/messages/info/forceRebuildHint.stories.ts": [
+      "node-src/ui/messages/info/forceRebuildHint.stories.ts"
+    ],
+    "node-src/ui/messages/info/forceRebuildHint.ts": [
+      "node-src/ui/messages/info/forceRebuildHint.stories.ts"
+    ],
+    "node-src/ui/messages/info/intro.stories.ts": [
+      "node-src/ui/messages/info/intro.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/messages/info/intro.ts": [
+      "node-src/ui/messages/info/intro.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/messages/info/listingStories.stories.ts": [
+      "node-src/ui/messages/info/listingStories.stories.ts"
+    ],
+    "node-src/ui/messages/info/listingStories.ts": [
+      "node-src/ui/messages/info/listingStories.stories.ts"
+    ],
+    "node-src/ui/messages/info/notAddedScript.stories.ts": [
+      "node-src/ui/messages/info/notAddedScript.stories.ts"
+    ],
+    "node-src/ui/messages/info/notAddedScript.ts": [
+      "node-src/ui/messages/info/notAddedScript.stories.ts"
+    ],
+    "node-src/ui/messages/info/replacedBuild.stories.ts": [
+      "node-src/ui/messages/info/replacedBuild.stories.ts"
+    ],
+    "node-src/ui/messages/info/replacedBuild.ts": [
+      "node-src/ui/messages/info/replacedBuild.stories.ts"
+    ],
+    "node-src/ui/messages/info/speedUpCI.stories.ts": [
+      "node-src/ui/messages/info/speedUpCI.stories.ts"
+    ],
+    "node-src/ui/messages/info/speedUpCI.ts": [
+      "node-src/ui/messages/info/speedUpCI.stories.ts"
+    ],
+    "node-src/ui/messages/info/storybookPublished.stories.ts": [
+      "node-src/ui/messages/info/storybookPublished.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts"
+    ],
+    "node-src/ui/messages/info/storybookPublished.ts": [
+      "node-src/ui/messages/info/storybookPublished.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/messages/info/storybookPublishedE2E.stories.ts": [
+      "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts": [
+      "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts"
+    ],
+    "node-src/ui/messages/info/tracedAffectedFiles.stories.ts": [
+      "node-src/ui/messages/info/tracedAffectedFiles.stories.ts"
+    ],
+    "node-src/ui/messages/info/tracedAffectedFiles.ts": [
+      "node-src/ui/messages/info/tracedAffectedFiles.stories.ts"
+    ],
+    "node-src/ui/messages/info/turboSnapEnabled.stories.ts": [
+      "node-src/ui/messages/info/turboSnapEnabled.stories.ts"
+    ],
+    "node-src/ui/messages/info/turboSnapEnabled.ts": [
+      "node-src/ui/messages/info/turboSnapEnabled.stories.ts"
+    ],
+    "node-src/ui/messages/info/uploadingMetadata.stories.ts": [
+      "node-src/ui/messages/info/uploadingMetadata.stories.ts"
+    ],
+    "node-src/ui/messages/info/uploadingMetadata.ts": [
+      "node-src/ui/messages/info/uploadingMetadata.stories.ts"
+    ],
+    "node-src/ui/messages/info/wroteReport.stories.ts": [
+      "node-src/ui/messages/info/wroteReport.stories.ts"
+    ],
+    "node-src/ui/messages/info/wroteReport.ts": [
+      "node-src/ui/messages/info/wroteReport.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/bailFile.stories.ts": [
+      "node-src/ui/messages/warnings/bailFile.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/bailFile.ts": [
+      "node-src/ui/messages/warnings/bailFile.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/buildLimited.stories.ts": [
+      "node-src/ui/messages/warnings/buildLimited.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/buildLimited.ts": [
+      "node-src/ui/messages/warnings/buildLimited.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/deduplicationFailed.stories.ts": [
+      "node-src/ui/messages/warnings/deduplicationFailed.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/deduplicationFailed.ts": [
+      "node-src/ui/messages/warnings/deduplicationFailed.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/deprecatedOption.stories.ts": [
+      "node-src/ui/messages/warnings/deprecatedOption.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/deprecatedOption.ts": [
+      "node-src/ui/messages/warnings/deprecatedOption.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/deviatingOutputDirectory.stories.ts": [
+      "node-src/ui/messages/warnings/deviatingOutputDirectory.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/deviatingOutputDirectory.ts": [
+      "node-src/ui/messages/warnings/deviatingOutputDirectory.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/externalsChanged.stories.ts": [
+      "node-src/ui/messages/warnings/externalsChanged.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/externalsChanged.ts": [
+      "node-src/ui/messages/warnings/externalsChanged.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/invalidChangedFiles.stories.ts": [
+      "node-src/ui/messages/warnings/invalidChangedFiles.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/invalidChangedFiles.ts": [
+      "node-src/ui/messages/warnings/invalidChangedFiles.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/isRebuild.stories.ts": [
+      "node-src/ui/messages/warnings/isRebuild.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/isRebuild.ts": [
+      "node-src/ui/messages/warnings/isRebuild.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/noAncestorBuild.stories.ts": [
+      "node-src/ui/messages/warnings/noAncestorBuild.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/noAncestorBuild.ts": [
+      "node-src/ui/messages/warnings/noAncestorBuild.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/noCommitDetails.stories.ts": [
+      "node-src/ui/messages/warnings/noCommitDetails.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/noCommitDetails.ts": [
+      "node-src/ui/messages/warnings/noCommitDetails.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/outdatedPackage.stories.ts": [
+      "node-src/ui/messages/warnings/outdatedPackage.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/outdatedPackage.ts": [
+      "node-src/ui/messages/warnings/outdatedPackage.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/paymentRequired.stories.ts": [
+      "node-src/ui/messages/warnings/paymentRequired.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/paymentRequired.ts": [
+      "node-src/ui/messages/warnings/paymentRequired.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/scriptNotFound.stories.ts": [
+      "node-src/ui/messages/warnings/scriptNotFound.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/scriptNotFound.ts": [
+      "node-src/ui/messages/warnings/scriptNotFound.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/snapshotQuotaReached.stories.ts": [
+      "node-src/ui/messages/warnings/snapshotQuotaReached.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/snapshotQuotaReached.ts": [
+      "node-src/ui/messages/warnings/snapshotQuotaReached.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/travisInternalBuild.stories.ts": [
+      "node-src/ui/messages/warnings/travisInternalBuild.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/travisInternalBuild.ts": [
+      "node-src/ui/messages/warnings/travisInternalBuild.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/turboSnapUnavailable.stories.ts": [
+      "node-src/ui/messages/warnings/turboSnapUnavailable.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/turboSnapUnavailable.ts": [
+      "node-src/ui/messages/warnings/turboSnapUnavailable.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/undefinedBranchOwner.stories.ts": [
+      "node-src/ui/messages/warnings/undefinedBranchOwner.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/undefinedBranchOwner.ts": [
+      "node-src/ui/messages/warnings/undefinedBranchOwner.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/unsupportedNodeVersion.stories.ts": [
+      "node-src/ui/messages/warnings/unsupportedNodeVersion.stories.ts"
+    ],
+    "node-src/ui/messages/warnings/unsupportedNodeVersion.ts": [
+      "node-src/ui/messages/warnings/unsupportedNodeVersion.stories.ts"
+    ],
+    "node-src/ui/tasks/auth.stories.ts": [
+      "node-src/ui/tasks/auth.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/auth.ts": [
+      "node-src/ui/tasks/auth.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/build.stories.ts": [
+      "node-src/ui/tasks/build.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts"
+    ],
+    "node-src/ui/tasks/build.ts": [
+      "node-src/ui/tasks/build.stories.ts",
+      "node-src/ui/tasks/buildE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/buildE2E.stories.ts": [
+      "node-src/ui/tasks/buildE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/buildReactNative.stories.ts": [
+      "node-src/ui/tasks/buildReactNative.stories.ts"
+    ],
+    "node-src/ui/tasks/buildReactNative.ts": [
+      "node-src/ui/tasks/buildReactNative.stories.ts"
+    ],
+    "node-src/ui/tasks/gitInfo.stories.ts": [
+      "node-src/ui/tasks/gitInfo.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/gitInfo.ts": [
+      "node-src/ui/messages/info/forceRebuildHint.stories.ts",
+      "node-src/ui/tasks/gitInfo.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/initialize.stories.ts": [
+      "node-src/ui/tasks/initialize.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/initialize.ts": [
+      "node-src/ui/tasks/initialize.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/prepare.stories.ts": [
+      "node-src/ui/tasks/prepare.stories.ts"
+    ],
+    "node-src/ui/tasks/prepare.ts": [
+      "node-src/ui/messages/errors/fatalError.stories.ts",
+      "node-src/ui/tasks/prepare.stories.ts",
+      "node-src/ui/tasks/prepareE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/prepareE2E.stories.ts": [
+      "node-src/ui/tasks/prepareE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/prepareWorkspace.stories.ts": [
+      "node-src/ui/tasks/prepareWorkspace.stories.ts"
+    ],
+    "node-src/ui/tasks/prepareWorkspace.ts": [
+      "node-src/ui/tasks/prepareWorkspace.stories.ts"
+    ],
+    "node-src/ui/tasks/report.stories.ts": [
+      "node-src/ui/tasks/report.stories.ts"
+    ],
+    "node-src/ui/tasks/report.ts": [
+      "node-src/ui/tasks/report.stories.ts"
+    ],
+    "node-src/ui/tasks/restoreWorkspace.stories.ts": [
+      "node-src/ui/tasks/restoreWorkspace.stories.ts"
+    ],
+    "node-src/ui/tasks/restoreWorkspace.ts": [
+      "node-src/ui/tasks/restoreWorkspace.stories.ts"
+    ],
+    "node-src/ui/tasks/snapshot.stories.ts": [
+      "node-src/ui/tasks/snapshot.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts"
+    ],
+    "node-src/ui/tasks/snapshot.ts": [
+      "node-src/ui/messages/info/buildPassed.stories.ts",
+      "node-src/ui/messages/info/buildPassedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublished.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts",
+      "node-src/ui/tasks/snapshot.stories.ts",
+      "node-src/ui/tasks/snapshotE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/snapshotE2E.stories.ts": [
+      "node-src/ui/tasks/snapshotE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/storybookInfo.stories.ts": [
+      "node-src/ui/tasks/storybookInfo.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts"
+    ],
+    "node-src/ui/tasks/storybookInfo.ts": [
+      "node-src/ui/tasks/storybookInfo.stories.ts",
+      "node-src/ui/tasks/storybookInfoE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/storybookInfoE2E.stories.ts": [
+      "node-src/ui/tasks/storybookInfoE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/upload.stories.ts": [
+      "node-src/ui/tasks/upload.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts"
+    ],
+    "node-src/ui/tasks/upload.ts": [
+      "node-src/ui/tasks/upload.stories.ts",
+      "node-src/ui/tasks/uploadE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/uploadE2E.stories.ts": [
+      "node-src/ui/tasks/uploadE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/utilities.ts": [
+      "node-src/ui/messages/errors/fatalError.stories.ts",
+      "node-src/ui/messages/info/storybookPublished.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedE2E.stories.ts",
+      "node-src/ui/messages/info/storybookPublishedReactNative.stories.ts",
+      "node-src/ui/tasks/build.stories.ts",
+      "node-src/ui/tasks/buildE2E.stories.ts",
+      "node-src/ui/tasks/prepare.stories.ts",
+      "node-src/ui/tasks/prepareE2E.stories.ts",
+      "node-src/ui/tasks/storybookInfo.stories.ts",
+      "node-src/ui/tasks/storybookInfoE2E.stories.ts",
+      "node-src/ui/tasks/upload.stories.ts",
+      "node-src/ui/tasks/uploadE2E.stories.ts",
+      "node-src/ui/tasks/verify.stories.ts",
+      "node-src/ui/tasks/verifyE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/verify.stories.ts": [
+      "node-src/ui/tasks/verify.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts"
+    ],
+    "node-src/ui/tasks/verify.ts": [
+      "node-src/ui/tasks/verify.stories.ts",
+      "node-src/ui/tasks/verifyE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuild.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/tasks/verifyE2E.stories.ts": [
+      "node-src/ui/tasks/verifyE2E.stories.ts",
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ],
+    "node-src/ui/workflows/uploadBuild.stories.ts": [
+      "node-src/ui/workflows/uploadBuild.stories.ts"
+    ],
+    "node-src/ui/workflows/uploadBuildE2E.stories.ts": [
+      "node-src/ui/workflows/uploadBuildE2E.stories.ts"
+    ]
+  },
+  "bailFiles": []
+}

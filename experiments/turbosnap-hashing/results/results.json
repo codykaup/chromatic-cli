@@ -1,0 +1,360 @@
+{
+  "groundTruth": {
+    "scenarioFiles": 225,
+    "storyFiles": 115,
+    "bailFiles": 0,
+    "statsModules": 381
+  },
+  "hashing": {
+    "files": 424,
+    "bytes": 1019829,
+    "ms": 6.502989999997226,
+    "mbPerSec": 149.55962171657723
+  },
+  "rows": [
+    {
+      "approach": "oxc-parser + oxc-resolver",
+      "buildMs": 98.117359,
+      "peakRssMb": 33.81640625,
+      "graphNodes": 415,
+      "graphEdges": 959,
+      "exactMatch": 119,
+      "totalScenarios": 225,
+      "recall": 0.9943502824858758,
+      "precision": 0.10801963993453355,
+      "falseNegativeScenarios": [
+        "node-src/ui/components/icons.ts",
+        "node-src/ui/components/link.ts",
+        "node-src/ui/messages/warnings/undefinedBranchOwner.ts"
+      ],
+      "notes": [
+        "Rust parser+resolver",
+        "TS/JSX native",
+        "native binding (prebuilt per-platform)",
+        "drops type-only imports (isType) to match runtime graph",
+        "963 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "whole",
+      "fileCount": 424
+    },
+    {
+      "approach": "oxc-parser + oxc-resolver",
+      "buildMs": 71.39306399999998,
+      "peakRssMb": 20.328125,
+      "graphNodes": 331,
+      "graphEdges": 743,
+      "exactMatch": 119,
+      "totalScenarios": 225,
+      "recall": 0.9943502824858758,
+      "precision": 0.10801963993453355,
+      "falseNegativeScenarios": [
+        "node-src/ui/components/icons.ts",
+        "node-src/ui/components/link.ts",
+        "node-src/ui/messages/warnings/undefinedBranchOwner.ts"
+      ],
+      "notes": [
+        "Rust parser+resolver",
+        "TS/JSX native",
+        "native binding (prebuilt per-platform)",
+        "drops type-only imports (isType) to match runtime graph",
+        "reached 332 files",
+        "743 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "scoped",
+      "fileCount": 115
+    },
+    {
+      "approach": "oxc-parser + oxc-resolver",
+      "buildMs": 78.08061900000001,
+      "peakRssMb": 22.3828125,
+      "graphNodes": 224,
+      "graphEdges": 312,
+      "exactMatch": 222,
+      "totalScenarios": 225,
+      "recall": 0.9943502824858758,
+      "precision": 1,
+      "falseNegativeScenarios": [
+        "node-src/ui/components/icons.ts",
+        "node-src/ui/components/link.ts",
+        "node-src/ui/messages/warnings/undefinedBranchOwner.ts"
+      ],
+      "notes": [
+        "Rust parser+resolver",
+        "TS/JSX native",
+        "native binding (prebuilt per-platform)",
+        "drops type-only imports (isType) to match runtime graph",
+        "reached 332 files",
+        "743 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "ceiling",
+      "fileCount": 115
+    },
+    {
+      "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
+      "buildMs": 645.290816,
+      "peakRssMb": 12.15234375,
+      "graphNodes": 415,
+      "graphEdges": 834,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "lexer is JS-only → needs esbuild type-strip first",
+        "misses type-only imports after strip (correct for runtime)",
+        "842 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "whole",
+      "fileCount": 424
+    },
+    {
+      "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
+      "buildMs": 318.47787000000005,
+      "peakRssMb": 9.74609375,
+      "graphNodes": 225,
+      "graphEdges": 313,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "lexer is JS-only → needs esbuild type-strip first",
+        "misses type-only imports after strip (correct for runtime)",
+        "reached 225 files",
+        "313 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "scoped",
+      "fileCount": 115
+    },
+    {
+      "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
+      "buildMs": 325.1805519999999,
+      "peakRssMb": 8.59375,
+      "graphNodes": 225,
+      "graphEdges": 313,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "lexer is JS-only → needs esbuild type-strip first",
+        "misses type-only imports after strip (correct for runtime)",
+        "reached 225 files",
+        "313 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "ceiling",
+      "fileCount": 115
+    },
+    {
+      "approach": "typescript (preProcessFile + resolveModuleName)",
+      "buildMs": 735.6492850000001,
+      "peakRssMb": 132.1015625,
+      "graphNodes": 417,
+      "graphEdges": 977,
+      "exactMatch": 119,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 0.10856675526477202,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "highest-fidelity TS resolution",
+        "pure JS dependency (no native binding)",
+        "resolves type-only imports too",
+        "991 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "whole",
+      "fileCount": 424
+    },
+    {
+      "approach": "typescript (preProcessFile + resolveModuleName)",
+      "buildMs": 704.1663470000001,
+      "peakRssMb": 128.703125,
+      "graphNodes": 337,
+      "graphEdges": 772,
+      "exactMatch": 119,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 0.10856675526477202,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "highest-fidelity TS resolution",
+        "pure JS dependency (no native binding)",
+        "resolves type-only imports too",
+        "reached 337 files",
+        "780 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "scoped",
+      "fileCount": 115
+    },
+    {
+      "approach": "typescript (preProcessFile + resolveModuleName)",
+      "buildMs": 708.103681,
+      "peakRssMb": 127.89453125,
+      "graphNodes": 225,
+      "graphEdges": 313,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "highest-fidelity TS resolution",
+        "pure JS dependency (no native binding)",
+        "resolves type-only imports too",
+        "reached 337 files",
+        "780 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "ceiling",
+      "fileCount": 115
+    },
+    {
+      "approach": "vite pluginContainer.resolveId + oxc-parser",
+      "buildMs": 939.164207,
+      "peakRssMb": 216.9140625,
+      "graphNodes": 415,
+      "graphEdges": 939,
+      "exactMatch": 125,
+      "totalScenarios": 225,
+      "recall": 0.9943502824858758,
+      "precision": 0.11398963730569948,
+      "falseNegativeScenarios": [
+        "node-src/ui/components/icons.ts",
+        "node-src/ui/components/link.ts",
+        "node-src/ui/messages/warnings/undefinedBranchOwner.ts"
+      ],
+      "notes": [
+        "borrows the real builder resolver",
+        "heavy startup; needs the builder + its plugin/alias config",
+        "942 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "whole",
+      "fileCount": 424
+    },
+    {
+      "approach": "vite pluginContainer.resolveId + oxc-parser",
+      "buildMs": 779.8481840000001,
+      "peakRssMb": 199.375,
+      "graphNodes": 321,
+      "graphEdges": 701,
+      "exactMatch": 125,
+      "totalScenarios": 225,
+      "recall": 0.9943502824858758,
+      "precision": 0.11398963730569948,
+      "falseNegativeScenarios": [
+        "node-src/ui/components/icons.ts",
+        "node-src/ui/components/link.ts",
+        "node-src/ui/messages/warnings/undefinedBranchOwner.ts"
+      ],
+      "notes": [
+        "borrows the real builder resolver",
+        "heavy startup; needs the builder + its plugin/alias config",
+        "reached 322 files",
+        "701 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "scoped",
+      "fileCount": 115
+    },
+    {
+      "approach": "vite pluginContainer.resolveId + oxc-parser",
+      "buildMs": 800.13525,
+      "peakRssMb": 203.6015625,
+      "graphNodes": 224,
+      "graphEdges": 312,
+      "exactMatch": 222,
+      "totalScenarios": 225,
+      "recall": 0.9943502824858758,
+      "precision": 1,
+      "falseNegativeScenarios": [
+        "node-src/ui/components/icons.ts",
+        "node-src/ui/components/link.ts",
+        "node-src/ui/messages/warnings/undefinedBranchOwner.ts"
+      ],
+      "notes": [
+        "borrows the real builder resolver",
+        "heavy startup; needs the builder + its plugin/alias config",
+        "reached 322 files",
+        "701 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "ceiling",
+      "fileCount": 115
+    },
+    {
+      "approach": "madge (dependency-tree/precinct)",
+      "buildMs": 1889.8897440000003,
+      "peakRssMb": 238.41015625,
+      "graphNodes": 420,
+      "graphEdges": 981,
+      "exactMatch": 119,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 0.10856675526477202,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "off-the-shelf",
+        "own resolver (enhanced-resolve based)",
+        "JSX/TSX via precinct",
+        "981 edges",
+        "2 skipped (madge warnings)"
+      ],
+      "mode": "whole",
+      "fileCount": 424
+    },
+    {
+      "approach": "madge (dependency-tree/precinct)",
+      "buildMs": 1485.196046,
+      "peakRssMb": 209.57421875,
+      "graphNodes": 338,
+      "graphEdges": 773,
+      "exactMatch": 119,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 0.10856675526477202,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "off-the-shelf",
+        "own resolver (enhanced-resolve based)",
+        "JSX/TSX via precinct",
+        "773 edges",
+        "1 skipped (madge warnings)"
+      ],
+      "mode": "scoped",
+      "fileCount": 115
+    },
+    {
+      "approach": "madge (dependency-tree/precinct)",
+      "buildMs": 1464.537299,
+      "peakRssMb": 211.90625,
+      "graphNodes": 225,
+      "graphEdges": 313,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "off-the-shelf",
+        "own resolver (enhanced-resolve based)",
+        "JSX/TSX via precinct",
+        "773 edges",
+        "1 skipped (madge warnings)"
+      ],
+      "mode": "ceiling",
+      "fileCount": 115
+    }
+  ]
+}
