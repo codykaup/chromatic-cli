@@ -504,6 +504,7 @@ ${scorecard()}
 | 11 | **es-module-lexer is a non-starter for CommonJS** | recovers 0/4 \`require()\` edges; require-aware parsers (oxc+AST, TS, precinct) recover 4/4. Type-elision (its TS edge) is moot in plain JS |
 | 12 | **One tool handles ESM+CJS with no branching: esbuild \`metafile\`** | scan pass (write:false) recovers 4/4 CJS edges, sees import+require in one mixed file, elides type-only — and follows node_modules in the same pass |
 | 13 | **All criteria incl. #6/#7 + CJS internals are met by esbuild-meta \`bundle\` + transform-aware hashing** | #6/#7 → 115/115, a require()-only CJS-internal change → busts (no miss); cost ~1.9s. Residual: dynamic require/import + esbuild-vs-builder fidelity → shadow-mode |
+| 14 | **At scale, the builder's own graph wins → build on PR #3** | the build already produces the complete graph (incl. 152 node_modules modules) for free; a 2nd esbuild bundle doesn't scale and is a proxy. Needs the builder plugin to add per-module \`contentHash\` + bridge \`preview.*\` (current released builder emits neither) |
 
 ## Modes
 - **whole**: parse the entire source tree, build the full import graph (no builder, no story scoping).
@@ -582,29 +583,43 @@ ${unifiedSection()}
    platform prebuilt binary); TypeScript is pure-JS but heavy; Vite is heaviest and buys nothing here
    because resolution was never the bottleneck; madge is slowest.
 
-## Implication for the path forward (revised — must support CommonJS)
-Builder-independent source-graphing is viable, but the parser choice depends on the codebase, and
-**es-module-lexer alone is ruled out where CommonJS must be supported** (0/4 \`require()\` edges).
+## Recommendation (revised) — build on the real builder's graph
+The criteria compound: **CommonJS support** + **no missed captures** + **cover node_modules content &
+CJS internals** + **scale**. Taken together they push *away* from builder-independence. The only
+builder-independent config that meets the correctness bar (esbuild metafile with \`bundle: true\` +
+transform-aware hashing) does so by running a **second full bundle pass** — ~1.9 s on a 115-story toy,
+i.e. effectively a second build on a large Storybook — and, because esbuild ≠ the real builder, it's a
+*proxy* that can still miss plugin/virtual-module captures.
 
-- **Pure TS/ESM:** es-module-lexer + esbuild strip is the simplest faithful option (type-only elision
-  for free, lowest memory).
-- **Any CommonJS (or mixed):** use a **require-aware** parser. The recommended single tool is
-  **esbuild-strip → oxc \`import\` + \`import()\` + AST \`require()\` walk** (+ oxc-resolver): it covers
-  ESM, dynamic import, and CJS (4/4 on the fixture) *and* keeps the type-only elision that avoids the
-  TS over-capture. TypeScript \`preProcessFile\` and madge/precinct also handle require() but keep
-  type-only imports (TS over-capture) and are heavier.
-- **No missed captures (must cover #6/#7 + CJS internals):** the source-only graph is not enough — you
-  must follow into node_modules. **esbuild metafile with \`bundle: true\`** does this in one pass
-  (bundles CJS internals natively) + **transform-aware hashing** (source stripped, node_modules raw):
-  all 11 criteria met, ~1.9s. But esbuild is a *proxy* builder, so for an absolute no-miss guarantee
-  the safest foundation is the **real builder's** graph + content hashes (PR #3); run the esbuild scan
-  in **shadow mode** against it (bail to full snapshot on divergence) until trusted.
+Meanwhile the **Storybook build already runs** (you need it to capture stories) and already produced the
+complete, resolved, type-elided, tree-shaken graph — **including node_modules and CJS internals**. PR #3
+reads that graph + per-module \`contentHash\` from the stats file: cost ≈ free, scales (it reads stats,
+doesn't bundle), and has **zero second-bundler-fidelity risk** because it *is* the builder's graph.
 
-Layer **content hashing (Option C/C2)** on top for change detection + an incrementally-cached graph,
-with **transform-aware hashing** (stripped for source, raw for node_modules) if the node_modules
-boundary is crawled. Remaining risk is recall edge-cases (dynamic/conditional \`require\`/\`import\`), so
-the safe rollout is **shadow mode** against the builder stats — bail to a full snapshot whenever the two
-disagree — before making it the source of truth.
+**So: build on PR #3's builder-graph (module-hash) strategy.** Everything else this study evaluated is
+how we *earned* that conclusion, and leaves two by-products:
+- The research independently **validates PR #3's rollup** (content-only digest, shared preview section,
+  transform-aware behavior #3=0 / #7=115 all reproduce).
+- The **esbuild metafile scan** keeps a narrow role: a **builder-agnostic fallback** when a builder can't
+  emit a complete graph with \`contentHash\`, and a **shadow oracle** to validate the builder-hash path.
+  The per-codebase parser findings (es-module-lexer ESM-only; require-aware needed for CJS; esbuild-strip
+  for type elision) define how to build that fallback if/when it's needed — not the primary path.
+
+### Does the current builder output suffice, or must the plugin change? → **the plugin must change**
+Measured on this repo's \`preview-stats.json\` from the **released \`@storybook/builder-vite\`** (381 modules):
+- per-module \`contentHash\`: **0 modules have it** — module keys are only \`id, name, reasons\`. The whole
+  module-hash rollup depends on this primitive, so it must be **added by the builder plugin**.
+- \`.storybook/preview.*\` in the graph: **absent** (the "preview gap") — so the shared preview section
+  can't be computed, which would miss preview/shared-dep captures (#5/#6/#7). The plugin must **bridge
+  preview into the graph** (through its \`\\0\` virtual modules).
+- What *is* already there: the full dependency graph via \`reasons\`, **including 152 node_modules
+  modules**. That's exactly why the builder path covers #6/#7 + CJS internals for free — those modules
+  are already in the graph; they just need to carry \`contentHash\`. No second bundle, no scale tax.
+
+Both gaps are precisely what PR #3's companion \`@storybook/builder-vite\` change (\`cody/hash-based-turbosnap\`)
+emits. Residual recall edge-cases (dynamic \`require\`/\`import\`, and out-of-graph inputs like
+\`.storybook/main.*\` / static dirs / \`preview-head.html\`) are handled by existing TurboSnap, and a
+versioned hash payload should trigger capture-all on an incompatible/absent baseline.
 `;
 
 fs.writeFileSync(path.join(RESULTS, 'report.md'), md);
