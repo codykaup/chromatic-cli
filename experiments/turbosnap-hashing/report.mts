@@ -66,18 +66,65 @@ for (const approach of APPROACHES) {
 async function hashingBench() {
   const xxhash = (await import('xxhash-wasm')).default;
   const { create64 } = await xxhash();
+  const { transform } = await import('esbuild');
   const files = candidateSourceFiles();
-  // cold read+hash of the full source tree
-  const t0 = performance.now();
+  const h = (s: string | Uint8Array) => create64().update(s).digest().toString(16);
+
+  // Mode 1: raw-bytes hashing (comment/format SENSITIVE) — current behavior.
+  let t0 = performance.now();
   let bytes = 0;
-  const hashes: Record<string, string> = {};
   for (const f of files) {
     const buf = fs.readFileSync(f);
     bytes += buf.length;
-    hashes[f] = create64().update(buf).digest().toString(16);
+    h(buf);
   }
-  const ms = performance.now() - t0;
-  return { files: files.length, bytes, ms, mbPerSec: bytes / 1024 / 1024 / (ms / 1000) };
+  const rawMs = performance.now() - t0;
+
+  // Mode 2: hash the esbuild-stripped output (comment/format INSENSITIVE).
+  t0 = performance.now();
+  let stripped = 0;
+  let fellBack = 0;
+  for (const f of files) {
+    const code = fs.readFileSync(f, 'utf8');
+    const ext = path.extname(f);
+    try {
+      const loader = ext === '.tsx' || ext === '.jsx' ? 'tsx' : ext === '.mdx' ? 'tsx' : 'ts';
+      const out = await transform(code, { loader, format: 'esm', legalComments: 'none' });
+      h(out.code);
+      stripped++;
+    } catch {
+      h(code); // fall back to raw on parse failure
+      fellBack++;
+    }
+  }
+  const normMs = performance.now() - t0;
+
+  // Demonstration: a comment-only edit changes the raw hash but NOT the normalized hash.
+  const sample = files.find((f) => f.endsWith('.ts')) ?? files[0];
+  const original = fs.readFileSync(sample, 'utf8');
+  const edited = `// a newly added comment\n${original}\n/* trailing */`;
+  const stripOf = async (c: string) =>
+    h((await transform(c, { loader: 'ts', format: 'esm', legalComments: 'none' })).code);
+  const demo = {
+    file: path.relative(REPO_ROOT, sample),
+    rawHashChanged: h(original) !== h(edited),
+    normHashChanged: (await stripOf(original)) !== (await stripOf(edited)),
+  };
+
+  return {
+    files: files.length,
+    bytes,
+    rawMs,
+    rawMbPerSec: bytes / 1024 / 1024 / (rawMs / 1000),
+    normMs,
+    normMultiplier: normMs / rawMs,
+    stripped,
+    fellBack,
+    demo,
+    // kept for backwards-compatible report fields
+    ms: rawMs,
+    mbPerSec: bytes / 1024 / 1024 / (rawMs / 1000),
+  };
 }
 const hashing = await hashingBench();
 
@@ -189,7 +236,8 @@ ${scorecard()}
 | 5 | **ceiling** mode lifts every approach to ~100% precision | restricting to the builder's module set removes the type-barrel hub — confirms universe, not tooling |
 | 6 | Recall is ~99–100% but **not always clean** | esbuild-lexer 100%; oxc/vite 99.4% (a few silently-missed stories — the dangerous direction) |
 | 7 | Parser/resolver = **speed/packaging**, not correctness | oxc fastest (native), TS pure-JS but heavy, Vite heaviest with no fidelity gain, madge slowest |
-| 8 | **Hashing is cheap** (Option C) | ${hashing.ms.toFixed(1)} ms to hash the whole tree (${hashing.mbPerSec.toFixed(0)} MB/s) → incremental graph cache is viable |
+| 8 | **Hashing is cheap** (Option C) | ${hashing.rawMs.toFixed(1)} ms to hash the whole tree (${hashing.rawMbPerSec.toFixed(0)} MB/s) → incremental graph cache is viable |
+| 9 | **Comment-insensitive change detection** is free (Option C2) | hashing esbuild-stripped output (${hashing.normMs.toFixed(1)} ms) ignores comment/format-only edits — reuses the graph transform |
 
 ## Modes
 - **whole**: parse the entire source tree, build the full import graph (no builder, no story scoping).
@@ -209,8 +257,32 @@ ${table('ceiling')}
 ## Option C — source-file hashing cost (xxhash-wasm)
 Hashing is not a graph builder; it's the change-detector/cache-key layer. Cost to read+hash the full
 source tree (${hashing.files} files, ${(hashing.bytes / 1024 / 1024).toFixed(1)} MB):
-**${hashing.ms.toFixed(1)} ms** (${hashing.mbPerSec.toFixed(0)} MB/s). Incremental runs only re-hash
+**${hashing.rawMs.toFixed(1)} ms** (${hashing.rawMbPerSec.toFixed(0)} MB/s). Incremental runs only re-hash
 changed files, so steady-state cost is effectively the changed subset.
+
+### Option C2 — comment/format-insensitive change detection (hash the stripped output)
+Instead of hashing raw bytes, hash the **esbuild-stripped** output of each file. Comments, whitespace,
+and formatting then don't affect the hash, so comment-only / reformat-only commits produce no change
+set → no trace → no snapshot. Same transform we already run for the graph, so it composes for free.
+
+| hashing mode | cost (full tree) | sensitive to |
+|---|--:|---|
+| raw bytes (C) | ${hashing.rawMs.toFixed(1)} ms | any byte (incl. comments/formatting) |
+| esbuild-stripped (C2) | ${hashing.normMs.toFixed(1)} ms (${hashing.normMultiplier.toFixed(1)}× standalone) | runtime code only |
+
+Note the ${hashing.normMultiplier.toFixed(0)}× is the *standalone* cost (the esbuild transform dominates).
+But the recommended grapher (es-module-lexer) **already transforms every file**, so when graphing and
+hashing run together the stripped output is already in hand and C2's marginal cost over C is just the
+extra hash — effectively free. C2 only looks expensive if you hash *without* building the graph.
+
+Demonstration on \`${hashing.demo.file}\` with a comment added: raw hash changed = **${hashing.demo.rawHashChanged}**,
+stripped hash changed = **${hashing.demo.normHashChanged}**. (${hashing.stripped} files stripped cleanly,
+${hashing.fellBack} fell back to raw on parse failure.)
+
+**Trade-offs.** Pros: skips snapshots on pure-comment/formatting churn; reuses the graph transform.
+Cons: (1) it's a *behavior change* — you'd stop snapshotting on comment-only edits, which must be
+deliberate; (2) hashes are only stable for a fixed esbuild version, so a toolchain bump invalidates the
+cache and forces one full re-snapshot; (3) needs a raw-hash fallback for files esbuild can't parse.
 
 ## Key findings
 1. **The fidelity gap is about *type-only import elision*, not parsing or resolution.** The builder
