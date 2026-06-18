@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "buildMs": 1890,
+    "stories": 115,
+    "totalReached": 258,
+    "nodeModulesReached": 32,
+    "ansiHtmlInGraph": true,
+    "cjsInternalProbe": "node_modules/chalk/source/util.js"
+  },
+  "3_story_comment_only": 0,
+  "4_used_dep_code": 3,
+  "5_preview_config": 115,
+  "6_preview_dep_substantive": 115,
+  "7_preview_dep_comment": 115,
+  "8_cjs_internal_dep": 115
+}

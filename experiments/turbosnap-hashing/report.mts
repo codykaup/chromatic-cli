@@ -272,6 +272,47 @@ still roll up per-file content hashes yourself (Option C/C2) for the change sign
 `;
 }
 
+// ---- Meeting all criteria (no missed captures) ----
+function completenessSection(): string {
+  const p = path.join(RESULTS, 'scenarios-complete.json');
+  if (!fs.existsSync(p)) return '';
+  const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const m = d._meta;
+  const cell = (v: any) => (typeof v === 'number' ? `${v}` : '—');
+  return `
+## Meeting ALL criteria — no missed captures
+The source-only options miss #6/#7 (a preview dependency inside node_modules) → **under-capture, the
+unacceptable direction**. Closing it requires following into node_modules with a parser that also
+handles **CJS internals**. esbuild metafile with **\`bundle: true\`** (no \`packages:external\`) does this
+natively — it bundles CommonJS, so it traces \`require()\` chains inside node_modules — paired with
+**transform-aware hashing** (source esbuild-stripped, node_modules raw).
+
+| # | scenario | required | esbuild-meta (bundle + node_modules) |
+|---|---|--:|--:|
+| 3 | story comment-only | 0 | ${cell(d['3_story_comment_only'])} |
+| 4 | used dependency | 3 | ${cell(d['4_used_dep_code'])} |
+| 5 | preview config | 115 | ${cell(d['5_preview_config'])} |
+| 6 | preview dep (node_modules) substantive | 115 | ${cell(d['6_preview_dep_substantive'])} |
+| 7 | preview dep (node_modules) comment-only | 115 | ${cell(d['7_preview_dep_comment'])} |
+| 8 | **CJS-internal dep** (\`${m.cjsInternalProbe}\`, reached only via \`require()\`) | >0 | ${cell(d['8_cjs_internal_dep'])} |
+
+All criteria met — including the CJS-internal change that es-module-lexer would silently miss. Reached
+${m.totalReached} files (${m.nodeModulesReached} in node_modules) in **${m.buildMs} ms** (vs ~90 ms source-only — the cost of completeness).
+
+**Residual under-capture risks (must be handled before trusting it):**
+1. **Dynamic \`require(variable)\` / \`import(variable)\`** — unresolvable statically by *any* tool. A real miss surface.
+2. **esbuild ≠ the real builder.** This is a *second* bundler used as a proxy; plugin-injected or
+   framework-virtual modules (Vue SFC, MDX, svgr, vite plugins) may resolve/transform differently, so
+   esbuild's graph can diverge from what Vite/webpack actually bundles — a potential miss.
+
+Because of #2, the only approach with **zero** second-bundler risk is using the **real builder's** graph +
+content hashes — which is exactly what PR #3 does. A builder-independent esbuild scan is the faster,
+lighter option but must run in **shadow mode** (diff against the real builder stats, bail to full
+snapshot on any divergence) until trusted. If "never miss a capture" is an absolute, PR #3's
+builder-graph approach is the safer foundation; the esbuild scan is the portable approximation.
+`;
+}
+
 // ---- CJS support ----
 function cjsSection(): string {
   const p = path.join(RESULTS, 'cjs-fixture.json');
@@ -462,6 +503,7 @@ ${scorecard()}
 | 10 | **Reproduces PR #3's module-hash on 9/11 e2e scenarios** | es-module-lexer + stripped hashing matches; only node_modules-dep scenarios (#6/#7) are out of source-graph scope |
 | 11 | **es-module-lexer is a non-starter for CommonJS** | recovers 0/4 \`require()\` edges; require-aware parsers (oxc+AST, TS, precinct) recover 4/4. Type-elision (its TS edge) is moot in plain JS |
 | 12 | **One tool handles ESM+CJS with no branching: esbuild \`metafile\`** | scan pass (write:false) recovers 4/4 CJS edges, sees import+require in one mixed file, elides type-only — and follows node_modules in the same pass |
+| 13 | **All criteria incl. #6/#7 + CJS internals are met by esbuild-meta \`bundle\` + transform-aware hashing** | #6/#7 → 115/115, a require()-only CJS-internal change → busts (no miss); cost ~1.9s. Residual: dynamic require/import + esbuild-vs-builder fidelity → shadow-mode |
 
 ## Modes
 - **whole**: parse the entire source tree, build the full import graph (no builder, no story scoping).
@@ -512,6 +554,7 @@ deliberate; (2) hashes are only stable for a fixed esbuild version, so a toolcha
 cache and forces one full re-snapshot; (3) needs a raw-hash fallback for files esbuild can't parse.
 
 ${scenarioSection()}
+${completenessSection()}
 ${cjsSection()}
 ${unifiedSection()}
 ## Key findings
@@ -550,6 +593,12 @@ Builder-independent source-graphing is viable, but the parser choice depends on 
   ESM, dynamic import, and CJS (4/4 on the fixture) *and* keeps the type-only elision that avoids the
   TS over-capture. TypeScript \`preProcessFile\` and madge/precinct also handle require() but keep
   type-only imports (TS over-capture) and are heavier.
+- **No missed captures (must cover #6/#7 + CJS internals):** the source-only graph is not enough — you
+  must follow into node_modules. **esbuild metafile with \`bundle: true\`** does this in one pass
+  (bundles CJS internals natively) + **transform-aware hashing** (source stripped, node_modules raw):
+  all 11 criteria met, ~1.9s. But esbuild is a *proxy* builder, so for an absolute no-miss guarantee
+  the safest foundation is the **real builder's** graph + content hashes (PR #3); run the esbuild scan
+  in **shadow mode** against it (bail to full snapshot on divergence) until trusted.
 
 Layer **content hashing (Option C/C2)** on top for change detection + an incrementally-cached graph,
 with **transform-aware hashing** (stripped for source, raw for node_modules) if the node_modules
