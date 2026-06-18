@@ -38,6 +38,28 @@ async function buildGraphFor(): Promise<{ graph: ReverseGraph; name: string; not
     const { graph, extra } = await m.run(mode === 'whole' ? null : storySeeds);
     return { graph: restrict(graph), name: m.name, notes: [...m.notes, ...extra] };
   }
+  if (key === 'esbuildmeta') {
+    const { build } = await import('esbuild');
+    const seeds = [...storySeeds, path.join(REPO_ROOT, '.storybook/preview.ts')];
+    const isRepoSrc = (abs: string) =>
+      abs.startsWith(REPO_ROOT + path.sep) && !abs.includes(`${path.sep}node_modules${path.sep}`);
+    const r = await build({
+      entryPoints: seeds,
+      bundle: true, metafile: true, write: false, outdir: 'scan-out',
+      logLevel: 'silent', platform: 'node', format: 'esm', packages: 'external',
+      loader: { '.css': 'empty', '.svg': 'empty', '.png': 'empty', '.html': 'empty' },
+    });
+    const graph = new ReverseGraph();
+    let edges = 0;
+    for (const [file, info] of Object.entries(r.metafile.inputs)) {
+      const importer = toRepoPath(path.join(REPO_ROOT, file));
+      for (const imp of (info as any).imports) {
+        const abs = path.join(REPO_ROOT, imp.path);
+        if (isRepoSrc(abs)) { graph.addEdge(importer, toRepoPath(abs)); edges++; }
+      }
+    }
+    return { graph: restrict(graph), name: 'esbuild metafile (scan)', notes: ['whole-program scan', `${edges} edges`] };
+  }
   const mods: Record<string, () => Promise<any>> = {
     oxc: () => import('./approaches/oxc.mts'),
     eslexer: () => import('./approaches/eslexer.mts'),

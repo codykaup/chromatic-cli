@@ -14,7 +14,7 @@ const TSX = path.join(HERE, 'node_modules/.bin/tsx');
 const RESULTS = path.join(HERE, 'results');
 fs.mkdirSync(RESULTS, { recursive: true });
 
-const APPROACHES = ['oxc', 'eslexer', 'typescript', 'vite', 'madge', 'oxcRequire', 'oxcStripRequire'];
+const APPROACHES = ['oxc', 'eslexer', 'typescript', 'vite', 'madge', 'oxcRequire', 'oxcStripRequire', 'esbuildmeta'];
 const MODES = ['whole', 'scoped', 'ceiling'] as const;
 
 interface Row {
@@ -402,7 +402,12 @@ const VERDICTS: Record<string, { dep: string; fidelity: string; verdict: string 
   'esbuild-strip + oxc(import+require)': {
     dep: 'esbuild + native',
     fidelity: 'matches builder + CJS',
-    verdict: '✅✅ unified ESM+CJS, type-elision kept — best for mixed repos',
+    verdict: '✅✅ unified ESM+CJS, type-elision kept, per-file/incremental — best for mixed repos',
+  },
+  'esbuild metafile (scan)': {
+    dep: 'esbuild (bundler)',
+    fidelity: 'matches builder + CJS',
+    verdict: '✅✅ unified ESM+CJS, simplest, fast; whole-program scan (not per-file incremental)',
   },
 };
 

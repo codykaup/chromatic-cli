@@ -8,10 +8,10 @@
   "hashing": {
     "files": 350,
     "bytes": 558742,
-    "rawMs": 7.359173000000737,
-    "rawMbPerSec": 72.40730648639563,
-    "normMs": 456.0304799999976,
-    "normMultiplier": 61.96762598188029,
+    "rawMs": 4.970323999998072,
+    "rawMbPerSec": 107.20787918406678,
+    "normMs": 359.57729499999914,
+    "normMultiplier": 72.34484009495932,
     "stripped": 350,
     "fellBack": 0,
     "demo": {
@@ -19,14 +19,14 @@
       "rawHashChanged": true,
       "normHashChanged": false
     },
-    "ms": 7.359173000000737,
-    "mbPerSec": 72.40730648639563
+    "ms": 4.970323999998072,
+    "mbPerSec": 107.20787918406678
   },
   "rows": [
     {
       "approach": "oxc-parser + oxc-resolver",
-      "buildMs": 110.20006599999999,
-      "peakRssMb": 19.875,
+      "buildMs": 2979.099961,
+      "peakRssMb": 25.078125,
       "graphNodes": 335,
       "graphEdges": 755,
       "exactMatch": 119,
@@ -51,8 +51,8 @@
     },
     {
       "approach": "oxc-parser + oxc-resolver",
-      "buildMs": 106.08013799999998,
-      "peakRssMb": 24.58984375,
+      "buildMs": 83.12198000000001,
+      "peakRssMb": 24.3828125,
       "graphNodes": 331,
       "graphEdges": 743,
       "exactMatch": 119,
@@ -78,8 +78,8 @@
     },
     {
       "approach": "oxc-parser + oxc-resolver",
-      "buildMs": 104.66037499999999,
-      "peakRssMb": 18.91015625,
+      "buildMs": 90.990254,
+      "peakRssMb": 21.55078125,
       "graphNodes": 224,
       "graphEdges": 312,
       "exactMatch": 222,
@@ -105,8 +105,8 @@
     },
     {
       "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
-      "buildMs": 508.74721900000003,
-      "peakRssMb": 13.79296875,
+      "buildMs": 691.9933799999999,
+      "peakRssMb": 17.08984375,
       "graphNodes": 334,
       "graphEdges": 639,
       "exactMatch": 225,
@@ -125,8 +125,8 @@
     },
     {
       "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
-      "buildMs": 311.978446,
-      "peakRssMb": 9.74609375,
+      "buildMs": 301.20163999999994,
+      "peakRssMb": 7.3671875,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -146,8 +146,8 @@
     },
     {
       "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
-      "buildMs": 317.831646,
-      "peakRssMb": 8.1875,
+      "buildMs": 297.24653399999994,
+      "peakRssMb": 12.703125,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -167,8 +167,8 @@
     },
     {
       "approach": "typescript (preProcessFile + resolveModuleName)",
-      "buildMs": 1129.1981460000002,
-      "peakRssMb": 127.88671875,
+      "buildMs": 2215.737857,
+      "peakRssMb": 129.3515625,
       "graphNodes": 338,
       "graphEdges": 772,
       "exactMatch": 119,
@@ -188,8 +188,8 @@
     },
     {
       "approach": "typescript (preProcessFile + resolveModuleName)",
-      "buildMs": 1010.287045,
-      "peakRssMb": 128.70703125,
+      "buildMs": 954.2164420000001,
+      "peakRssMb": 127.2734375,
       "graphNodes": 337,
       "graphEdges": 772,
       "exactMatch": 119,
@@ -210,8 +210,8 @@
     },
     {
       "approach": "typescript (preProcessFile + resolveModuleName)",
-      "buildMs": 1072.4985339999998,
-      "peakRssMb": 126.375,
+      "buildMs": 1182.455736,
+      "peakRssMb": 125.6171875,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -232,8 +232,8 @@
     },
     {
       "approach": "vite pluginContainer.resolveId + oxc-parser",
-      "buildMs": 1227.85282,
-      "peakRssMb": 174.57421875,
+      "buildMs": 3663.448892,
+      "peakRssMb": 197.54296875,
       "graphNodes": 333,
       "graphEdges": 746,
       "exactMatch": 125,
@@ -256,8 +256,8 @@
     },
     {
       "approach": "vite pluginContainer.resolveId + oxc-parser",
-      "buildMs": 1131.642187,
-      "peakRssMb": 183.89453125,
+      "buildMs": 766.875219,
+      "peakRssMb": 176.671875,
       "graphNodes": 321,
       "graphEdges": 701,
       "exactMatch": 125,
@@ -281,8 +281,8 @@
     },
     {
       "approach": "vite pluginContainer.resolveId + oxc-parser",
-      "buildMs": 1183.4587789999998,
-      "peakRssMb": 197.1328125,
+      "buildMs": 852.8281040000002,
+      "peakRssMb": 190.8984375,
       "graphNodes": 224,
       "graphEdges": 312,
       "exactMatch": 222,
@@ -306,8 +306,8 @@
     },
     {
       "approach": "madge (dependency-tree/precinct)",
-      "buildMs": 2677.845402,
-      "peakRssMb": 236.01953125,
+      "buildMs": 2717.748208,
+      "peakRssMb": 218.53125,
       "graphNodes": 420,
       "graphEdges": 981,
       "exactMatch": 119,
@@ -327,8 +327,8 @@
     },
     {
       "approach": "madge (dependency-tree/precinct)",
-      "buildMs": 2040.545104,
-      "peakRssMb": 232.5,
+      "buildMs": 1587.784906,
+      "peakRssMb": 231.109375,
       "graphNodes": 338,
       "graphEdges": 773,
       "exactMatch": 119,
@@ -348,8 +348,8 @@
     },
     {
       "approach": "madge (dependency-tree/precinct)",
-      "buildMs": 2038.533004,
-      "peakRssMb": 214.94140625,
+      "buildMs": 1623.95542,
+      "peakRssMb": 211.97265625,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -369,8 +369,8 @@
     },
     {
       "approach": "oxc + require() (import+require+dyn)",
-      "buildMs": 214.27198500000003,
-      "peakRssMb": 28.9296875,
+      "buildMs": 162.35972099999998,
+      "peakRssMb": 34.21875,
       "graphNodes": 335,
       "graphEdges": 755,
       "exactMatch": 119,
@@ -393,8 +393,8 @@
     },
     {
       "approach": "oxc + require() (import+require+dyn)",
-      "buildMs": 199.23393500000003,
-      "peakRssMb": 32.41015625,
+      "buildMs": 150.85704299999998,
+      "peakRssMb": 36.45703125,
       "graphNodes": 331,
       "graphEdges": 743,
       "exactMatch": 119,
@@ -418,8 +418,8 @@
     },
     {
       "approach": "oxc + require() (import+require+dyn)",
-      "buildMs": 220.607414,
-      "peakRssMb": 32.64453125,
+      "buildMs": 163.947264,
+      "peakRssMb": 32.48046875,
       "graphNodes": 224,
       "graphEdges": 312,
       "exactMatch": 222,
@@ -443,8 +443,8 @@
     },
     {
       "approach": "esbuild-strip + oxc(import+require)",
-      "buildMs": 643.6275599999999,
-      "peakRssMb": 27.61328125,
+      "buildMs": 559.928476,
+      "peakRssMb": 30.65234375,
       "graphNodes": 334,
       "graphEdges": 639,
       "exactMatch": 225,
@@ -464,8 +464,8 @@
     },
     {
       "approach": "esbuild-strip + oxc(import+require)",
-      "buildMs": 385.99254600000006,
-      "peakRssMb": 22.640625,
+      "buildMs": 366.4653840000001,
+      "peakRssMb": 22.328125,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -486,8 +486,8 @@
     },
     {
       "approach": "esbuild-strip + oxc(import+require)",
-      "buildMs": 416.580731,
-      "peakRssMb": 23.4765625,
+      "buildMs": 338.67228900000003,
+      "peakRssMb": 23.546875,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -502,6 +502,60 @@
         "reached 225 files",
         "313 edges",
         "0 unresolved rel"
+      ],
+      "mode": "ceiling",
+      "fileCount": 115
+    },
+    {
+      "approach": "esbuild metafile (scan)",
+      "buildMs": 94.15027500000002,
+      "peakRssMb": 3.0625,
+      "graphNodes": 238,
+      "graphEdges": 515,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "whole-program scan",
+        "515 edges"
+      ],
+      "mode": "whole",
+      "fileCount": 350
+    },
+    {
+      "approach": "esbuild metafile (scan)",
+      "buildMs": 90.04068800000002,
+      "peakRssMb": 2.98828125,
+      "graphNodes": 238,
+      "graphEdges": 515,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "whole-program scan",
+        "515 edges"
+      ],
+      "mode": "scoped",
+      "fileCount": 115
+    },
+    {
+      "approach": "esbuild metafile (scan)",
+      "buildMs": 94.52722299999999,
+      "peakRssMb": 3.5546875,
+      "graphNodes": 225,
+      "graphEdges": 313,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "whole-program scan",
+        "515 edges"
       ],
       "mode": "ceiling",
       "fileCount": 115
