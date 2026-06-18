@@ -229,6 +229,46 @@ ${matrixRows}
 Two scenarios separate the options, and both echo the earlier fidelity findings:
 - **#3 (comment-only edit):** raw hashing re-captures 3 stories; **stripped hashing correctly reports 0** (matches PR #3, which strips via the builder transform).
 - **#4 (edit a used dependency, \`auth.ts\`):** the correct answer is **3** (the CSF-composition set). **es-module-lexer gets 3**; oxc / TypeScript / vite / madge over-capture to **43** — the same type-only-import over-connection, now as 14× wasted snapshots. Only the esbuild-stripped parse matches the builder.
+${nodeModulesSection()}`;
+}
+
+// ---- Closing #6/#7 by crawling into node_modules ----
+function nodeModulesSection(): string {
+  const p = path.join(RESULTS, 'scenarios-nodemodules.json');
+  if (!fs.existsSync(p)) return '';
+  const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const so = d.sourceOnly;
+  const nm = d.withNodeModules;
+  const c = (r: any) => (r?.note ? '—' : r.added ? `+${r.added}` : r.removed ? `−${r.removed}` : `${r.changed}`);
+  return `
+### Closing #6/#7 — crawling into node_modules
+The crawl already *resolves* bare imports into node_modules; it just stops there. Following through
+(only the reachable closure, not all of node_modules) plus **transform-aware hashing** — esbuild-stripped
+for in-project source, **raw bytes for node_modules** (the builder passes those through untransformed) —
+closes the gap:
+
+| # | scenario | PR #3 | source-only | + node_modules |
+|---|---|--:|--:|--:|
+| 3 | story comment-only | 0 | ${c(so['3_story_comment_only'])} | ${c(nm['3_story_comment_only'])} |
+| 4 | used dependency | 3 | ${c(so['4_used_dep_code'])} | ${c(nm['4_used_dep_code'])} |
+| 6 | preview dep (node_modules) substantive | 115 | ${c(so['6_preview_dep_substantive'])} | ${c(nm['6_preview_dep_substantive'])} |
+| 7 | preview dep (node_modules) comment-only | 115 | ${c(so['7_preview_dep_comment'])} | ${c(nm['7_preview_dep_comment'])} |
+
+With node_modules included, es-module-lexer matches PR #3 on **all 11** scenarios. Raw hashing for
+node_modules is what makes #7 (comment-only dep edit) correctly bust — comments survive in an
+untransformed dependency, exactly as the builder sees it. Cost barely moved: ${so._meta.reached} → ${nm._meta.reached}
+reached files (~${nm._meta.buildMs} ms).
+
+**The catch — CommonJS.** That +${nm._meta.reached - so._meta.reached}-file growth is suspiciously small because es-module-lexer only
+follows ESM \`import\`. Most node_modules (e.g. \`chalk\`, \`ansi-html\` here) are CommonJS and use
+\`require()\`, which the lexer doesn't see — so a CJS dependency's *internal* files aren't in the graph.
+\`#6/#7\` work because we edit the package's reached *entry* file, but a change to a deep CJS-internal
+file would be **missed (under-capture — the dangerous direction)**. Fully completing the node_modules
+graph needs CJS-aware import detection (an AST walk for \`require(...)\` via oxc/acorn) — more cost and
+its own dynamic-\`require\` edge cases. The pragmatic alternative is to **not** re-derive node_modules
+content and instead pair the source-graph with the existing dependency-change signal
+(\`findChangedDependencies\`, lockfile/version diff) for the node_modules boundary — coarser
+(package-level) but robust and already in TurboSnap.
 `;
 }
 

@@ -1,0 +1,59 @@
+{
+  "generatedAt": "2026-06-18T02:03:37.418Z",
+  "sourceOnly": {
+    "_meta": {
+      "includeNodeModules": false,
+      "reached": 226,
+      "capped": false,
+      "buildMs": 341,
+      "stories": 115,
+      "ansiHtmlInGraph": false
+    },
+    "3_story_comment_only": {
+      "changed": 0,
+      "added": 0,
+      "removed": 0
+    },
+    "4_used_dep_code": {
+      "changed": 3,
+      "added": 0,
+      "removed": 0
+    },
+    "6_preview_dep_substantive": {
+      "note": "ansi-html not reached"
+    },
+    "7_preview_dep_comment": {
+      "note": "ansi-html not reached"
+    }
+  },
+  "withNodeModules": {
+    "_meta": {
+      "includeNodeModules": true,
+      "reached": 234,
+      "capped": false,
+      "buildMs": 295,
+      "stories": 115,
+      "ansiHtmlInGraph": true
+    },
+    "3_story_comment_only": {
+      "changed": 0,
+      "added": 0,
+      "removed": 0
+    },
+    "4_used_dep_code": {
+      "changed": 3,
+      "added": 0,
+      "removed": 0
+    },
+    "6_preview_dep_substantive": {
+      "changed": 115,
+      "added": 0,
+      "removed": 0
+    },
+    "7_preview_dep_comment": {
+      "changed": 115,
+      "added": 0,
+      "removed": 0
+    }
+  }
+}
