@@ -583,43 +583,22 @@ ${unifiedSection()}
    platform prebuilt binary); TypeScript is pure-JS but heavy; Vite is heaviest and buys nothing here
    because resolution was never the bottleneck; madge is slowest.
 
-## Recommendation (revised) — build on the real builder's graph
-The criteria compound: **CommonJS support** + **no missed captures** + **cover node_modules content &
-CJS internals** + **scale**. Taken together they push *away* from builder-independence. The only
-builder-independent config that meets the correctness bar (esbuild metafile with \`bundle: true\` +
-transform-aware hashing) does so by running a **second full bundle pass** — ~1.9 s on a 115-story toy,
-i.e. effectively a second build on a large Storybook — and, because esbuild ≠ the real builder, it's a
-*proxy* that can still miss plugin/virtual-module captures.
+## Recommendation → see [DESIGN.md](../DESIGN.md) (agreed design)
+The exploration above evaluated every builder-independent grapher; the criteria stack (CommonJS +
+no-missed-captures + node_modules/CJS coverage + scale) ultimately argued against re-deriving the graph
+with a second bundler. The **agreed design** lands on a hybrid that needs **no builder plugin change**:
 
-Meanwhile the **Storybook build already runs** (you need it to capture stories) and already produced the
-complete, resolved, type-elided, tree-shaken graph — **including node_modules and CJS internals**. PR #3
-reads that graph + per-module \`contentHash\` from the stats file: cost ≈ free, scales (it reads stats,
-doesn't bundle), and has **zero second-bundler-fidelity risk** because it *is* the builder's graph.
+- **Graph from the builder** — today's \`preview-stats.json\` \`reasons\` (already includes node_modules
+  modules). No \`contentHash\`, no preview-gap fix required.
+- **Hashing in the CLI** — raw bytes of the files that exist now; content-only per-story digest.
+- **Diff against a backend baseline *manifest*** — never against git blobs (no baseline checkout / shallow-clone problem).
+- **Three signals**: preview bail + main/config bail (global) and a per-story rollup (granular); deps
+  become per-story file hashes, replacing the lockfile entirely.
+- **Gradual migration**: always upload the manifest; fall back to the legacy algorithm when the baseline
+  has no compatible manifest.
 
-**So: build on PR #3's builder-graph (module-hash) strategy.** Everything else this study evaluated is
-how we *earned* that conclusion, and leaves two by-products:
-- The research independently **validates PR #3's rollup** (content-only digest, shared preview section,
-  transform-aware behavior #3=0 / #7=115 all reproduce).
-- The **esbuild metafile scan** keeps a narrow role: a **builder-agnostic fallback** when a builder can't
-  emit a complete graph with \`contentHash\`, and a **shadow oracle** to validate the builder-hash path.
-  The per-codebase parser findings (es-module-lexer ESM-only; require-aware needed for CJS; esbuild-strip
-  for type elision) define how to build that fallback if/when it's needed — not the primary path.
-
-### Does the current builder output suffice, or must the plugin change? → **the plugin must change**
-Measured on this repo's \`preview-stats.json\` from the **released \`@storybook/builder-vite\`** (381 modules):
-- per-module \`contentHash\`: **0 modules have it** — module keys are only \`id, name, reasons\`. The whole
-  module-hash rollup depends on this primitive, so it must be **added by the builder plugin**.
-- \`.storybook/preview.*\` in the graph: **absent** (the "preview gap") — so the shared preview section
-  can't be computed, which would miss preview/shared-dep captures (#5/#6/#7). The plugin must **bridge
-  preview into the graph** (through its \`\\0\` virtual modules).
-- What *is* already there: the full dependency graph via \`reasons\`, **including 152 node_modules
-  modules**. That's exactly why the builder path covers #6/#7 + CJS internals for free — those modules
-  are already in the graph; they just need to carry \`contentHash\`. No second bundle, no scale tax.
-
-Both gaps are precisely what PR #3's companion \`@storybook/builder-vite\` change (\`cody/hash-based-turbosnap\`)
-emits. Residual recall edge-cases (dynamic \`require\`/\`import\`, and out-of-graph inputs like
-\`.storybook/main.*\` / static dirs / \`preview-head.html\`) are handled by existing TurboSnap, and a
-versioned hash payload should trigger capture-all on an incompatible/absent baseline.
+Full design, decision algorithm, accepted trade-offs, and a runnable PoC (with decision table) are in
+[\`DESIGN.md\`](../DESIGN.md) and [\`poc.mts\`](../poc.mts).
 `;
 
 fs.writeFileSync(path.join(RESULTS, 'report.md'), md);
