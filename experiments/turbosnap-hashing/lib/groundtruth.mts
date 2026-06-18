@@ -9,8 +9,14 @@ import fs from 'node:fs';
 import { getDependentStoryFiles } from '../../../node-src/lib/turbosnap/getDependentStoryFiles';
 import { readStatsFile } from '../../../node-src/tasks/readStatsFile';
 import { REPO_ROOT, gitTrackedFiles, isStoryFile } from './common.mts';
-
-const STATS_PATH = path.join(REPO_ROOT, 'storybook-static/preview-stats.json');
+import {
+  CONFIG_DIR,
+  SOURCE_EXCLUDE_RE,
+  SOURCE_INCLUDE_RE,
+  STATIC_DIRS,
+  STATS_PATH,
+  STORY_BASE_DIR,
+} from './config.mts';
 
 const silentLog = {
   debug() {},
@@ -24,9 +30,9 @@ const silentLog = {
 function makeCtx() {
   return {
     log: silentLog,
-    options: { storybookConfigDir: '.storybook', untraced: [], traceChanged: false },
+    options: { storybookConfigDir: CONFIG_DIR, untraced: [], traceChanged: false },
     git: { rootPath: REPO_ROOT },
-    storybook: { baseDir: '', configDir: '.storybook', staticDir: ['static'] },
+    storybook: { baseDir: STORY_BASE_DIR, configDir: CONFIG_DIR, staticDir: STATIC_DIRS },
     turboSnap: {},
   } as any;
 }
@@ -50,8 +56,10 @@ export async function buildGroundTruth(): Promise<GroundTruth> {
   const scenarioSet = new Set<string>();
   for (const m of stats.modules) {
     if (!m.name || m.name.includes('node_modules') || m.name.startsWith('/virtual')) continue;
-    const repoPath = m.name.replace(/^\.\//, '').replace(/\s+\+\s+\d+\s+modules?$/, '').replace(/\?.*$/, '');
-    if (tracked.has(repoPath) && /^node-src\//.test(repoPath)) scenarioSet.add(repoPath);
+    const rel = m.name.replace(/^\.\//, '').replace(/\s+\+\s+\d+\s+modules?$/, '').replace(/\?.*$/, '');
+    const repoPath = STORY_BASE_DIR ? path.posix.join(STORY_BASE_DIR, rel) : rel;
+    if (tracked.has(repoPath) && SOURCE_INCLUDE_RE.test(repoPath) && !SOURCE_EXCLUDE_RE.test(repoPath))
+      scenarioSet.add(repoPath);
   }
   const scenarioFiles = [...scenarioSet].sort();
 

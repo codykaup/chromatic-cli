@@ -8,7 +8,8 @@ import { init, parse } from 'es-module-lexer';
 import { transform } from 'esbuild';
 import { ResolverFactory } from 'oxc-resolver';
 
-import { REPO_ROOT, SOURCE_EXTS, type ParseFn, type ResolveFn } from '../lib/common.mts';
+import { type ParseFn, type ResolveFn } from '../lib/common.mts';
+import { CONDITIONS, SOURCE_EXTS, TSCONFIG } from '../lib/config.mts';
 
 export const name = 'es-module-lexer (+esbuild strip) + oxc-resolver';
 export const notes = ['lexer is JS-only → needs esbuild type-strip first', 'misses type-only imports after strip (correct for runtime)'];
@@ -17,7 +18,8 @@ export async function prepare(): Promise<{ parse: ParseFn; resolve: ResolveFn }>
   await init;
   const resolver = new ResolverFactory({
     extensions: SOURCE_EXTS,
-    tsconfig: { configFile: path.join(REPO_ROOT, 'tsconfig.json'), references: 'auto' },
+    conditionNames: CONDITIONS.length ? [...CONDITIONS, 'import', 'require', 'default'] : undefined,
+    tsconfig: { configFile: TSCONFIG, references: 'auto' },
   });
   const parse_: ParseFn = async (absPath, code) => {
     const ext = path.extname(absPath);

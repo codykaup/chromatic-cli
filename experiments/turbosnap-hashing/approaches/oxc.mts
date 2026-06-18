@@ -3,7 +3,8 @@ import path from 'node:path';
 import { parseSync } from 'oxc-parser';
 import { ResolverFactory } from 'oxc-resolver';
 
-import { REPO_ROOT, SOURCE_EXTS, type ParseFn, type ResolveFn } from '../lib/common.mts';
+import { type ParseFn, type ResolveFn } from '../lib/common.mts';
+import { CONDITIONS, SOURCE_EXTS, TSCONFIG } from '../lib/config.mts';
 
 export const name = 'oxc-parser + oxc-resolver';
 export const notes = ['Rust parser+resolver', 'TS/JSX native', 'native binding (prebuilt per-platform)', 'drops type-only imports (isType) to match runtime graph'];
@@ -27,7 +28,8 @@ export function oxcImports(absPath: string, code: string): string[] {
 export async function prepare(): Promise<{ parse: ParseFn; resolve: ResolveFn }> {
   const resolver = new ResolverFactory({
     extensions: SOURCE_EXTS,
-    tsconfig: { configFile: path.join(REPO_ROOT, 'tsconfig.json'), references: 'auto' },
+    conditionNames: CONDITIONS.length ? [...CONDITIONS, 'import', 'require', 'default'] : undefined,
+    tsconfig: { configFile: TSCONFIG, references: 'auto' },
   });
   const resolve: ResolveFn = (spec, importerAbs) => resolver.sync(path.dirname(importerAbs), spec).path ?? null;
   return { parse: oxcImports, resolve };

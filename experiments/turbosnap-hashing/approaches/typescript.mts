@@ -6,13 +6,13 @@ import path from 'node:path';
 import ts from 'typescript';
 
 import { REPO_ROOT, type ParseFn, type ResolveFn } from '../lib/common.mts';
+import { TSCONFIG } from '../lib/config.mts';
 
 export const name = 'typescript (preProcessFile + resolveModuleName)';
 export const notes = ['highest-fidelity TS resolution', 'pure JS dependency (no native binding)', 'resolves type-only imports too'];
 
 export async function prepare(): Promise<{ parse: ParseFn; resolve: ResolveFn }> {
-  const configPath = path.join(REPO_ROOT, 'tsconfig.json');
-  const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
+  const configFile = ts.readConfigFile(TSCONFIG, ts.sys.readFile);
   const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, REPO_ROOT);
   const options = parsed.options;
   const host = ts.createCompilerHost(options);

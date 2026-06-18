@@ -11,15 +11,23 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const REPO_ROOT = execSync('git rev-parse --show-toplevel').toString().trim();
+import {
+  REPO_ROOT,
+  SOURCE_EXTS,
+  SOURCE_EXCLUDE_RE,
+  SOURCE_INCLUDE_RE,
+  STATS_PATH,
+  STORY_BASE_DIR,
+  STORY_RE,
+} from './config.mts';
 
-/** Stories glob from .storybook/main.ts: ['../node-src/**\/*.@(mdx|stories.*)'] (relative to repo root). */
-export const STORY_RE = /^node-src\/.*\.(mdx|stories\.[^/]+)$/;
+export { REPO_ROOT, SOURCE_EXTS } from './config.mts';
+
 export const isStoryFile = (repoPath: string) => STORY_RE.test(repoPath);
 
 /** All git-tracked files, as repo-relative POSIX paths. */
 export function gitTrackedFiles(): string[] {
-  return execSync('git ls-files', { cwd: REPO_ROOT, maxBuffer: 64 * 1024 * 1024 })
+  return execSync('git ls-files', { cwd: REPO_ROOT, maxBuffer: 256 * 1024 * 1024 })
     .toString()
     .split('\n')
     .filter(Boolean);
@@ -83,12 +91,12 @@ export class ReverseGraph {
 
 /** Repo paths of every user module the builder actually bundled into the preview (from stats). */
 export function statsUniverse(): Set<string> {
-  const statsPath = path.join(REPO_ROOT, 'storybook-static/preview-stats.json');
-  const stats = JSON.parse(fs.readFileSync(statsPath, 'utf8')) as { modules: { name: string }[] };
+  const stats = JSON.parse(fs.readFileSync(STATS_PATH, 'utf8')) as { modules: { name: string }[] };
   const set = new Set<string>();
   for (const m of stats.modules) {
     if (!m.name || m.name.includes('node_modules') || m.name.startsWith('/virtual')) continue;
-    set.add(m.name.replace(/^\.\//, '').replace(/\s+\+\s+\d+\s+modules?$/, '').replace(/\?.*$/, ''));
+    const rel = m.name.replace(/^\.\//, '').replace(/\s+\+\s+\d+\s+modules?$/, '').replace(/\?.*$/, '');
+    set.add(STORY_BASE_DIR ? path.posix.join(STORY_BASE_DIR, rel) : rel);
   }
   return set;
 }
@@ -147,12 +155,10 @@ export function scoreFidelity(
   };
 }
 
-export const SOURCE_EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs', '.mdx'];
-
-/** All candidate source files in the graph universe (what the main Storybook can reach). */
+/** All candidate source files in the graph universe (what the Storybook can reach). */
 export function candidateSourceFiles(): string[] {
   return gitTrackedFiles()
-    .filter((f) => /^node-src\//.test(f) || /^isChromatic\.(js|mjs)$/.test(f))
+    .filter((f) => SOURCE_INCLUDE_RE.test(f) && !SOURCE_EXCLUDE_RE.test(f))
     .filter((f) => SOURCE_EXTS.includes(path.extname(f)))
     .map((f) => path.join(REPO_ROOT, f));
 }
