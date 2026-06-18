@@ -8,10 +8,10 @@
   "hashing": {
     "files": 350,
     "bytes": 558742,
-    "rawMs": 7.185419000001275,
-    "rawMbPerSec": 74.15822165657512,
-    "normMs": 437.6074829999998,
-    "normMultiplier": 60.90215240056594,
+    "rawMs": 7.359173000000737,
+    "rawMbPerSec": 72.40730648639563,
+    "normMs": 456.0304799999976,
+    "normMultiplier": 61.96762598188029,
     "stripped": 350,
     "fellBack": 0,
     "demo": {
@@ -19,14 +19,14 @@
       "rawHashChanged": true,
       "normHashChanged": false
     },
-    "ms": 7.185419000001275,
-    "mbPerSec": 74.15822165657512
+    "ms": 7.359173000000737,
+    "mbPerSec": 72.40730648639563
   },
   "rows": [
     {
       "approach": "oxc-parser + oxc-resolver",
-      "buildMs": 103.23278599999998,
-      "peakRssMb": 21.61328125,
+      "buildMs": 110.20006599999999,
+      "peakRssMb": 19.875,
       "graphNodes": 335,
       "graphEdges": 755,
       "exactMatch": 119,
@@ -51,8 +51,8 @@
     },
     {
       "approach": "oxc-parser + oxc-resolver",
-      "buildMs": 103.32676900000001,
-      "peakRssMb": 20.8515625,
+      "buildMs": 106.08013799999998,
+      "peakRssMb": 24.58984375,
       "graphNodes": 331,
       "graphEdges": 743,
       "exactMatch": 119,
@@ -78,8 +78,8 @@
     },
     {
       "approach": "oxc-parser + oxc-resolver",
-      "buildMs": 108.69347399999998,
-      "peakRssMb": 19.48046875,
+      "buildMs": 104.66037499999999,
+      "peakRssMb": 18.91015625,
       "graphNodes": 224,
       "graphEdges": 312,
       "exactMatch": 222,
@@ -105,8 +105,8 @@
     },
     {
       "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
-      "buildMs": 517.451348,
-      "peakRssMb": 16.265625,
+      "buildMs": 508.74721900000003,
+      "peakRssMb": 13.79296875,
       "graphNodes": 334,
       "graphEdges": 639,
       "exactMatch": 225,
@@ -125,8 +125,8 @@
     },
     {
       "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
-      "buildMs": 323.68152,
-      "peakRssMb": 7.71875,
+      "buildMs": 311.978446,
+      "peakRssMb": 9.74609375,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -146,8 +146,8 @@
     },
     {
       "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
-      "buildMs": 330.802174,
-      "peakRssMb": 12.85546875,
+      "buildMs": 317.831646,
+      "peakRssMb": 8.1875,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -167,8 +167,8 @@
     },
     {
       "approach": "typescript (preProcessFile + resolveModuleName)",
-      "buildMs": 992.2161779999999,
-      "peakRssMb": 130.20703125,
+      "buildMs": 1129.1981460000002,
+      "peakRssMb": 127.88671875,
       "graphNodes": 338,
       "graphEdges": 772,
       "exactMatch": 119,
@@ -188,8 +188,8 @@
     },
     {
       "approach": "typescript (preProcessFile + resolveModuleName)",
-      "buildMs": 996.40058,
-      "peakRssMb": 130.78125,
+      "buildMs": 1010.287045,
+      "peakRssMb": 128.70703125,
       "graphNodes": 337,
       "graphEdges": 772,
       "exactMatch": 119,
@@ -210,8 +210,8 @@
     },
     {
       "approach": "typescript (preProcessFile + resolveModuleName)",
-      "buildMs": 1003.360814,
-      "peakRssMb": 128.58203125,
+      "buildMs": 1072.4985339999998,
+      "peakRssMb": 126.375,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -232,8 +232,8 @@
     },
     {
       "approach": "vite pluginContainer.resolveId + oxc-parser",
-      "buildMs": 1169.060817,
-      "peakRssMb": 193.4609375,
+      "buildMs": 1227.85282,
+      "peakRssMb": 174.57421875,
       "graphNodes": 333,
       "graphEdges": 746,
       "exactMatch": 125,
@@ -256,8 +256,8 @@
     },
     {
       "approach": "vite pluginContainer.resolveId + oxc-parser",
-      "buildMs": 1151.601308,
-      "peakRssMb": 191.828125,
+      "buildMs": 1131.642187,
+      "peakRssMb": 183.89453125,
       "graphNodes": 321,
       "graphEdges": 701,
       "exactMatch": 125,
@@ -281,8 +281,8 @@
     },
     {
       "approach": "vite pluginContainer.resolveId + oxc-parser",
-      "buildMs": 1146.13091,
-      "peakRssMb": 190.9375,
+      "buildMs": 1183.4587789999998,
+      "peakRssMb": 197.1328125,
       "graphNodes": 224,
       "graphEdges": 312,
       "exactMatch": 222,
@@ -306,8 +306,8 @@
     },
     {
       "approach": "madge (dependency-tree/precinct)",
-      "buildMs": 2545.9498329999997,
-      "peakRssMb": 259.98828125,
+      "buildMs": 2677.845402,
+      "peakRssMb": 236.01953125,
       "graphNodes": 420,
       "graphEdges": 981,
       "exactMatch": 119,
@@ -327,8 +327,8 @@
     },
     {
       "approach": "madge (dependency-tree/precinct)",
-      "buildMs": 2009.0212429999997,
-      "peakRssMb": 211.7578125,
+      "buildMs": 2040.545104,
+      "peakRssMb": 232.5,
       "graphNodes": 338,
       "graphEdges": 773,
       "exactMatch": 119,
@@ -348,8 +348,8 @@
     },
     {
       "approach": "madge (dependency-tree/precinct)",
-      "buildMs": 1970.45601,
-      "peakRssMb": 226.796875,
+      "buildMs": 2038.533004,
+      "peakRssMb": 214.94140625,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -363,6 +363,145 @@
         "JSX/TSX via precinct",
         "773 edges",
         "1 skipped (madge warnings)"
+      ],
+      "mode": "ceiling",
+      "fileCount": 115
+    },
+    {
+      "approach": "oxc + require() (import+require+dyn)",
+      "buildMs": 214.27198500000003,
+      "peakRssMb": 28.9296875,
+      "graphNodes": 335,
+      "graphEdges": 755,
+      "exactMatch": 119,
+      "totalScenarios": 225,
+      "recall": 0.9943502824858758,
+      "precision": 0.10801963993453355,
+      "falseNegativeScenarios": [
+        "node-src/ui/components/icons.ts",
+        "node-src/ui/components/link.ts",
+        "node-src/ui/messages/warnings/undefinedBranchOwner.ts"
+      ],
+      "notes": [
+        "require-aware → CommonJS supported",
+        "syntactic (no usage-based type elision)",
+        "755 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "whole",
+      "fileCount": 350
+    },
+    {
+      "approach": "oxc + require() (import+require+dyn)",
+      "buildMs": 199.23393500000003,
+      "peakRssMb": 32.41015625,
+      "graphNodes": 331,
+      "graphEdges": 743,
+      "exactMatch": 119,
+      "totalScenarios": 225,
+      "recall": 0.9943502824858758,
+      "precision": 0.10801963993453355,
+      "falseNegativeScenarios": [
+        "node-src/ui/components/icons.ts",
+        "node-src/ui/components/link.ts",
+        "node-src/ui/messages/warnings/undefinedBranchOwner.ts"
+      ],
+      "notes": [
+        "require-aware → CommonJS supported",
+        "syntactic (no usage-based type elision)",
+        "reached 332 files",
+        "743 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "scoped",
+      "fileCount": 115
+    },
+    {
+      "approach": "oxc + require() (import+require+dyn)",
+      "buildMs": 220.607414,
+      "peakRssMb": 32.64453125,
+      "graphNodes": 224,
+      "graphEdges": 312,
+      "exactMatch": 222,
+      "totalScenarios": 225,
+      "recall": 0.9943502824858758,
+      "precision": 1,
+      "falseNegativeScenarios": [
+        "node-src/ui/components/icons.ts",
+        "node-src/ui/components/link.ts",
+        "node-src/ui/messages/warnings/undefinedBranchOwner.ts"
+      ],
+      "notes": [
+        "require-aware → CommonJS supported",
+        "syntactic (no usage-based type elision)",
+        "reached 332 files",
+        "743 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "ceiling",
+      "fileCount": 115
+    },
+    {
+      "approach": "esbuild-strip + oxc(import+require)",
+      "buildMs": 643.6275599999999,
+      "peakRssMb": 27.61328125,
+      "graphNodes": 334,
+      "graphEdges": 639,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "unified ESM+CJS",
+        "type elision via esbuild strip",
+        "require-aware via AST",
+        "643 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "whole",
+      "fileCount": 350
+    },
+    {
+      "approach": "esbuild-strip + oxc(import+require)",
+      "buildMs": 385.99254600000006,
+      "peakRssMb": 22.640625,
+      "graphNodes": 225,
+      "graphEdges": 313,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "unified ESM+CJS",
+        "type elision via esbuild strip",
+        "require-aware via AST",
+        "reached 225 files",
+        "313 edges",
+        "0 unresolved rel"
+      ],
+      "mode": "scoped",
+      "fileCount": 115
+    },
+    {
+      "approach": "esbuild-strip + oxc(import+require)",
+      "buildMs": 416.580731,
+      "peakRssMb": 23.4765625,
+      "graphNodes": 225,
+      "graphEdges": 313,
+      "exactMatch": 225,
+      "totalScenarios": 225,
+      "recall": 1,
+      "precision": 1,
+      "falseNegativeScenarios": [],
+      "notes": [
+        "unified ESM+CJS",
+        "type elision via esbuild strip",
+        "require-aware via AST",
+        "reached 225 files",
+        "313 edges",
+        "0 unresolved rel"
       ],
       "mode": "ceiling",
       "fileCount": 115

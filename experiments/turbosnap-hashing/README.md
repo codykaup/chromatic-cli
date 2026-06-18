@@ -25,8 +25,12 @@ See [`results/report.md`](./results/report.md) for the full tables. Headline:
 
 - `lib/common.mts` — repo-path helpers, reverse-graph + trace, forward crawl, fidelity scoring, timing.
 - `lib/groundtruth.mts` — runs the real `getDependentStoryFiles` per scenario → `results/groundtruth.json`.
-- `approaches/` — one module per strategy (`oxc`, `eslexer`, `typescript`, `vite`, `madge`), each
-  exposing a `parse` + `resolve` (or a `run`).
+- `approaches/` — one module per strategy, each exposing a `parse` + `resolve` (or a `run`):
+  `oxc`, `eslexer`, `typescript`, `vite`, `madge`, plus the CJS-capable `oxcRequire` (import + AST
+  `require()`) and the unified `oxcStripRequire` (esbuild-strip + oxc import+require). The
+  `esbuild`-metafile option is run directly in `scenarios.mts` / `esbuildMeta.mts`.
+- `cjsFixture.mts` + `fixtures/cjs|mixed` — measure how many `require()` edges each parser recovers.
+- `esbuildMeta.mts` — validates esbuild's metafile as the no-branching ESM+CJS graph source.
 - `bench.mts` — runs one approach in one mode (`whole` | `scoped` | `ceiling`), prints a JSON result.
 - `report.mts` — orchestrator: runs every approach × mode in isolated processes, plus the hashing
   micro-benchmark, folds in the scenario results, and writes `results/results.json` + `results/report.md`.

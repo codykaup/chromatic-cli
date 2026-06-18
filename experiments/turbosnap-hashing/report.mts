@@ -14,7 +14,7 @@ const TSX = path.join(HERE, 'node_modules/.bin/tsx');
 const RESULTS = path.join(HERE, 'results');
 fs.mkdirSync(RESULTS, { recursive: true });
 
-const APPROACHES = ['oxc', 'eslexer', 'typescript', 'vite', 'madge'];
+const APPROACHES = ['oxc', 'eslexer', 'typescript', 'vite', 'madge', 'oxcRequire', 'oxcStripRequire'];
 const MODES = ['whole', 'scoped', 'ceiling'] as const;
 
 interface Row {
@@ -175,8 +175,8 @@ function scenarioSection(): string {
   const cell = (r: any) => (r.added ? `+${r.added}` : r.removed ? `−${r.removed}` : `${r.changed}`);
   const ids = Object.keys(LABELS);
 
-  // Main table: PR vs recommended (eslexer + stripped).
-  const rec = runs['eslexer_stripped']?.results ?? {};
+  // Main table: PR vs recommended unified option (esbuild metafile + stripped).
+  const rec = runs['esbuildmeta_stripped']?.results ?? {};
   const mainRows = ids
     .map((id, i) => {
       const got = cell(rec[id]);
@@ -185,14 +185,17 @@ function scenarioSection(): string {
     })
     .join('\n');
 
-  // Divergence matrix across options (changed-count cells).
+  // Divergence matrix across ALL options (changed-count cells), stripped hashing unless noted.
   const cols: [string, string][] = [
-    ['eslexer_stripped', 'es-lexer +stripped (rec.)'],
+    ['esbuildmeta_stripped', 'esbuild-meta'],
+    ['oxcStripRequire_stripped', 'strip+oxc+req'],
+    ['eslexer_stripped', 'es-lexer'],
     ['eslexer_raw', 'es-lexer +raw'],
-    ['oxc_stripped', 'oxc +stripped'],
-    ['typescript_stripped', 'ts +stripped'],
-    ['madge_stripped', 'madge +stripped'],
-    ['vite_stripped', 'vite +stripped'],
+    ['oxcRequire_stripped', 'oxc+require'],
+    ['oxc_stripped', 'oxc'],
+    ['typescript_stripped', 'ts'],
+    ['vite_stripped', 'vite'],
+    ['madge_stripped', 'madge'],
   ];
   const matrixHead = `| # | scenario | PR | ${cols.map((c) => c[1]).join(' | ')} |\n|---|---|--:|${cols.map(() => '--:').join('|')}|`;
   const matrixRows = ids
@@ -201,6 +204,8 @@ function scenarioSection(): string {
       return `| ${i + 1} | ${LABELS[id]} | ${PR[id]} | ${cells.join(' | ')} |`;
     })
     .join('\n');
+  const perfRow = `| — | **graph build (ms)** | — | ${cols.map(([k]) => runs[k]?.buildMs ?? '?').join(' | ')} |`;
+  const cjsRow = `| — | **CommonJS support** | — | ${cols.map(([k]) => (/(esbuildmeta|Require|typescript|madge)/.test(k) ? '✅' : '❌')).join(' | ')} |`;
 
   const matches = ids.filter((id) => cell(rec[id]) === PR[id]).length;
 
@@ -212,7 +217,7 @@ builder-INDEPENDENT graph (our static approaches) and our own content hashes (ra
 on this repo's Storybook (${runs['eslexer_stripped']?.storyCount ?? '?'} stories). Cells are the count of stories flagged for re-capture
 (\`changed\`, or \`+added\` / \`−removed\`).
 
-### Recommended option (es-module-lexer + stripped hashing) vs PR #3
+### Recommended unified option (esbuild metafile + stripped hashing) vs PR #3
 | # | scenario | PR #3 (builder) | ours | match |
 |---|---|--:|--:|:--:|
 ${mainRows}
@@ -222,11 +227,15 @@ ${mainRows}
 source-graph stops at the package boundary. That's the known trade-off: closing it means either
 crawling into node_modules (costly) or keeping the existing dependency-change signal for that case.
 
-### Where the options diverge (changed-story count)
+### All options × 11 scenarios (+ build time + CJS), changed-story count
 ${matrixHead}
 ${matrixRows}
+${perfRow}
+${cjsRow}
 
-Two scenarios separate the options, and both echo the earlier fidelity findings:
+Reading the matrix: the only rows that separate the options are **#3** (hash mode) and **#4** (graph
+faithfulness); #6/#7 are the node_modules gap (all source-only options report 0). Two scenarios echo
+the earlier fidelity findings:
 - **#3 (comment-only edit):** raw hashing re-captures 3 stories; **stripped hashing correctly reports 0** (matches PR #3, which strips via the builder transform).
 - **#4 (edit a used dependency, \`auth.ts\`):** the correct answer is **3** (the CSF-composition set). **es-module-lexer gets 3**; oxc / TypeScript / vite / madge over-capture to **43** — the same type-only-import over-connection, now as 14× wasted snapshots. Only the esbuild-stripped parse matches the builder.
 ${nodeModulesSection()}`;
@@ -384,6 +393,16 @@ const VERDICTS: Record<string, { dep: string; fidelity: string; verdict: string 
     dep: 'off-the-shelf',
     fidelity: 'over-connects (syntactic imports)',
     verdict: '❌ slowest; same fidelity ceiling as other syntactic tools',
+  },
+  'oxc + require() (import+require+dyn)': {
+    dep: 'native + AST walk',
+    fidelity: 'over-connects on TS (syntactic)',
+    verdict: '✅ CJS-capable; fast; over-captures on TS type-only imports',
+  },
+  'esbuild-strip + oxc(import+require)': {
+    dep: 'esbuild + native',
+    fidelity: 'matches builder + CJS',
+    verdict: '✅✅ unified ESM+CJS, type-elision kept — best for mixed repos',
   },
 };
 

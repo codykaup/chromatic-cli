@@ -10,9 +10,10 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 
 import xxhashInit from 'xxhash-wasm';
-import { transform } from 'esbuild';
+import { build as esbuild, transform } from 'esbuild';
 
 import { REPO_ROOT, candidateSourceFiles, isStoryFile, toRepoPath } from './lib/common.mts';
 import { SOURCE_EXTS } from './lib/config.mts';
@@ -48,6 +49,27 @@ async function buildForward(approach: string) {
   ];
   const forward = new Map<string, Set<string>>();
   const contentOf = new Map<string, string>();
+
+  if (approach === 'esbuildmeta') {
+    // One uniform scan pass: esbuild resolves ESM+CJS+TS, elides types, emits the graph.
+    // packages:'external' stops at the node_modules boundary to match the other source-only runs.
+    const r = await esbuild({
+      entryPoints: seeds,
+      bundle: true, metafile: true, write: false, outdir: 'scan-out',
+      logLevel: 'silent', platform: 'node', format: 'esm', packages: 'external',
+      loader: { '.css': 'empty', '.svg': 'empty', '.png': 'empty', '.html': 'empty' },
+    }).catch((e) => { throw new Error('esbuild scan failed: ' + (e.message?.split('\n')[0] ?? e)); });
+    for (const [file, info] of Object.entries(r.metafile.inputs)) {
+      const importer = toRepoPath(path.join(REPO_ROOT, file));
+      if (!forward.has(importer)) forward.set(importer, new Set());
+      for (const imp of (info as any).imports) {
+        const abs = path.join(REPO_ROOT, imp.path);
+        if (isRepoSource(abs)) forward.get(importer)!.add(toRepoPath(abs));
+      }
+    }
+    for (const f of forward.keys()) { try { contentOf.set(f, fs.readFileSync(path.join(REPO_ROOT, f), 'utf8')); } catch {} }
+    return { forward, contentOf };
+  }
 
   if (approach === 'madge') {
     const madge = (await import('madge')).default;
@@ -132,7 +154,9 @@ const COMMENT = '// probe: a comment-only edit\n';
 interface ScenarioResult { changed: number; added: number; removed: number; note?: string }
 
 async function runScenarios(approach: string, mode: HashMode) {
+  const t0 = performance.now();
   const { forward, contentOf } = await buildForward(approach);
+  const buildMs = Math.round(performance.now() - t0);
   const stories = new Set([...forward.keys()].filter(isStoryFile));
 
   // base content hashes
@@ -198,10 +222,10 @@ async function runScenarios(approach: string, mode: HashMode) {
     results['11_paths_relocated_same_content'] = diff(baseStoryHashes, computeStoryHashes(f2, stories, h2));
   }
 
-  return { storyCount: stories.size, results };
+  return { storyCount: stories.size, buildMs, results };
 }
 
-const APPROACHES = ['oxc', 'eslexer', 'typescript', 'vite', 'madge'];
+const APPROACHES = ['oxc', 'eslexer', 'oxcRequire', 'oxcStripRequire', 'esbuildmeta', 'typescript', 'vite', 'madge'];
 const out: any = { generatedAt: new Date().toISOString(), runs: {} };
 for (const approach of APPROACHES) {
   for (const mode of ['raw', 'stripped'] as HashMode[]) {

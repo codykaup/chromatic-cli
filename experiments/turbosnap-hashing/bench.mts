@@ -43,6 +43,8 @@ async function buildGraphFor(): Promise<{ graph: ReverseGraph; name: string; not
     eslexer: () => import('./approaches/eslexer.mts'),
     typescript: () => import('./approaches/typescript.mts'),
     vite: () => import('./approaches/vite.mts'),
+    oxcRequire: () => import('./approaches/oxcRequire.mts'),
+    oxcStripRequire: () => import('./approaches/oxcStripRequire.mts'),
   };
   if (!mods[key]) {
     console.error(`unknown approach: ${key}`);
