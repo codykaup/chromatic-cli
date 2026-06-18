@@ -1,0 +1,11 @@
+{
+  "expectedEdges": 4,
+  "edgesRecovered": {
+    "es-module-lexer (+strip)": 0,
+    "oxc module record (import only)": 0,
+    "oxc + AST require() walk": 4,
+    "typescript preProcessFile": 4,
+    "esbuild-strip + oxc(import + require)": 4,
+    "madge (precinct/detective-cjs)": 4
+  }
+}

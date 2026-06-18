@@ -232,6 +232,45 @@ Two scenarios separate the options, and both echo the earlier fidelity findings:
 ${nodeModulesSection()}`;
 }
 
+// ---- CJS support ----
+function cjsSection(): string {
+  const p = path.join(RESULTS, 'cjs-fixture.json');
+  if (!fs.existsSync(p)) return '';
+  const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const exp = d.expectedEdges;
+  const rec = d.edgesRecovered as Record<string, number>;
+  const rows = Object.entries(rec)
+    .map(([name, n]) => `| ${name} | ${n}/${exp} | ${((n / exp) * 100).toFixed(0)}% |`)
+    .join('\n');
+  return `
+## CommonJS support (require()) — a hard requirement for some repos
+es-module-lexer only sees ESM \`import\`. For a CJS codebase whose edges are all \`require()\`, that's a
+**non-starter**: it recovers almost no graph → mass under-capture (the dangerous direction). Measured on
+a small all-\`require()\` fixture (${exp} real edges):
+
+| parser | edges recovered | |
+|---|--:|--:|
+${rows}
+
+### Parser capability matrix
+| parser | ESM \`import\` | dyn \`import()\` | CJS \`require()\` | TS type-only elision |
+|---|:--:|:--:|:--:|:--:|
+| es-module-lexer (+esbuild strip) | ✅ | ✅ | ❌ | ✅ (esbuild usage-based) |
+| oxc module record | ✅ | ✅ | ❌ | ⚠️ (drops \`import type\` only) |
+| oxc + AST \`require()\` walk | ✅ | ✅ | ✅ | ⚠️ (syntactic) |
+| TypeScript \`preProcessFile\` | ✅ | ✅ | ✅ | ❌ (keeps) |
+| madge / precinct | ✅ | ✅ | ✅ | ❌ (keeps) |
+| **esbuild-strip + oxc(import + require)** | ✅ | ✅ | ✅ | ✅ |
+
+The type-only-elision column (the reason es-module-lexer won on TS) is a **TypeScript-only** concern —
+plain CJS/JS has no type imports, so for a pure-CJS repo a require-aware syntactic parser is both
+complete and correct. The combination that covers **both** worlds is **esbuild-strip (type elision for
+TS) → oxc parse for \`import\` + \`import()\` + an AST \`require()\` walk**: it recovers the full CJS
+fixture (${rec['esbuild-strip + oxc(import + require)']}/${exp}) and, because the esbuild strip drops type-only imports, it also avoids the
+TS over-capture (it inherits es-module-lexer's scenario-#4 = 3 behavior, not oxc's 43).
+`;
+}
+
 // ---- Closing #6/#7 by crawling into node_modules ----
 function nodeModulesSection(): string {
   const p = path.join(RESULTS, 'scenarios-nodemodules.json');
@@ -366,6 +405,7 @@ ${scorecard()}
 | 8 | **Hashing is cheap** (Option C) | ${hashing.rawMs.toFixed(1)} ms to hash the whole tree (${hashing.rawMbPerSec.toFixed(0)} MB/s) → incremental graph cache is viable |
 | 9 | **Comment-insensitive change detection** is free (Option C2) | hashing esbuild-stripped output (${hashing.normMs.toFixed(1)} ms) ignores comment/format-only edits — reuses the graph transform |
 | 10 | **Reproduces PR #3's module-hash on 9/11 e2e scenarios** | es-module-lexer + stripped hashing matches; only node_modules-dep scenarios (#6/#7) are out of source-graph scope |
+| 11 | **es-module-lexer is a non-starter for CommonJS** | recovers 0/4 \`require()\` edges; require-aware parsers (oxc+AST, TS, precinct) recover 4/4. Type-elision (its TS edge) is moot in plain JS |
 
 ## Modes
 - **whole**: parse the entire source tree, build the full import graph (no builder, no story scoping).
@@ -413,6 +453,7 @@ deliberate; (2) hashes are only stable for a fixed esbuild version, so a toolcha
 cache and forces one full re-snapshot; (3) needs a raw-hash fallback for files esbuild can't parse.
 
 ${scenarioSection()}
+${cjsSection()}
 ## Key findings
 1. **The fidelity gap is about *type-only import elision*, not parsing or resolution.** The builder
    (esbuild/Rollup) drops imports used only in type positions — even when written with value syntax and
@@ -438,14 +479,23 @@ ${scenarioSection()}
    platform prebuilt binary); TypeScript is pure-JS but heavy; Vite is heaviest and buys nothing here
    because resolution was never the bottleneck; madge is slowest.
 
-## Implication for the path forward
-Builder-independent source-graphing is **viable on this codebase** — but only with an approach that
-replicates the builder's type-only import elision. The natural fit is **es-module-lexer + esbuild
-type-strip + a resolver (oxc-resolver)**: it matched the builder exactly here, with low memory, and its
-only real cost (per-file transform) is amortized by **content hashing (Option C)** — re-transform and
-re-resolve only files whose hash changed, and cache the graph between runs. The remaining risk is recall
-edge-cases (dynamic/conditional imports), so the safe rollout is to **shadow** this graph against the
-builder stats and bail to a full snapshot whenever the two disagree, before making it the source of truth.
+## Implication for the path forward (revised — must support CommonJS)
+Builder-independent source-graphing is viable, but the parser choice depends on the codebase, and
+**es-module-lexer alone is ruled out where CommonJS must be supported** (0/4 \`require()\` edges).
+
+- **Pure TS/ESM:** es-module-lexer + esbuild strip is the simplest faithful option (type-only elision
+  for free, lowest memory).
+- **Any CommonJS (or mixed):** use a **require-aware** parser. The recommended single tool is
+  **esbuild-strip → oxc \`import\` + \`import()\` + AST \`require()\` walk** (+ oxc-resolver): it covers
+  ESM, dynamic import, and CJS (4/4 on the fixture) *and* keeps the type-only elision that avoids the
+  TS over-capture. TypeScript \`preProcessFile\` and madge/precinct also handle require() but keep
+  type-only imports (TS over-capture) and are heavier.
+
+Layer **content hashing (Option C/C2)** on top for change detection + an incrementally-cached graph,
+with **transform-aware hashing** (stripped for source, raw for node_modules) if the node_modules
+boundary is crawled. Remaining risk is recall edge-cases (dynamic/conditional \`require\`/\`import\`), so
+the safe rollout is **shadow mode** against the builder stats — bail to a full snapshot whenever the two
+disagree — before making it the source of truth.
 `;
 
 fs.writeFileSync(path.join(RESULTS, 'report.md'), md);
