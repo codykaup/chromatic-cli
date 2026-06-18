@@ -469,6 +469,9 @@ ${scorecard()}
 - **ceiling**: scoped, then restrict the graph to the builder's actual module set — isolates parse/resolve
   fidelity from the *module-universe* problem (i.e. "what if we knew exactly which files the builder bundles").
 
+> Note: \`esbuild metafile\` is entry-point driven (entries = stories + preview), so it is inherently
+> scoped — its **whole** and **scoped** rows are the same scan; only **ceiling** restricts it further.
+
 ## Results — whole-repo static graph
 ${table('whole')}
 

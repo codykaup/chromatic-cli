@@ -15,14 +15,14 @@ measured against the **real** `getDependentStoryFiles` run on the builder's `pre
 ## Summary scorecard (preview-scoped mode)
 | approach | recall | precision | speed | memory | dependency | verdict |
 |---|--:|--:|--:|--:|---|---|
-| esbuild metafile (scan) | 100.0% | 100.0% | 90 ms | 3 MB | esbuild (bundler) | ✅✅ unified ESM+CJS, simplest, fast; whole-program scan (not per-file incremental) |
-| es-module-lexer (+esbuild strip) + oxc-resolver | 100.0% | 100.0% | 301 ms | 7 MB | pure JS + wasm | ✅ recommended — esbuild strip gives builder-faithful elision |
-| esbuild-strip + oxc(import+require) | 100.0% | 100.0% | 366 ms | 22 MB | esbuild + native | ✅✅ unified ESM+CJS, type-elision kept, per-file/incremental — best for mixed repos |
-| vite pluginContainer.resolveId + oxc-parser | 99.4% | 11.4% | 767 ms | 177 MB | the builder itself | ❌ heaviest, no fidelity gain, defeats "builder-independent" |
-| typescript (preProcessFile + resolveModuleName) | 100.0% | 10.9% | 954 ms | 127 MB | pure JS (typescript) | ➖ accurate resolution, heavy, still needs type-aware elision |
-| madge (dependency-tree/precinct) | 100.0% | 10.9% | 1588 ms | 231 MB | off-the-shelf | ❌ slowest; same fidelity ceiling as other syntactic tools |
-| oxc-parser + oxc-resolver | 99.4% | 10.8% | 83 ms | 24 MB | native (prebuilt binary) | ⚠️ fastest, but needs usage-based elision to be correct |
-| oxc + require() (import+require+dyn) | 99.4% | 10.8% | 151 ms | 36 MB | native + AST walk | ✅ CJS-capable; fast; over-captures on TS type-only imports |
+| esbuild metafile (scan) | 100.0% | 100.0% | 122 ms | 3 MB | esbuild (bundler) | ✅✅ unified ESM+CJS, simplest, fast; whole-program scan (not per-file incremental) |
+| es-module-lexer (+esbuild strip) + oxc-resolver | 100.0% | 100.0% | 357 ms | 7 MB | pure JS + wasm | ✅ recommended — esbuild strip gives builder-faithful elision |
+| esbuild-strip + oxc(import+require) | 100.0% | 100.0% | 471 ms | 14 MB | esbuild + native | ✅✅ unified ESM+CJS, type-elision kept, per-file/incremental — best for mixed repos |
+| vite pluginContainer.resolveId + oxc-parser | 99.4% | 11.4% | 907 ms | 175 MB | the builder itself | ❌ heaviest, no fidelity gain, defeats "builder-independent" |
+| typescript (preProcessFile + resolveModuleName) | 100.0% | 10.9% | 891 ms | 131 MB | pure JS (typescript) | ➖ accurate resolution, heavy, still needs type-aware elision |
+| madge (dependency-tree/precinct) | 100.0% | 10.9% | 1735 ms | 211 MB | off-the-shelf | ❌ slowest; same fidelity ceiling as other syntactic tools |
+| oxc-parser + oxc-resolver | 99.4% | 10.8% | 79 ms | 18 MB | native (prebuilt binary) | ⚠️ fastest, but needs usage-based elision to be correct |
+| oxc + require() (import+require+dyn) | 99.4% | 10.8% | 164 ms | 36 MB | native + AST walk | ✅ CJS-capable; fast; over-captures on TS type-only imports |
 
 > recall <100% = **misses a changed story (dangerous)**; precision <100% = **extra snapshots (wasteful but safe)**.
 
@@ -36,8 +36,8 @@ measured against the **real** `getDependentStoryFiles` run on the builder's `pre
 | 5 | **ceiling** mode lifts every approach to ~100% precision | restricting to the builder's module set removes the type-barrel hub — confirms universe, not tooling |
 | 6 | Recall is ~99–100% but **not always clean** | esbuild-lexer 100%; oxc/vite 99.4% (a few silently-missed stories — the dangerous direction) |
 | 7 | Parser/resolver = **speed/packaging**, not correctness | oxc fastest (native), TS pure-JS but heavy, Vite heaviest with no fidelity gain, madge slowest |
-| 8 | **Hashing is cheap** (Option C) | 5.0 ms to hash the whole tree (107 MB/s) → incremental graph cache is viable |
-| 9 | **Comment-insensitive change detection** is free (Option C2) | hashing esbuild-stripped output (359.6 ms) ignores comment/format-only edits — reuses the graph transform |
+| 8 | **Hashing is cheap** (Option C) | 6.4 ms to hash the whole tree (83 MB/s) → incremental graph cache is viable |
+| 9 | **Comment-insensitive change detection** is free (Option C2) | hashing esbuild-stripped output (537.2 ms) ignores comment/format-only edits — reuses the graph transform |
 | 10 | **Reproduces PR #3's module-hash on 9/11 e2e scenarios** | es-module-lexer + stripped hashing matches; only node_modules-dep scenarios (#6/#7) are out of source-graph scope |
 | 11 | **es-module-lexer is a non-starter for CommonJS** | recovers 0/4 `require()` edges; require-aware parsers (oxc+AST, TS, precinct) recover 4/4. Type-elision (its TS edge) is moot in plain JS |
 | 12 | **One tool handles ESM+CJS with no branching: esbuild `metafile`** | scan pass (write:false) recovers 4/4 CJS edges, sees import+require in one mixed file, elides type-only — and follows node_modules in the same pass |
@@ -48,46 +48,49 @@ measured against the **real** `getDependentStoryFiles` run on the builder's `pre
 - **ceiling**: scoped, then restrict the graph to the builder's actual module set — isolates parse/resolve
   fidelity from the *module-universe* problem (i.e. "what if we knew exactly which files the builder bundles").
 
+> Note: `esbuild metafile` is entry-point driven (entries = stories + preview), so it is inherently
+> scoped — its **whole** and **scoped** rows are the same scan; only **ceiling** restricts it further.
+
 ## Results — whole-repo static graph
 | approach | build ms | peak RSS MB | edges | exact match | recall (1−FN) | precision (1−FP) |
 |---|--:|--:|--:|--:|--:|--:|
-| esbuild metafile (scan) | 94 | 3.1 | 515 | 225/225 | 100.0% | 100.0% |
-| oxc + require() (import+require+dyn) | 162 | 34.2 | 755 | 119/225 | 99.4% | 10.8% |
-| esbuild-strip + oxc(import+require) | 560 | 30.7 | 639 | 225/225 | 100.0% | 100.0% |
-| es-module-lexer (+esbuild strip) + oxc-resolver | 692 | 17.1 | 639 | 225/225 | 100.0% | 100.0% |
-| typescript (preProcessFile + resolveModuleName) | 2216 | 129.4 | 772 | 119/225 | 100.0% | 10.9% |
-| madge (dependency-tree/precinct) | 2718 | 218.5 | 981 | 119/225 | 100.0% | 10.9% |
-| oxc-parser + oxc-resolver | 2979 | 25.1 | 755 | 119/225 | 99.4% | 10.8% |
-| vite pluginContainer.resolveId + oxc-parser | 3663 | 197.5 | 746 | 125/225 | 99.4% | 11.4% |
+| oxc-parser + oxc-resolver | 86 | 20.5 | 755 | 119/225 | 99.4% | 10.8% |
+| esbuild metafile (scan) | 114 | 3.2 | 515 | 225/225 | 100.0% | 100.0% |
+| oxc + require() (import+require+dyn) | 206 | 34.9 | 755 | 119/225 | 99.4% | 10.8% |
+| es-module-lexer (+esbuild strip) + oxc-resolver | 560 | 11.4 | 639 | 225/225 | 100.0% | 100.0% |
+| esbuild-strip + oxc(import+require) | 788 | 27.5 | 639 | 225/225 | 100.0% | 100.0% |
+| typescript (preProcessFile + resolveModuleName) | 910 | 129.4 | 772 | 119/225 | 100.0% | 10.9% |
+| vite pluginContainer.resolveId + oxc-parser | 966 | 176.8 | 746 | 125/225 | 99.4% | 11.4% |
+| madge (dependency-tree/precinct) | 2184 | 210.3 | 981 | 119/225 | 100.0% | 10.9% |
 
 ## Results — preview-scoped (crawl from stories)
 | approach | build ms | peak RSS MB | edges | exact match | recall (1−FN) | precision (1−FP) |
 |---|--:|--:|--:|--:|--:|--:|
-| oxc-parser + oxc-resolver | 83 | 24.4 | 743 | 119/225 | 99.4% | 10.8% |
-| esbuild metafile (scan) | 90 | 3.0 | 515 | 225/225 | 100.0% | 100.0% |
-| oxc + require() (import+require+dyn) | 151 | 36.5 | 743 | 119/225 | 99.4% | 10.8% |
-| es-module-lexer (+esbuild strip) + oxc-resolver | 301 | 7.4 | 313 | 225/225 | 100.0% | 100.0% |
-| esbuild-strip + oxc(import+require) | 366 | 22.3 | 313 | 225/225 | 100.0% | 100.0% |
-| vite pluginContainer.resolveId + oxc-parser | 767 | 176.7 | 701 | 125/225 | 99.4% | 11.4% |
-| typescript (preProcessFile + resolveModuleName) | 954 | 127.3 | 772 | 119/225 | 100.0% | 10.9% |
-| madge (dependency-tree/precinct) | 1588 | 231.1 | 773 | 119/225 | 100.0% | 10.9% |
+| oxc-parser + oxc-resolver | 79 | 17.7 | 743 | 119/225 | 99.4% | 10.8% |
+| esbuild metafile (scan) | 122 | 2.7 | 515 | 225/225 | 100.0% | 100.0% |
+| oxc + require() (import+require+dyn) | 164 | 36.4 | 743 | 119/225 | 99.4% | 10.8% |
+| es-module-lexer (+esbuild strip) + oxc-resolver | 357 | 6.8 | 313 | 225/225 | 100.0% | 100.0% |
+| esbuild-strip + oxc(import+require) | 471 | 14.0 | 313 | 225/225 | 100.0% | 100.0% |
+| typescript (preProcessFile + resolveModuleName) | 891 | 131.2 | 772 | 119/225 | 100.0% | 10.9% |
+| vite pluginContainer.resolveId + oxc-parser | 907 | 174.7 | 701 | 125/225 | 99.4% | 11.4% |
+| madge (dependency-tree/precinct) | 1735 | 211.2 | 773 | 119/225 | 100.0% | 10.9% |
 
 ## Results — ceiling (scoped ∩ builder module set)
 | approach | build ms | peak RSS MB | edges | exact match | recall (1−FN) | precision (1−FP) |
 |---|--:|--:|--:|--:|--:|--:|
-| oxc-parser + oxc-resolver | 91 | 21.6 | 312 | 222/225 | 99.4% | 100.0% |
-| esbuild metafile (scan) | 95 | 3.6 | 313 | 225/225 | 100.0% | 100.0% |
-| oxc + require() (import+require+dyn) | 164 | 32.5 | 312 | 222/225 | 99.4% | 100.0% |
-| es-module-lexer (+esbuild strip) + oxc-resolver | 297 | 12.7 | 313 | 225/225 | 100.0% | 100.0% |
-| esbuild-strip + oxc(import+require) | 339 | 23.5 | 313 | 225/225 | 100.0% | 100.0% |
-| vite pluginContainer.resolveId + oxc-parser | 853 | 190.9 | 312 | 222/225 | 99.4% | 100.0% |
-| typescript (preProcessFile + resolveModuleName) | 1182 | 125.6 | 313 | 225/225 | 100.0% | 100.0% |
-| madge (dependency-tree/precinct) | 1624 | 212.0 | 313 | 225/225 | 100.0% | 100.0% |
+| oxc-parser + oxc-resolver | 87 | 20.8 | 312 | 222/225 | 99.4% | 100.0% |
+| esbuild metafile (scan) | 118 | 3.4 | 313 | 225/225 | 100.0% | 100.0% |
+| oxc + require() (import+require+dyn) | 175 | 31.7 | 312 | 222/225 | 99.4% | 100.0% |
+| es-module-lexer (+esbuild strip) + oxc-resolver | 364 | 8.6 | 313 | 225/225 | 100.0% | 100.0% |
+| esbuild-strip + oxc(import+require) | 478 | 23.5 | 313 | 225/225 | 100.0% | 100.0% |
+| typescript (preProcessFile + resolveModuleName) | 842 | 129.2 | 313 | 225/225 | 100.0% | 100.0% |
+| vite pluginContainer.resolveId + oxc-parser | 915 | 177.1 | 312 | 222/225 | 99.4% | 100.0% |
+| madge (dependency-tree/precinct) | 1813 | 210.1 | 313 | 225/225 | 100.0% | 100.0% |
 
 ## Option C — source-file hashing cost (xxhash-wasm)
 Hashing is not a graph builder; it's the change-detector/cache-key layer. Cost to read+hash the full
 source tree (350 files, 0.5 MB):
-**5.0 ms** (107 MB/s). Incremental runs only re-hash
+**6.4 ms** (83 MB/s). Incremental runs only re-hash
 changed files, so steady-state cost is effectively the changed subset.
 
 ### Option C2 — comment/format-insensitive change detection (hash the stripped output)
@@ -97,10 +100,10 @@ set → no trace → no snapshot. Same transform we already run for the graph, s
 
 | hashing mode | cost (full tree) | sensitive to |
 |---|--:|---|
-| raw bytes (C) | 5.0 ms | any byte (incl. comments/formatting) |
-| esbuild-stripped (C2) | 359.6 ms (72.3× standalone) | runtime code only |
+| raw bytes (C) | 6.4 ms | any byte (incl. comments/formatting) |
+| esbuild-stripped (C2) | 537.2 ms (83.8× standalone) | runtime code only |
 
-Note the 72× is the *standalone* cost (the esbuild transform dominates).
+Note the 84× is the *standalone* cost (the esbuild transform dominates).
 But the recommended grapher (es-module-lexer) **already transforms every file**, so when graphing and
 hashing run together the stripped output is already in hand and C2's marginal cost over C is just the
 extra hash — effectively free. C2 only looks expensive if you hash *without* building the graph.
