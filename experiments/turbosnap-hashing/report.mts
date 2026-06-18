@@ -232,6 +232,37 @@ Two scenarios separate the options, and both echo the earlier fidelity findings:
 ${nodeModulesSection()}`;
 }
 
+// ---- Unified ESM+CJS option ----
+function unifiedSection(): string {
+  const p = path.join(RESULTS, 'esbuild-meta.json');
+  if (!fs.existsSync(p)) return '';
+  const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+  return `
+## A single approach for ESM + CJS with no branching — esbuild \`metafile\`
+The per-file parsers force a choice (lexer for ESM, require-walk for CJS). To handle both **uniformly,
+in one tool, with no module-system branching**, use the one tool that already understands every module
+system: **esbuild**, run as a scan pass (\`bundle: true, metafile: true, write: false\`). esbuild resolves
+with the real resolver, elides TS types, follows \`import\`, dynamic \`import()\`, and \`require()\` alike,
+and its \`metafile\` reports every edge with its \`kind\`. Nothing is emitted — we only read the graph.
+
+Validated here:
+- All-CJS fixture: **${d.cjsFixture.recovered}/${d.cjsFixture.expectedEdges}** \`require()\` edges recovered (all tagged \`require-call\`).
+- One mixed \`.ts\` file (\`import\` + \`require\` + a type-only import): sees the ESM import = **${d.mixedFile.seesEsmImport}**,
+  sees the CJS require = **${d.mixedFile.seesCjsRequire}**, drops the type-only import = **${d.mixedFile.elidesTypeOnly}**. One pass, no branching.
+
+Because \`bundle: true\` follows into node_modules, this also covers CJS-internal files and the #6/#7
+dependency boundary in the same pass — the things the lexer/oxc paths needed extra machinery for.
+
+**Trade-offs.** It is a real resolve+load pass (heavier than per-file lexing, though esbuild is Go-fast
+and writes nothing). It must resolve everything, so non-JS imports (CSS, SVG, assets) need a loader
+shim or \`external\` rule or the pass errors; \`packages: 'external'\` stops at the node_modules boundary if
+you only want source. Dynamic \`require(variable)\` / \`import(variable)\` remain unresolvable (universal).
+Conceptually it's the middle ground between static lexing and PR #3's "use the real build": a fast,
+**builder-independent** bundler used purely to extract the graph. The metafile gives the graph; you
+still roll up per-file content hashes yourself (Option C/C2) for the change signal.
+`;
+}
+
 // ---- CJS support ----
 function cjsSection(): string {
   const p = path.join(RESULTS, 'cjs-fixture.json');
@@ -406,6 +437,7 @@ ${scorecard()}
 | 9 | **Comment-insensitive change detection** is free (Option C2) | hashing esbuild-stripped output (${hashing.normMs.toFixed(1)} ms) ignores comment/format-only edits — reuses the graph transform |
 | 10 | **Reproduces PR #3's module-hash on 9/11 e2e scenarios** | es-module-lexer + stripped hashing matches; only node_modules-dep scenarios (#6/#7) are out of source-graph scope |
 | 11 | **es-module-lexer is a non-starter for CommonJS** | recovers 0/4 \`require()\` edges; require-aware parsers (oxc+AST, TS, precinct) recover 4/4. Type-elision (its TS edge) is moot in plain JS |
+| 12 | **One tool handles ESM+CJS with no branching: esbuild \`metafile\`** | scan pass (write:false) recovers 4/4 CJS edges, sees import+require in one mixed file, elides type-only — and follows node_modules in the same pass |
 
 ## Modes
 - **whole**: parse the entire source tree, build the full import graph (no builder, no story scoping).
@@ -454,6 +486,7 @@ cache and forces one full re-snapshot; (3) needs a raw-hash fallback for files e
 
 ${scenarioSection()}
 ${cjsSection()}
+${unifiedSection()}
 ## Key findings
 1. **The fidelity gap is about *type-only import elision*, not parsing or resolution.** The builder
    (esbuild/Rollup) drops imports used only in type positions — even when written with value syntax and

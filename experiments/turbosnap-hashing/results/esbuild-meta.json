@@ -1,0 +1,21 @@
+{
+  "cjsFixture": {
+    "expectedEdges": 4,
+    "edges": [
+      "util.js -[require-call]-> helper.js",
+      "Button.js -[require-call]-> theme.js",
+      "Button.js -[require-call]-> util.js",
+      "button.stories.js -[require-call]-> Button.js"
+    ],
+    "recovered": 4
+  },
+  "mixedFile": {
+    "edges": [
+      "entry.ts -[import-statement]-> esmDep.ts",
+      "entry.ts -[require-call]-> cjsDep.js"
+    ],
+    "elidesTypeOnly": true,
+    "seesEsmImport": true,
+    "seesCjsRequire": true
+  }
+}
