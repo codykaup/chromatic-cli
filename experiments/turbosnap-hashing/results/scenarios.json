@@ -1,0 +1,625 @@
+{
+  "generatedAt": "2026-06-18T01:57:51.420Z",
+  "runs": {
+    "oxc_raw": {
+      "storyCount": 115,
+      "results": {
+        "1_rebuild_no_edit": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "2_story_substantive": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "3_story_comment_only": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "4_used_dep_code": {
+          "changed": 43,
+          "added": 0,
+          "removed": 0
+        },
+        "5_preview_config": {
+          "changed": 115,
+          "added": 0,
+          "removed": 0
+        },
+        "6_preview_dep_substantive": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "7_preview_dep_comment": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "8_add_story": {
+          "changed": 0,
+          "added": 1,
+          "removed": 0
+        },
+        "9_remove_story": {
+          "changed": 0,
+          "added": 0,
+          "removed": 1
+        },
+        "10_readme_out_of_graph": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "11_paths_relocated_same_content": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        }
+      }
+    },
+    "oxc_stripped": {
+      "storyCount": 115,
+      "results": {
+        "1_rebuild_no_edit": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "2_story_substantive": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "3_story_comment_only": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "4_used_dep_code": {
+          "changed": 43,
+          "added": 0,
+          "removed": 0
+        },
+        "5_preview_config": {
+          "changed": 115,
+          "added": 0,
+          "removed": 0
+        },
+        "6_preview_dep_substantive": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "7_preview_dep_comment": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "8_add_story": {
+          "changed": 0,
+          "added": 1,
+          "removed": 0
+        },
+        "9_remove_story": {
+          "changed": 0,
+          "added": 0,
+          "removed": 1
+        },
+        "10_readme_out_of_graph": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "11_paths_relocated_same_content": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        }
+      }
+    },
+    "eslexer_raw": {
+      "storyCount": 115,
+      "results": {
+        "1_rebuild_no_edit": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "2_story_substantive": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "3_story_comment_only": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "4_used_dep_code": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "5_preview_config": {
+          "changed": 115,
+          "added": 0,
+          "removed": 0
+        },
+        "6_preview_dep_substantive": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "7_preview_dep_comment": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "8_add_story": {
+          "changed": 0,
+          "added": 1,
+          "removed": 0
+        },
+        "9_remove_story": {
+          "changed": 0,
+          "added": 0,
+          "removed": 1
+        },
+        "10_readme_out_of_graph": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "11_paths_relocated_same_content": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        }
+      }
+    },
+    "eslexer_stripped": {
+      "storyCount": 115,
+      "results": {
+        "1_rebuild_no_edit": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "2_story_substantive": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "3_story_comment_only": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "4_used_dep_code": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "5_preview_config": {
+          "changed": 115,
+          "added": 0,
+          "removed": 0
+        },
+        "6_preview_dep_substantive": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "7_preview_dep_comment": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "8_add_story": {
+          "changed": 0,
+          "added": 1,
+          "removed": 0
+        },
+        "9_remove_story": {
+          "changed": 0,
+          "added": 0,
+          "removed": 1
+        },
+        "10_readme_out_of_graph": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "11_paths_relocated_same_content": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        }
+      }
+    },
+    "typescript_raw": {
+      "storyCount": 115,
+      "results": {
+        "1_rebuild_no_edit": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "2_story_substantive": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "3_story_comment_only": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "4_used_dep_code": {
+          "changed": 43,
+          "added": 0,
+          "removed": 0
+        },
+        "5_preview_config": {
+          "changed": 115,
+          "added": 0,
+          "removed": 0
+        },
+        "6_preview_dep_substantive": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "7_preview_dep_comment": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "8_add_story": {
+          "changed": 0,
+          "added": 1,
+          "removed": 0
+        },
+        "9_remove_story": {
+          "changed": 0,
+          "added": 0,
+          "removed": 1
+        },
+        "10_readme_out_of_graph": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "11_paths_relocated_same_content": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        }
+      }
+    },
+    "typescript_stripped": {
+      "storyCount": 115,
+      "results": {
+        "1_rebuild_no_edit": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "2_story_substantive": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "3_story_comment_only": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "4_used_dep_code": {
+          "changed": 43,
+          "added": 0,
+          "removed": 0
+        },
+        "5_preview_config": {
+          "changed": 115,
+          "added": 0,
+          "removed": 0
+        },
+        "6_preview_dep_substantive": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "7_preview_dep_comment": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "8_add_story": {
+          "changed": 0,
+          "added": 1,
+          "removed": 0
+        },
+        "9_remove_story": {
+          "changed": 0,
+          "added": 0,
+          "removed": 1
+        },
+        "10_readme_out_of_graph": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "11_paths_relocated_same_content": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        }
+      }
+    },
+    "vite_raw": {
+      "storyCount": 115,
+      "results": {
+        "1_rebuild_no_edit": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "2_story_substantive": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "3_story_comment_only": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "4_used_dep_code": {
+          "changed": 43,
+          "added": 0,
+          "removed": 0
+        },
+        "5_preview_config": {
+          "changed": 115,
+          "added": 0,
+          "removed": 0
+        },
+        "6_preview_dep_substantive": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "7_preview_dep_comment": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "8_add_story": {
+          "changed": 0,
+          "added": 1,
+          "removed": 0
+        },
+        "9_remove_story": {
+          "changed": 0,
+          "added": 0,
+          "removed": 1
+        },
+        "10_readme_out_of_graph": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "11_paths_relocated_same_content": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        }
+      }
+    },
+    "vite_stripped": {
+      "storyCount": 115,
+      "results": {
+        "1_rebuild_no_edit": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "2_story_substantive": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "3_story_comment_only": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "4_used_dep_code": {
+          "changed": 43,
+          "added": 0,
+          "removed": 0
+        },
+        "5_preview_config": {
+          "changed": 115,
+          "added": 0,
+          "removed": 0
+        },
+        "6_preview_dep_substantive": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "7_preview_dep_comment": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "8_add_story": {
+          "changed": 0,
+          "added": 1,
+          "removed": 0
+        },
+        "9_remove_story": {
+          "changed": 0,
+          "added": 0,
+          "removed": 1
+        },
+        "10_readme_out_of_graph": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "11_paths_relocated_same_content": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        }
+      }
+    },
+    "madge_raw": {
+      "storyCount": 115,
+      "results": {
+        "1_rebuild_no_edit": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "2_story_substantive": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "3_story_comment_only": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "4_used_dep_code": {
+          "changed": 43,
+          "added": 0,
+          "removed": 0
+        },
+        "5_preview_config": {
+          "changed": 115,
+          "added": 0,
+          "removed": 0
+        },
+        "6_preview_dep_substantive": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "7_preview_dep_comment": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "8_add_story": {
+          "changed": 0,
+          "added": 1,
+          "removed": 0
+        },
+        "9_remove_story": {
+          "changed": 0,
+          "added": 0,
+          "removed": 1
+        },
+        "10_readme_out_of_graph": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "11_paths_relocated_same_content": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        }
+      }
+    },
+    "madge_stripped": {
+      "storyCount": 115,
+      "results": {
+        "1_rebuild_no_edit": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "2_story_substantive": {
+          "changed": 3,
+          "added": 0,
+          "removed": 0
+        },
+        "3_story_comment_only": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "4_used_dep_code": {
+          "changed": 43,
+          "added": 0,
+          "removed": 0
+        },
+        "5_preview_config": {
+          "changed": 115,
+          "added": 0,
+          "removed": 0
+        },
+        "6_preview_dep_substantive": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "7_preview_dep_comment": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0,
+          "note": "node_modules dep — not in source graph"
+        },
+        "8_add_story": {
+          "changed": 0,
+          "added": 1,
+          "removed": 0
+        },
+        "9_remove_story": {
+          "changed": 0,
+          "added": 0,
+          "removed": 1
+        },
+        "10_readme_out_of_graph": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        },
+        "11_paths_relocated_same_content": {
+          "changed": 0,
+          "added": 0,
+          "removed": 0
+        }
+      }
+    }
+  }
+}

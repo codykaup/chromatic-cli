@@ -8,10 +8,10 @@
   "hashing": {
     "files": 350,
     "bytes": 558742,
-    "rawMs": 7.632165999999415,
-    "rawMbPerSec": 69.81738799935717,
-    "normMs": 465.39886900000056,
-    "normMultiplier": 60.97860934891042,
+    "rawMs": 6.95156599999973,
+    "rawMbPerSec": 76.6529289799567,
+    "normMs": 408.5169760000026,
+    "normMultiplier": 58.76617959176659,
     "stripped": 350,
     "fellBack": 0,
     "demo": {
@@ -19,14 +19,14 @@
       "rawHashChanged": true,
       "normHashChanged": false
     },
-    "ms": 7.632165999999415,
-    "mbPerSec": 69.81738799935717
+    "ms": 6.95156599999973,
+    "mbPerSec": 76.6529289799567
   },
   "rows": [
     {
       "approach": "oxc-parser + oxc-resolver",
-      "buildMs": 103.672193,
-      "peakRssMb": 23.640625,
+      "buildMs": 102.87698699999999,
+      "peakRssMb": 24.9609375,
       "graphNodes": 335,
       "graphEdges": 755,
       "exactMatch": 119,
@@ -51,8 +51,8 @@
     },
     {
       "approach": "oxc-parser + oxc-resolver",
-      "buildMs": 100.90191300000004,
-      "peakRssMb": 20.81640625,
+      "buildMs": 99.982504,
+      "peakRssMb": 20.91796875,
       "graphNodes": 331,
       "graphEdges": 743,
       "exactMatch": 119,
@@ -78,8 +78,8 @@
     },
     {
       "approach": "oxc-parser + oxc-resolver",
-      "buildMs": 101.24310100000002,
-      "peakRssMb": 21.8203125,
+      "buildMs": 102.535482,
+      "peakRssMb": 19.96484375,
       "graphNodes": 224,
       "graphEdges": 312,
       "exactMatch": 222,
@@ -105,8 +105,8 @@
     },
     {
       "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
-      "buildMs": 557.0557309999999,
-      "peakRssMb": 16.12109375,
+      "buildMs": 496.79654000000005,
+      "peakRssMb": 15.94921875,
       "graphNodes": 334,
       "graphEdges": 639,
       "exactMatch": 225,
@@ -125,8 +125,8 @@
     },
     {
       "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
-      "buildMs": 335.777091,
-      "peakRssMb": 6.984375,
+      "buildMs": 310.40766199999996,
+      "peakRssMb": 12.62109375,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -146,8 +146,8 @@
     },
     {
       "approach": "es-module-lexer (+esbuild strip) + oxc-resolver",
-      "buildMs": 335.947084,
-      "peakRssMb": 11.23046875,
+      "buildMs": 362.08367499999997,
+      "peakRssMb": 12.8359375,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -167,8 +167,8 @@
     },
     {
       "approach": "typescript (preProcessFile + resolveModuleName)",
-      "buildMs": 1072.126423,
-      "peakRssMb": 127.34375,
+      "buildMs": 1002.4367870000001,
+      "peakRssMb": 124.61328125,
       "graphNodes": 338,
       "graphEdges": 772,
       "exactMatch": 119,
@@ -188,8 +188,8 @@
     },
     {
       "approach": "typescript (preProcessFile + resolveModuleName)",
-      "buildMs": 1029.08906,
-      "peakRssMb": 128.2578125,
+      "buildMs": 1043.596367,
+      "peakRssMb": 129.05859375,
       "graphNodes": 337,
       "graphEdges": 772,
       "exactMatch": 119,
@@ -210,8 +210,8 @@
     },
     {
       "approach": "typescript (preProcessFile + resolveModuleName)",
-      "buildMs": 1022.228975,
-      "peakRssMb": 132.11328125,
+      "buildMs": 1023.9689790000001,
+      "peakRssMb": 127.61328125,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,
@@ -232,8 +232,8 @@
     },
     {
       "approach": "vite pluginContainer.resolveId + oxc-parser",
-      "buildMs": 1099.301222,
-      "peakRssMb": 197.00390625,
+      "buildMs": 1183.2896640000001,
+      "peakRssMb": 198.87890625,
       "graphNodes": 333,
       "graphEdges": 746,
       "exactMatch": 125,
@@ -256,8 +256,8 @@
     },
     {
       "approach": "vite pluginContainer.resolveId + oxc-parser",
-      "buildMs": 1105.288255,
-      "peakRssMb": 173.75,
+      "buildMs": 992.879657,
+      "peakRssMb": 181.66796875,
       "graphNodes": 321,
       "graphEdges": 701,
       "exactMatch": 125,
@@ -281,8 +281,8 @@
     },
     {
       "approach": "vite pluginContainer.resolveId + oxc-parser",
-      "buildMs": 1168.086407,
-      "peakRssMb": 183.00390625,
+      "buildMs": 1015.258861,
+      "peakRssMb": 193.44921875,
       "graphNodes": 224,
       "graphEdges": 312,
       "exactMatch": 222,
@@ -306,8 +306,8 @@
     },
     {
       "approach": "madge (dependency-tree/precinct)",
-      "buildMs": 2723.8084470000003,
-      "peakRssMb": 239.07421875,
+      "buildMs": 2383.532252,
+      "peakRssMb": 258.69921875,
       "graphNodes": 420,
       "graphEdges": 981,
       "exactMatch": 119,
@@ -327,8 +327,8 @@
     },
     {
       "approach": "madge (dependency-tree/precinct)",
-      "buildMs": 1886.8159160000002,
-      "peakRssMb": 192.80859375,
+      "buildMs": 1830.4752189999997,
+      "peakRssMb": 208.5078125,
       "graphNodes": 338,
       "graphEdges": 773,
       "exactMatch": 119,
@@ -348,8 +348,8 @@
     },
     {
       "approach": "madge (dependency-tree/precinct)",
-      "buildMs": 1944.0935949999998,
-      "peakRssMb": 214.44921875,
+      "buildMs": 1862.099421,
+      "peakRssMb": 233.921875,
       "graphNodes": 225,
       "graphEdges": 313,
       "exactMatch": 225,

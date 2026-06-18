@@ -29,7 +29,9 @@ See [`results/report.md`](./results/report.md) for the full tables. Headline:
   exposing a `parse` + `resolve` (or a `run`).
 - `bench.mts` — runs one approach in one mode (`whole` | `scoped` | `ceiling`), prints a JSON result.
 - `report.mts` — orchestrator: runs every approach × mode in isolated processes, plus the hashing
-  micro-benchmark, and writes `results/results.json` + `results/report.md`.
+  micro-benchmark, folds in the scenario results, and writes `results/results.json` + `results/report.md`.
+- `scenarios.mts` — reproduces PR #3's 11-scenario end-to-end matrix using our builder-independent
+  graph + our own content hashes (raw vs esbuild-stripped), for every approach → `results/scenarios.json`.
 - `build-gt.mjs` — esbuild bundling for the ground-truth entry (stubs `findChangedDependencies` to
   keep the snyk/execa subtree out of the bundle).
 

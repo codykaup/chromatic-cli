@@ -145,6 +145,93 @@ fs.writeFileSync(path.join(RESULTS, 'results.json'), JSON.stringify(summary, nul
 const fmt = (n: number, d = 0) => n.toFixed(d);
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
+// ---- End-to-end scenarios vs PR #3 (module-hash) ----
+function scenarioSection(): string {
+  const p = path.join(RESULTS, 'scenarios.json');
+  if (!fs.existsSync(p)) return '';
+  const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const runs = data.runs as Record<string, { storyCount: number; results: Record<string, any> }>;
+
+  // PR #3's documented module-hash expectations (changed unless +added / −removed).
+  const LABELS: Record<string, string> = {
+    '1_rebuild_no_edit': 'rebuild, no edit (determinism)',
+    '2_story_substantive': 'story file — substantive',
+    '3_story_comment_only': 'story file — comment-only',
+    '4_used_dep_code': 'used dependency — code change',
+    '5_preview_config': 'preview config (.storybook/preview.ts)',
+    '6_preview_dep_substantive': 'preview dep (node_modules) — substantive',
+    '7_preview_dep_comment': 'preview dep (node_modules) — comment-only',
+    '8_add_story': 'add 1 story',
+    '9_remove_story': 'remove 1 story',
+    '10_readme_out_of_graph': 'README (out of graph)',
+    '11_paths_relocated_same_content': 'dep paths relocated, content identical',
+  };
+  const PR: Record<string, string> = {
+    '1_rebuild_no_edit': '0', '2_story_substantive': '3', '3_story_comment_only': '0',
+    '4_used_dep_code': '3', '5_preview_config': '115', '6_preview_dep_substantive': '115',
+    '7_preview_dep_comment': '115', '8_add_story': '+1', '9_remove_story': '−1',
+    '10_readme_out_of_graph': '0', '11_paths_relocated_same_content': '0',
+  };
+  const cell = (r: any) => (r.added ? `+${r.added}` : r.removed ? `−${r.removed}` : `${r.changed}`);
+  const ids = Object.keys(LABELS);
+
+  // Main table: PR vs recommended (eslexer + stripped).
+  const rec = runs['eslexer_stripped']?.results ?? {};
+  const mainRows = ids
+    .map((id, i) => {
+      const got = cell(rec[id]);
+      const match = got === PR[id] ? '✅' : rec[id]?.note ? '➖ gap' : '⚠️';
+      return `| ${i + 1} | ${LABELS[id]} | ${PR[id]} | ${got} | ${match} |`;
+    })
+    .join('\n');
+
+  // Divergence matrix across options (changed-count cells).
+  const cols: [string, string][] = [
+    ['eslexer_stripped', 'es-lexer +stripped (rec.)'],
+    ['eslexer_raw', 'es-lexer +raw'],
+    ['oxc_stripped', 'oxc +stripped'],
+    ['typescript_stripped', 'ts +stripped'],
+    ['madge_stripped', 'madge +stripped'],
+    ['vite_stripped', 'vite +stripped'],
+  ];
+  const matrixHead = `| # | scenario | PR | ${cols.map((c) => c[1]).join(' | ')} |\n|---|---|--:|${cols.map(() => '--:').join('|')}|`;
+  const matrixRows = ids
+    .map((id, i) => {
+      const cells = cols.map(([k]) => cell(runs[k]?.results?.[id] ?? {}));
+      return `| ${i + 1} | ${LABELS[id]} | ${PR[id]} | ${cells.join(' | ')} |`;
+    })
+    .join('\n');
+
+  const matches = ids.filter((id) => cell(rec[id]) === PR[id]).length;
+
+  return `
+## End-to-end scenarios vs PR #3 (module-hash strategy)
+PR #3 reduces each story to a content-hash rollup **from the builder's module graph + per-module
+\`contentHash\`** and diffs builds. Here we run the **same 11 scenarios** but feed the rollup a
+builder-INDEPENDENT graph (our static approaches) and our own content hashes (raw vs esbuild-stripped),
+on this repo's Storybook (${runs['eslexer_stripped']?.storyCount ?? '?'} stories). Cells are the count of stories flagged for re-capture
+(\`changed\`, or \`+added\` / \`−removed\`).
+
+### Recommended option (es-module-lexer + stripped hashing) vs PR #3
+| # | scenario | PR #3 (builder) | ours | match |
+|---|---|--:|--:|:--:|
+${mainRows}
+
+**${matches}/11 scenarios match PR #3 exactly.** The only divergences are #6/#7 — a preview dependency
+*inside node_modules*. PR #3 catches those because node_modules are modules in the builder graph; our
+source-graph stops at the package boundary. That's the known trade-off: closing it means either
+crawling into node_modules (costly) or keeping the existing dependency-change signal for that case.
+
+### Where the options diverge (changed-story count)
+${matrixHead}
+${matrixRows}
+
+Two scenarios separate the options, and both echo the earlier fidelity findings:
+- **#3 (comment-only edit):** raw hashing re-captures 3 stories; **stripped hashing correctly reports 0** (matches PR #3, which strips via the builder transform).
+- **#4 (edit a used dependency, \`auth.ts\`):** the correct answer is **3** (the CSF-composition set). **es-module-lexer gets 3**; oxc / TypeScript / vite / madge over-capture to **43** — the same type-only-import over-connection, now as 14× wasted snapshots. Only the esbuild-stripped parse matches the builder.
+`;
+}
+
 function table(mode: string) {
   const r = rows.filter((x) => x.mode === mode).sort((a, b) => a.buildMs - b.buildMs);
   const head =
@@ -238,6 +325,7 @@ ${scorecard()}
 | 7 | Parser/resolver = **speed/packaging**, not correctness | oxc fastest (native), TS pure-JS but heavy, Vite heaviest with no fidelity gain, madge slowest |
 | 8 | **Hashing is cheap** (Option C) | ${hashing.rawMs.toFixed(1)} ms to hash the whole tree (${hashing.rawMbPerSec.toFixed(0)} MB/s) → incremental graph cache is viable |
 | 9 | **Comment-insensitive change detection** is free (Option C2) | hashing esbuild-stripped output (${hashing.normMs.toFixed(1)} ms) ignores comment/format-only edits — reuses the graph transform |
+| 10 | **Reproduces PR #3's module-hash on 9/11 e2e scenarios** | es-module-lexer + stripped hashing matches; only node_modules-dep scenarios (#6/#7) are out of source-graph scope |
 
 ## Modes
 - **whole**: parse the entire source tree, build the full import graph (no builder, no story scoping).
@@ -284,6 +372,7 @@ Cons: (1) it's a *behavior change* — you'd stop snapshotting on comment-only e
 deliberate; (2) hashes are only stable for a fixed esbuild version, so a toolchain bump invalidates the
 cache and forces one full re-snapshot; (3) needs a raw-hash fallback for files esbuild can't parse.
 
+${scenarioSection()}
 ## Key findings
 1. **The fidelity gap is about *type-only import elision*, not parsing or resolution.** The builder
    (esbuild/Rollup) drops imports used only in type positions — even when written with value syntax and
