@@ -13,6 +13,7 @@ import * as git from '../../git/git';
 import getEnvironment from '../../lib/getEnvironment';
 import TestLogger from '../testLogger';
 import { findChangedDependencies } from './findChangedDependencies';
+import { FindChangedDependenciesInput } from './types';
 
 vi.mock('snyk-nodejs-lockfile-parser');
 vi.mock('snyk-nodejs-plugin');
@@ -57,18 +58,19 @@ afterEach(() => {
   createChangedPackagesGraph.mockReset();
 });
 
-const getContext = (
-  input: Partial<Omit<Context, 'git' | 'options'>> & {
-    git: Partial<Context['git']>;
-    options?: Partial<Context['options']>;
-  }
-) =>
-  ({
+const getInput = (input: {
+  git: Partial<Context['git']>;
+  options?: Partial<Context['options']>;
+}): FindChangedDependenciesInput => {
+  const environment = getEnvironment();
+  return {
     log: new TestLogger(),
-    options: {},
-    env: getEnvironment(),
-    ...input,
-  }) as Context;
+    packageMetadataChanges: input.git.packageMetadataChanges,
+    untraced: input.options?.untraced,
+    manifestConcurrency: environment.CHROMATIC_TURBOSNAP_MANIFEST_CONCURRENCY,
+    packageConcurrency: environment.CHROMATIC_TURBOSNAP_PACKAGE_CONCURRENCY,
+  };
+};
 
 const AMetadataChanges = [{ changedFiles: ['package.json'], commit: 'A' }];
 
@@ -118,7 +120,7 @@ function mockChangedPackagesGraph(dependencies: string[]) {
 
 describe('findChangedDependencies', () => {
   it('returns nothing given no changes', async () => {
-    const context = getContext({ git: { packageMetadataChanges: [] } });
+    const context = getInput({ git: { packageMetadataChanges: [] } });
 
     await expect(findChangedDependencies(context)).resolves.toEqual([]);
     expect(checkoutFile).not.toHaveBeenCalled();
@@ -126,7 +128,7 @@ describe('findChangedDependencies', () => {
   });
 
   it('returns nothing given no changes to found package metadata', async () => {
-    const context = getContext({
+    const context = getInput({
       // Only detected metadata change is to a file that's not on disk
       git: { packageMetadataChanges: [{ changedFiles: ['foo/package.json'], commit: 'A' }] },
     });
@@ -141,7 +143,7 @@ describe('findChangedDependencies', () => {
     mockInspect(/* HEAD */ ['react@18.2.0'], /* Baseline A */ ['react@18.2.0']);
     mockChangedPackagesGraph([]);
 
-    const context = getContext({ git: { packageMetadataChanges: AMetadataChanges } });
+    const context = getInput({ git: { packageMetadataChanges: AMetadataChanges } });
 
     await expect(findChangedDependencies(context)).resolves.toEqual([]);
   });
@@ -151,7 +153,7 @@ describe('findChangedDependencies', () => {
     mockInspect(/* HEAD */ [], /* Baseline A */ []);
     mockChangedPackagesGraph([]);
 
-    const context = getContext({ git: { packageMetadataChanges: AMetadataChanges } });
+    const context = getInput({ git: { packageMetadataChanges: AMetadataChanges } });
 
     await expect(findChangedDependencies(context)).resolves.toEqual([]);
   });
@@ -160,7 +162,7 @@ describe('findChangedDependencies', () => {
     mockInspect(/* HEAD */ ['react@18.2.0'], /* Baseline A */ ['react@18.2.0']);
     mockChangedPackagesGraph([]);
 
-    const context = getContext({ git: { packageMetadataChanges: AMetadataChanges } });
+    const context = getInput({ git: { packageMetadataChanges: AMetadataChanges } });
 
     await expect(findChangedDependencies(context)).resolves.toEqual([]);
   });
@@ -169,7 +171,7 @@ describe('findChangedDependencies', () => {
     mockInspect(/* HEAD */ ['react@18.2.0'], /* Baseline A */ ['react@18.3.0']);
     mockChangedPackagesGraph(['react@18.3.0']);
 
-    const context = getContext({ git: { packageMetadataChanges: AMetadataChanges } });
+    const context = getInput({ git: { packageMetadataChanges: AMetadataChanges } });
 
     await expect(findChangedDependencies(context)).resolves.toEqual(['react']);
   });
@@ -178,7 +180,7 @@ describe('findChangedDependencies', () => {
     mockInspect(/* HEAD */ ['react@18.2.0'], /* Baseline A */ ['vue@3.2.0']);
     mockChangedPackagesGraph(['vue@3.2.0', 'react@18.2.0']);
 
-    const context = getContext({ git: { packageMetadataChanges: AMetadataChanges } });
+    const context = getInput({ git: { packageMetadataChanges: AMetadataChanges } });
 
     await expect(findChangedDependencies(context)).resolves.toEqual(['vue', 'react']);
   });
@@ -192,7 +194,7 @@ describe('findChangedDependencies', () => {
     );
     mockChangedPackagesGraph(['loose-envify']);
 
-    const context = getContext({ git: { packageMetadataChanges: AMetadataChanges } });
+    const context = getInput({ git: { packageMetadataChanges: AMetadataChanges } });
 
     await expect(findChangedDependencies(context)).resolves.toEqual(['loose-envify']);
   });
@@ -209,7 +211,7 @@ describe('findChangedDependencies', () => {
 
     mockChangedPackagesGraph(['react@18.3.0', 'lodash@4.18.0']);
 
-    const context = getContext({
+    const context = getInput({
       git: {
         packageMetadataChanges: [
           { changedFiles: ['package.json'], commit: 'A' },
@@ -218,10 +220,7 @@ describe('findChangedDependencies', () => {
       },
     });
 
-    await expect(findChangedDependencies(getContext(context))).resolves.toEqual([
-      'react',
-      'lodash',
-    ]);
+    await expect(findChangedDependencies(context)).resolves.toEqual(['react', 'lodash']);
   });
 
   it('looks for manifest and lock files in subpackages', async () => {
@@ -242,7 +241,7 @@ describe('findChangedDependencies', () => {
 
     mockChangedPackagesGraph(['react@18.3.0', 'lodash@4.18.0']);
 
-    const context = getContext({
+    const context = getInput({
       git: {
         packageMetadataChanges: [
           { changedFiles: ['package.json', 'subdir/package.json'], commit: 'A' },
@@ -293,7 +292,7 @@ describe('findChangedDependencies', () => {
     );
     mockChangedPackagesGraph([]);
 
-    const context = getContext({
+    const context = getInput({
       git: {
         packageMetadataChanges: [{ changedFiles: ['yarn.lock'], commit: 'A' }],
       },
@@ -314,7 +313,7 @@ describe('findChangedDependencies', () => {
       return Promise.resolve(file.startsWith('**') ? [file.replace('**', 'subdir')] : [file]);
     });
 
-    const context = getContext({
+    const context = getInput({
       git: {
         // The metadata changes are filtered by untraced, but lockfile changes could still get in here
         packageMetadataChanges: [{ changedFiles: ['yarn.lock'], commit: 'A' }],
@@ -340,7 +339,7 @@ describe('findChangedDependencies', () => {
     mockInspect(/* HEAD */ [], /* Baseline A */ []);
     mockChangedPackagesGraph([]);
 
-    const context = getContext({
+    const context = getInput({
       git: {
         packageMetadataChanges: [{ changedFiles: ['subdir/package-lock.json'], commit: 'A' }],
       },
@@ -382,7 +381,7 @@ describe('findChangedDependencies', () => {
     mockInspect(/* HEAD */ ['react@18.2.0'], /* Baseline A */ ['react@18.3.0']);
     mockChangedPackagesGraph(['react@18.3.0']);
 
-    const context = getContext({
+    const context = getInput({
       git: {
         packageMetadataChanges: [{ changedFiles: ['package.json'], commit: 'A' }],
       },

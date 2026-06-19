@@ -1,4 +1,18 @@
 import { HTTPClientError } from '../../io/httpClient';
+import { TurboSnapBailReason } from '../../types';
+
+/**
+ * Error thrown when the webpack stats file required for TurboSnap tracing is missing. Carries the
+ * bail reason so the caller can record it on its context before the error propagates.
+ */
+export class MissingStatsFileError extends Error {
+  public bailReason: TurboSnapBailReason = { missingStatsFile: true };
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'MissingStatsFileError';
+  }
+}
 
 /**
  * Error thrown when a lockfile exceeds the configured maximum size and parsing is skipped.

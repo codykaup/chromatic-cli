@@ -2,7 +2,7 @@ import { statSync } from 'fs';
 import path from 'path';
 import { inspect } from 'snyk-nodejs-plugin';
 
-import { Context } from '../../types';
+import { Logger } from '../log';
 import { LockFileParseFailedError, LockFileSizeExceededError } from './errors';
 
 export const MAX_LOCK_FILE_SIZE = 10_485_760; // 10 MB
@@ -14,7 +14,7 @@ export interface BaselineConfig {
 }
 
 export const getDependencies = async (
-  ctx: Context,
+  log: Logger,
   {
     rootPath,
     manifestPath,
@@ -30,7 +30,7 @@ export const getDependencies = async (
 
   // We can run into OOM errors if the lock file is too large. Therefore, we bail early and skip
   // lock file parsing because some TurboSnap is better than no TurboSnap.
-  ensureLockFileSize(ctx, absoluteLockfilePath);
+  ensureLockFileSize(log, absoluteLockfilePath);
 
   try {
     const headGraph = await inspectLockfile(absoluteManifestPath, absoluteLockfilePath);
@@ -41,7 +41,7 @@ export const getDependencies = async (
 
     return headGraph.scannedProjects[0].depGraph;
   } catch (err) {
-    ctx.log.debug({ rootPath, manifestPath, lockfilePath }, 'Failed to get dependencies');
+    log.debug({ rootPath, manifestPath, lockfilePath }, 'Failed to get dependencies');
     throw err;
   }
 };
@@ -57,13 +57,13 @@ async function inspectLockfile(absoluteManifestPath: string, absoluteLockfilePat
   }
 }
 
-function ensureLockFileSize(ctx: Context, fullPath: string) {
+function ensureLockFileSize(log: Logger, fullPath: string) {
   const maxLockFileSize =
     Number.parseInt(process.env.MAX_LOCK_FILE_SIZE ?? '') || MAX_LOCK_FILE_SIZE;
 
   const stats = statSync(fullPath);
   if (stats.size > maxLockFileSize) {
-    ctx.log.warn({ fullPath }, 'Lock file too large to parse, skipping');
+    log.warn({ fullPath }, 'Lock file too large to parse, skipping');
     throw new LockFileSizeExceededError(fullPath, stats.size);
   }
 }

@@ -1,12 +1,13 @@
 import path from 'path';
 
-import { Context, Module, Reason, Stats } from '../../types';
+import { Module, Reason, Stats, TurboSnap } from '../../types';
 import noCSFGlobs from '../../ui/messages/errors/noCSFGlobs';
 import tracedAffectedFiles from '../../ui/messages/info/tracedAffectedFiles';
 import bailFile from '../../ui/messages/warnings/bailFile';
 import { posix } from '../posix';
 import { isPackageManifestFile, matchesFile } from '../utilities';
 import { SUPPORTED_LOCK_FILES } from './findChangedDependencies';
+import { GetDependentStoryFilesInput, GetDependentStoryFilesResult } from './types';
 
 type FilePath = string;
 type NormalizedName = string;
@@ -56,25 +57,26 @@ export function normalizePath(posixPath: string, rootPath: string, baseDirectory
  * the changed git files. The result is a map of Module ID => file path. In the end we'll only send
  * the Module IDs to Chromatic, the file paths are only for logging purposes.
  *
- * @param ctx The context set when executing the CLI.
+ * @param input The data and configuration TurboSnap needs to trace dependent story files.
  * @param stats The stats file information from the project's builder (Webpack, for example).
  * @param statsPath The path to the stats file generated from the project's builder (Webpack, for
  * example).
  * @param changedFiles A list of changed files.
  * @param changedDependencies A list of changed dependencies.
  *
- * @returns Any story files that are impacted by the list of changed files and dependencies.
+ * @returns The resulting TurboSnap state, untraced files, and any affected story files (omitted
+ * when TurboSnap bailed).
  */
 // TODO: refactor this function
 // eslint-disable-next-line complexity, max-statements
 export async function getDependentStoryFiles(
-  ctx: Context,
+  input: GetDependentStoryFilesInput,
   stats: Stats,
   statsPath: string,
   changedFiles: string[],
   changedDependencies: string[] = []
-) {
-  const { rootPath } = ctx.git || {};
+): Promise<GetDependentStoryFilesResult> {
+  const { log, rootPath } = input;
   if (!rootPath) {
     throw new Error('Failed to determine repository root');
   }
@@ -83,13 +85,15 @@ export async function getDependentStoryFiles(
     baseDir: baseDirectory = '',
     configDir: configDirectory = '.storybook',
     staticDir: staticDirectory = [],
-  } = ctx.storybook || {};
+  } = input;
   const {
     storybookBuildDir,
     // eslint-disable-next-line unicorn/prevent-abbreviations
     storybookConfigDir = configDirectory,
+    storybookBaseDir,
     untraced = [],
-  } = ctx.options;
+    traceChanged,
+  } = input;
 
   // Convert a "webpack path" (relative to storybookBaseDir) to a "git path" (relative to repository root)
   // e.g. `./src/file.js` => `path/to/storybook/src/file.js`
@@ -106,8 +110,8 @@ export async function getDependentStoryFiles(
   const storybookDirectory = normalize(posix(storybookConfigDir));
   const staticDirectories = staticDirectory.map((directory: string) => normalize(posix(directory)));
 
-  ctx.log.debug('BASE Directory:', baseDirectory);
-  ctx.log.debug('Storybook CONFIG Directory:', storybookDirectory);
+  log.debug('BASE Directory:', baseDirectory);
+  log.debug('Storybook CONFIG Directory:', storybookDirectory);
 
   // NOTE: this only works with `main:stories` -- if stories are imported from files in `.storybook/preview.js`
   // we'll need a different approach to figure out CSF files (maybe the user should pass a glob?).
@@ -191,7 +195,7 @@ export async function getDependentStoryFiles(
         !storiesEntryFiles.includes(normalize(module_.name))
     );
     const entryFile = foundEntry && normalize(foundEntry.name);
-    ctx.log.error(
+    log.error(
       noCSFGlobs({
         statsPath,
         storybookDir: storybookDirectory,
@@ -206,12 +210,12 @@ export async function getDependentStoryFiles(
   const isStaticFile = (name: string) =>
     staticDirectories.some((directory) => name && name.startsWith(`${directory}/`));
 
-  ctx.untracedFiles = [];
+  const untracedFiles: string[] = [];
 
   function untrace(filepath: string) {
     filepath = filepath.replace(/\s\+\s\d+\smodules?$/, ''); // strip ' + N modules' from the string before matching against `untraced`
     if (untraced.some((glob) => matchesFile(glob, filepath))) {
-      ctx.untracedFiles?.push(filepath);
+      untracedFiles.push(filepath);
       return false;
     }
     return true;
@@ -236,7 +240,7 @@ export async function getDependentStoryFiles(
   const checkedIds = {};
   const toCheck: TraceToCheck[] = [];
 
-  ctx.turboSnap = {
+  const turboSnap: TurboSnap = {
     rootPath,
     baseDir: baseDirectory,
     storybookDir: storybookDirectory,
@@ -254,9 +258,9 @@ export async function getDependentStoryFiles(
   if (nodeModules.size === 0 && changedDependencies.length > 0) {
     // If we didn't find any node_modules in the stats file, it's probably incomplete and we can't
     // trace changed dependencies, so we bail just in case.
-    ctx.turboSnap.bailReason = {
+    turboSnap.bailReason = {
       changedPackageFiles: [
-        ...(ctx.git.changedFiles?.filter((file) => isPackageManifestFile(file)) || []),
+        ...(changedFiles?.filter((file) => isPackageManifestFile(file)) || []),
         ...changedPackageLockFiles,
       ],
       bailSubreason: 'nodeModulesMissingInStats',
@@ -264,18 +268,16 @@ export async function getDependentStoryFiles(
   }
 
   function shouldBail(moduleName: string) {
-    if (!ctx.turboSnap) ctx.turboSnap = {};
-
     // Check staticDirs before the Storybook config dir so static assets
     // nested under `.storybook/` (e.g. an MSW-generated mockServiceWorker.js
     // inside a configured staticDir) aren't mis-categorized as config changes.
     if (isStaticFile(moduleName)) {
-      ctx.turboSnap.bailReason = { changedStaticFiles: files(moduleName) };
+      turboSnap.bailReason = { changedStaticFiles: files(moduleName) };
       return true;
     }
 
     if (isStorybookFile(moduleName)) {
-      ctx.turboSnap.bailReason = { changedStorybookFiles: files(moduleName) };
+      turboSnap.bailReason = { changedStorybookFiles: files(moduleName) };
       return true;
     }
     return false;
@@ -284,7 +286,7 @@ export async function getDependentStoryFiles(
   // TODO: refactor this function
   // eslint-disable-next-line complexity
   function traceName(name: string, tracePath: string[] = []) {
-    if (ctx.turboSnap?.bailReason || isCsfGlob(name)) return;
+    if (turboSnap.bailReason || isCsfGlob(name)) return;
     if (shouldBail(name)) return;
     const { id } = modulesByName.get(name) || {};
     // eslint-disable-next-line unicorn/no-null
@@ -302,9 +304,9 @@ export async function getDependentStoryFiles(
     }
   }
 
-  if (ctx.options.traceChanged) {
-    ctx.log.debug('Traced files...');
-    ctx.log.debug(tracedFiles);
+  if (traceChanged) {
+    log.debug('Traced files...');
+    log.debug(tracedFiles);
   }
 
   // First, check the files that have changed according to git
@@ -314,11 +316,11 @@ export async function getDependentStoryFiles(
     const [id, tracePath] = toCheck.pop() as TraceToCheck;
 
     if (Array.isArray(id)) {
-      ctx.log.debug('Trace ID is an unexpected value, skipping');
+      log.debug('Trace ID is an unexpected value, skipping');
       continue;
     }
     if (!Array.isArray(tracePath)) {
-      ctx.log.debug('Trace path is an unexpected value, skipping');
+      log.debug('Trace path is an unexpected value, skipping');
       continue;
     }
 
@@ -333,27 +335,35 @@ export async function getDependentStoryFiles(
     [...affectedModuleIds].map((id) => [String(id), files(namesById.get(id) || '')])
   );
 
-  if (ctx.options.traceChanged) {
-    ctx.log.debug('Affected modules...');
-    ctx.log.debug(affectedModules);
+  if (traceChanged) {
+    log.debug('Affected modules...');
+    log.debug(affectedModules);
   }
 
-  if (ctx.options.traceChanged) {
-    ctx.log.info(
-      tracedAffectedFiles(ctx, {
-        changedFiles,
-        affectedModules,
-        modulesByName: Object.fromEntries(modulesByName),
-        normalize,
-      })
+  if (traceChanged) {
+    log.info(
+      tracedAffectedFiles(
+        {
+          log,
+          options: { storybookBaseDir, storybookConfigDir, traceChanged },
+          turboSnap,
+          untracedFiles,
+        },
+        {
+          changedFiles,
+          affectedModules,
+          modulesByName: Object.fromEntries(modulesByName),
+          normalize,
+        }
+      )
     );
-    ctx.log.info('');
+    log.info('');
   }
 
-  if (ctx.turboSnap.bailReason) {
-    ctx.log.warn(bailFile({ turboSnap: ctx.turboSnap }));
-    return;
+  if (turboSnap.bailReason) {
+    log.warn(bailFile({ turboSnap }));
+    return { turboSnap, untracedFiles };
   }
 
-  return affectedModules;
+  return { turboSnap, untracedFiles, affectedModules };
 }

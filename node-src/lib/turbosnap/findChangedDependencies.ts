@@ -4,10 +4,10 @@ import pLimit from 'p-limit';
 import path from 'path';
 
 import { checkoutFile, findFilesFromRepositoryRoot, getRepositoryRoot } from '../../git/git';
-import { Context } from '../../types';
 import { matchesFile } from '../utilities';
 import { compareBaseline } from './compareBaseline';
 import { getDependencies } from './getDependencies';
+import { FindChangedDependenciesInput } from './types';
 
 const PACKAGE_JSON = 'package.json';
 export const SUPPORTED_LOCK_FILES = ['yarn.lock', 'pnpm-lock.yaml', 'package-lock.json'];
@@ -16,41 +16,47 @@ export const SUPPORTED_LOCK_FILES = ['yarn.lock', 'pnpm-lock.yaml', 'package-loc
 // E.g. ['react', 'react-dom', '@storybook/react']
 // TODO: refactor this function
 // eslint-disable-next-line complexity,max-statements
-export const findChangedDependencies = async (ctx: Context) => {
-  const { packageMetadataChanges } = ctx.git;
-  const { untraced = [] } = ctx.options;
+export const findChangedDependencies = async (input: FindChangedDependenciesInput) => {
+  const {
+    log,
+    packageMetadataChanges,
+    untraced = [],
+    manifestConcurrency,
+    packageConcurrency,
+  } = input;
+  const gitDeps = { log };
 
   if (packageMetadataChanges?.length === 0) {
-    ctx.log.debug('No package metadata changed found');
+    log.debug('No package metadata changed found');
     return [];
   }
 
-  ctx.log.debug(
+  log.debug(
     { packageMetadataChanges },
     `Finding changed dependencies for ${packageMetadataChanges?.length} baselines`
   );
 
-  const rootPath = (await getRepositoryRoot(ctx)) || '';
-  const [rootManifestPath] = (await findFilesFromRepositoryRoot(ctx, rootPath, PACKAGE_JSON)) || [];
+  const rootPath = (await getRepositoryRoot(gitDeps)) || '';
+  const [rootManifestPath] =
+    (await findFilesFromRepositoryRoot(gitDeps, rootPath, PACKAGE_JSON)) || [];
   const [rootLockfilePath] =
-    (await findFilesFromRepositoryRoot(ctx, rootPath, ...SUPPORTED_LOCK_FILES)) || [];
+    (await findFilesFromRepositoryRoot(gitDeps, rootPath, ...SUPPORTED_LOCK_FILES)) || [];
   if (!rootManifestPath || !rootLockfilePath) {
-    ctx.log.debug(
+    log.debug(
       { rootPath, rootManifestPath, rootLockfilePath },
       'No manifest or lockfile found at the root of the repository'
     );
   }
 
-  ctx.log.debug({ rootPath, rootManifestPath, rootLockfilePath }, `Found manifest and lockfile`);
+  log.debug({ rootPath, rootManifestPath, rootLockfilePath }, `Found manifest and lockfile`);
 
   // Handle monorepos with (multiple) nested package.json files.
   // Note that this does not use `path.join` to concatenate the file paths because
   // git uses forward slashes, even on windows
   const nestedManifestPaths =
-    (await findFilesFromRepositoryRoot(ctx, rootPath, `**/${PACKAGE_JSON}`)) || [];
-  ctx.log.debug({ nestedManifestPaths: nestedManifestPaths.length }, 'Found nested manifest paths');
+    (await findFilesFromRepositoryRoot(gitDeps, rootPath, `**/${PACKAGE_JSON}`)) || [];
+  log.debug({ nestedManifestPaths: nestedManifestPaths.length }, 'Found nested manifest paths');
 
-  const manifestConcurrency = ctx.env.CHROMATIC_TURBOSNAP_MANIFEST_CONCURRENCY;
   const manifestLimit = pLimit(manifestConcurrency);
   const metadataPathPairs = await Promise.all(
     nestedManifestPaths.map((manifestPath) =>
@@ -58,7 +64,7 @@ export const findChangedDependencies = async (ctx: Context) => {
         const dirname = path.dirname(manifestPath);
         const [lockfilePath] =
           (await findFilesFromRepositoryRoot(
-            ctx,
+            gitDeps,
             rootPath,
             ...SUPPORTED_LOCK_FILES.map((lockfile) => `${dirname}/${lockfile}`)
           )) || [];
@@ -76,7 +82,7 @@ export const findChangedDependencies = async (ctx: Context) => {
     );
   }
 
-  ctx.log.debug(
+  log.debug(
     { pathPairs: metadataPathPairs },
     `Found ${metadataPathPairs.length} manifest/lockfile pairs to check`
   );
@@ -97,7 +103,7 @@ export const findChangedDependencies = async (ctx: Context) => {
         !untraced.some((glob) => matchesFile(glob, manifestPath)) && commits.length > 0
     );
 
-  ctx.log.debug(
+  log.debug(
     { filteredPathPairs },
     `Found ${filteredPathPairs.length} manifest/lockfile pairs to diff`
   );
@@ -111,7 +117,6 @@ export const findChangedDependencies = async (ctx: Context) => {
   const changedDependencyNames = new Set<string>();
   const tmpdirsCreated = new Set<string>();
 
-  const packageConcurrency = ctx.env.CHROMATIC_TURBOSNAP_PACKAGE_CONCURRENCY;
   const headDependenciesLimit = pLimit(packageConcurrency);
   const baseDependenciesLimit = pLimit(packageConcurrency);
 
@@ -134,13 +139,13 @@ export const findChangedDependencies = async (ctx: Context) => {
           fs.copyFileSync(absoluteManifestPath, temporaryManifestPath);
           fs.copyFileSync(absoluteLockfilePath, temporaryLockfilePath);
 
-          const headDependencies = await getDependencies(ctx, {
+          const headDependencies = await getDependencies(log, {
             rootPath: tmpdir,
             manifestPath: temporaryManifestPath,
             lockfilePath: temporaryLockfilePath,
           });
 
-          ctx.log.debug({ manifestPath, lockfilePath }, `Found HEAD dependencies`);
+          log.debug({ manifestPath, lockfilePath }, `Found HEAD dependencies`);
 
           // Retrieve the union of dependencies which changed compared to each baseline.
           // A change means either the version number is different or the dependency was added/removed.
@@ -154,13 +159,13 @@ export const findChangedDependencies = async (ctx: Context) => {
                 const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'chromatic'));
                 tmpdirsCreated.add(tmpdir);
 
-                const baselineDependencies = await getDependencies(ctx, {
+                const baselineDependencies = await getDependencies(log, {
                   rootPath: tmpdir,
-                  manifestPath: await checkoutFile(ctx, reference, manifestPath, tmpdir),
-                  lockfilePath: await checkoutFile(ctx, reference, lockfilePath, tmpdir),
+                  manifestPath: await checkoutFile(gitDeps, reference, manifestPath, tmpdir),
+                  lockfilePath: await checkoutFile(gitDeps, reference, lockfilePath, tmpdir),
                 });
 
-                ctx.log.debug({ reference }, `Found baseline dependencies`);
+                log.debug({ reference }, `Found baseline dependencies`);
 
                 const baselineChanges = await compareBaseline(
                   headDependencies,

@@ -1,4 +1,7 @@
-import { traceChangedFiles as traceChangedFilesDep } from '@cli/turbosnap';
+import {
+  shouldTrace as shouldTraceDep,
+  traceChangedFiles as traceChangedFilesDep,
+} from '@cli/turbosnap';
 import { access } from 'fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,6 +23,7 @@ vi.mock('../readStatsFile', () => ({
 }));
 
 const traceChangedFilesTurbosnap = vi.mocked(traceChangedFilesDep);
+const shouldTrace = vi.mocked(shouldTraceDep);
 const accessMock = vi.mocked(access);
 
 const environment = { CHROMATIC_RETRIES: 2, CHROMATIC_OUTPUT_INTERVAL: 0 };
@@ -34,11 +38,17 @@ afterEach(() => {
 describe('traceChangedFiles', () => {
   beforeEach(() => {
     accessMock.mockImplementation((_path, callback) => Promise.resolve(callback(null)));
+    shouldTrace.mockReturnValue(true);
   });
 
   it('sets onlyStoryFiles on context', async () => {
     const deps = { 123: ['./example.stories.js'] };
-    traceChangedFilesTurbosnap.mockResolvedValue(deps);
+    traceChangedFilesTurbosnap.mockResolvedValue({
+      outcome: 'traced',
+      turboSnap: {},
+      untracedFiles: [],
+      affectedModules: deps,
+    });
 
     const ctx = {
       env: environment,
@@ -65,7 +75,12 @@ describe('traceChangedFiles', () => {
         '[./example/[account]/[id]/[unit]/language/example.stories.tsx]',
       ],
     };
-    traceChangedFilesTurbosnap.mockResolvedValue(deps);
+    traceChangedFilesTurbosnap.mockResolvedValue({
+      outcome: 'traced',
+      turboSnap: {},
+      untracedFiles: [],
+      affectedModules: deps,
+    });
 
     const ctx = {
       env: environment,

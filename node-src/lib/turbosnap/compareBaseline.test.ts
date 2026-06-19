@@ -8,20 +8,15 @@ import { getDependencies } from './getDependencies';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const getContext: any = (baselineCommits: string[]) => ({
-  log: new TestLogger(),
-  git: { baselineCommits },
-});
-
 async function getMockedDependencies(headName: string, baseName: string) {
-  const ctx = getContext();
+  const log = new TestLogger();
   return {
-    head: await getDependencies(ctx, {
+    head: await getDependencies(log, {
       rootPath: path.join(__dirname, `../../__mocks__/dependencyChanges/${headName}`),
       manifestPath: 'package.json',
       lockfilePath: 'yarn.lock',
     }),
-    base: await getDependencies(ctx, {
+    base: await getDependencies(log, {
       rootPath: path.join(__dirname, `../../__mocks__/dependencyChanges/${baseName}`),
       manifestPath: 'package.json',
       lockfilePath: 'yarn.lock',

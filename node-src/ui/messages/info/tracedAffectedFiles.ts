@@ -1,8 +1,16 @@
 import chalk from 'chalk';
 import pluralize from 'pluralize';
 
-import { Context, Module, TurboSnap } from '../../../types';
+import { Logger } from '../../../lib/log';
+import { Module, Options, TurboSnap } from '../../../types';
 import { info } from '../../components/icons';
+
+interface TracedAffectedFilesContext {
+  log: Logger;
+  options: Pick<Options, 'storybookBaseDir' | 'storybookConfigDir' | 'traceChanged'>;
+  turboSnap?: TurboSnap;
+  untracedFiles?: string[];
+}
 
 const printFilePath = (filepath: string, basedir: string, expanded: boolean) => {
   const result =
@@ -29,7 +37,7 @@ export const traceSuggestions = `If you are having trouble with tracing, please 
 // TODO: refactor this function
 
 export default (
-  ctx: Context,
+  ctx: TracedAffectedFilesContext,
   {
     changedFiles,
     affectedModules,

@@ -2,9 +2,10 @@ import * as Sentry from '@sentry/node';
 import { access } from 'fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { checkStorybookBaseDirectory } from '../checkStorybookBaseDirectory';
 import { exitCodes } from '../setExitCode';
 import TestLogger from '../testLogger';
-import { traceChangedFiles } from '.';
+import { MissingStatsFileError, traceChangedFiles, TraceChangedFilesInput } from '.';
 import {
   BaselineCheckoutFailedError,
   LockFileParseFailedError,
@@ -45,9 +46,19 @@ const findChangedDependencies = vi.mocked(findChangedDependenciesDep);
 const accessMock = vi.mocked(access);
 const captureException = vi.mocked(Sentry.captureException);
 
-const environment = { CHROMATIC_RETRIES: 2, CHROMATIC_OUTPUT_INTERVAL: 0 };
 const log = new TestLogger();
-const http = { fetch: vi.fn() };
+
+const buildInput = (overrides: Partial<TraceChangedFilesInput> = {}): TraceChangedFilesInput => ({
+  log,
+  unavailable: false,
+  changedFiles: ['./example.js'],
+  manifestConcurrency: 20,
+  packageConcurrency: 200,
+  statsPath: '/static/preview-stats.json',
+  rootPath: '/path/to/project',
+  storybookConfigDir: '.storybook',
+  ...overrides,
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -55,26 +66,26 @@ afterEach(() => {
 
 beforeEach(() => {
   accessMock.mockImplementation((_path, callback) => Promise.resolve(callback(null)));
+  getDependentStoryFiles.mockResolvedValue({
+    turboSnap: {},
+    untracedFiles: [],
+    affectedModules: {},
+  });
 });
 
 describe('traceChangedFiles', () => {
   it('does not run package dependency analysis if there are no metadata changes', async () => {
     const deps = { 123: ['./example.stories.js'] };
-    getDependentStoryFiles.mockResolvedValue(deps);
-
-    const ctx = {
-      env: environment,
-      log,
-      http,
-      options: {},
-      sourceDir: '/static/',
-      fileInfo: { statsPath: '/static/preview-stats.json' },
-      git: { changedFiles: ['./example.js'] },
+    getDependentStoryFiles.mockResolvedValue({
       turboSnap: {},
-    } as any;
-    const onlyStoryFiles = await traceChangedFiles(ctx);
+      untracedFiles: [],
+      affectedModules: deps,
+    });
 
-    expect(onlyStoryFiles).toStrictEqual(deps);
+    const result = await traceChangedFiles(buildInput());
+
+    expect(result.outcome).toBe('traced');
+    expect(result.outcome === 'traced' && result.affectedModules).toStrictEqual(deps);
     expect(findChangedDependencies).not.toHaveBeenCalled();
     expect(findChangedPackageFiles).not.toHaveBeenCalled();
   });
@@ -142,19 +153,14 @@ describe('traceChangedFiles', () => {
       findChangedPackageFiles.mockResolvedValue(['./package.json']);
 
       const packageMetadataChanges = [{ changedFiles: ['./package.json'], commit: 'abcdef' }];
-      const ctx = {
-        env: environment,
-        log,
-        http,
-        options: {},
-        sourceDir: '/static/',
-        fileInfo: { statsPath: '/static/preview-stats.json' },
-        git: { changedFiles: ['./example.js', './package.json'], packageMetadataChanges },
-        turboSnap: {},
-      } as any;
-      await traceChangedFiles(ctx);
+      const result = await traceChangedFiles(
+        buildInput({ packageMetadataChanges, changedFiles: ['./example.js', './package.json'] })
+      );
 
-      expect(ctx.turboSnap.bailReason).toEqual(expectedBailReason);
+      expect(result.outcome).toBe('bailed');
+      expect(result.outcome === 'bailed' && result.turboSnap.bailReason).toEqual(
+        expectedBailReason
+      );
       expect(captureException).toHaveBeenCalledTimes(1);
       expect(captureException).toHaveBeenCalledWith(error, {
         tags: {
@@ -171,41 +177,27 @@ describe('traceChangedFiles', () => {
     findChangedPackageFiles.mockResolvedValue([]);
 
     const packageMetadataChanges = [{ changedFiles: ['./package.json'], commit: 'abcdef' }];
-    const ctx = {
-      env: environment,
-      log,
-      http,
-      options: {},
-      sourceDir: '/static/',
-      fileInfo: { statsPath: '/static/preview-stats.json' },
-      git: { changedFiles: ['./example.js', './package.json'], packageMetadataChanges },
-      turboSnap: {},
-    } as any;
-    await traceChangedFiles(ctx);
+    const result = await traceChangedFiles(
+      buildInput({ packageMetadataChanges, changedFiles: ['./example.js', './package.json'] })
+    );
 
-    expect(ctx.git.changedDependencyNames).toEqual(['moment']);
+    expect(result.outcome === 'traced' && result.changedDependencyNames).toEqual(['moment']);
   });
 
   it('throws an error if storybookBaseDir is incorrect', async () => {
-    const deps = { 123: ['./example.stories.js'] };
     findChangedDependencies.mockResolvedValue([]);
     findChangedPackageFiles.mockResolvedValue([]);
-    getDependentStoryFiles.mockResolvedValue(deps);
     accessMock.mockImplementation((_path, callback) =>
       Promise.resolve(callback(new Error('some error')))
     );
 
-    const ctx = {
-      env: environment,
-      log,
-      http,
-      options: { storybookBaseDir: '/wrong' },
-      sourceDir: '/static/',
-      fileInfo: { statsPath: '/static/preview-stats.json' },
-      git: { changedFiles: ['./example.js'] },
-      turboSnap: {},
-    } as any;
-    await expect(traceChangedFiles(ctx)).rejects.toThrow();
+    const ctx = { log, options: { storybookBaseDir: '/wrong' } } as any;
+    const input = buildInput({
+      storybookBaseDir: '/wrong',
+      validateStorybookBaseDir: (stats) => checkStorybookBaseDirectory(ctx, stats),
+    });
+
+    await expect(traceChangedFiles(input)).rejects.toThrow();
     expect(ctx.exitCode).toBe(exitCodes.INVALID_OPTIONS);
   });
 
@@ -213,62 +205,53 @@ describe('traceChangedFiles', () => {
     const deps = { 123: ['./example.stories.js'] };
     findChangedDependencies.mockRejectedValue(new Error('no lockfile'));
     findChangedPackageFiles.mockResolvedValue([]); // no dependency changes
-    getDependentStoryFiles.mockResolvedValue(deps);
+    getDependentStoryFiles.mockResolvedValue({
+      turboSnap: {},
+      untracedFiles: [],
+      affectedModules: deps,
+    });
 
     const packageMetadataChanges = [{ changedFiles: ['./package.json'], commit: 'abcdef' }];
-    const ctx = {
-      env: environment,
-      log,
-      http,
-      options: {},
-      sourceDir: '/static/',
-      fileInfo: { statsPath: '/static/preview-stats.json' },
-      git: { changedFiles: ['./example.js', './package.json'], packageMetadataChanges },
-      turboSnap: {},
-    } as any;
-    const onlyStoryFiles = await traceChangedFiles(ctx);
+    const result = await traceChangedFiles(
+      buildInput({ packageMetadataChanges, changedFiles: ['./example.js', './package.json'] })
+    );
 
-    expect(ctx.turboSnap.bailReason).toBeUndefined();
-    expect(onlyStoryFiles).toStrictEqual(deps);
-    expect(findChangedPackageFiles).toHaveBeenCalledWith(ctx, packageMetadataChanges);
+    expect(result.outcome).toBe('traced');
+    expect(result.outcome === 'traced' && result.turboSnap.bailReason).toBeUndefined();
+    expect(result.outcome === 'traced' && result.affectedModules).toStrictEqual(deps);
+    expect(findChangedPackageFiles).toHaveBeenCalledWith(log, packageMetadataChanges);
   });
 
   it('does not set bailReason or capture to Sentry when findChangedDependencies fails but findChangedPackageFiles is empty', async () => {
     const error = new LockFileSizeExceededError('/tmp/x', 999);
     findChangedDependencies.mockRejectedValue(error);
     findChangedPackageFiles.mockResolvedValue([]);
-    getDependentStoryFiles.mockResolvedValue({});
+    getDependentStoryFiles.mockResolvedValue({
+      turboSnap: {},
+      untracedFiles: [],
+      affectedModules: {},
+    });
 
     const packageMetadataChanges = [{ changedFiles: ['./package.json'], commit: 'abcdef' }];
-    const ctx = {
-      env: environment,
-      log,
-      http,
-      options: {},
-      sourceDir: '/static/',
-      fileInfo: { statsPath: '/static/preview-stats.json' },
-      git: { changedFiles: ['./example.js', './package.json'], packageMetadataChanges },
-      turboSnap: {},
-    } as any;
-    await traceChangedFiles(ctx);
+    const result = await traceChangedFiles(
+      buildInput({ packageMetadataChanges, changedFiles: ['./example.js', './package.json'] })
+    );
 
-    expect(ctx.turboSnap.bailReason).toBeUndefined();
+    expect(result.outcome === 'traced' && result.turboSnap.bailReason).toBeUndefined();
     expect(captureException).not.toHaveBeenCalled();
   });
 
   it('throws if stats file is not found', async () => {
     const packageMetadataChanges = [{ changedFiles: ['./package.json'], commit: 'abcdef' }];
-    const ctx = {
-      env: environment,
-      log,
-      http,
-      options: {},
-      sourceDir: '/static/',
-      git: { changedFiles: ['./example.js', './package.json'], packageMetadataChanges },
-      turboSnap: {},
-    } as any;
+    const input = buildInput({
+      packageMetadataChanges,
+      changedFiles: ['./example.js', './package.json'],
+      statsPath: undefined,
+    });
 
-    await expect(traceChangedFiles(ctx)).rejects.toThrow();
-    expect(ctx.turboSnap.bailReason).toEqual({ missingStatsFile: true });
+    await expect(traceChangedFiles(input)).rejects.toThrow(MissingStatsFileError);
+    await expect(traceChangedFiles(input)).rejects.toMatchObject({
+      bailReason: { missingStatsFile: true },
+    });
   });
 });

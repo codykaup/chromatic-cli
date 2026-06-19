@@ -5,7 +5,6 @@ import { getRepositoryRoot } from '../node-src/git/git';
 import { createLogger } from '../node-src/lib/log';
 import { isPackageManifestFile } from '../node-src/lib/utilities';
 import { readStatsFile } from '../node-src/tasks/readStatsFile';
-import { Context } from '../node-src/types';
 
 /**
  * Utility to trace a set of changed file paths to dependent story files using a Webpack stats file.
@@ -86,22 +85,6 @@ export async function main(argv: string[]) {
   );
 
   const log = createLogger({}, { logPrefix: '', logLevel: 'info' });
-  const ctx: Context = {
-    log,
-    options: {
-      storybookBaseDir: flags.storybookBaseDir,
-      storybookConfigDir: flags.storybookConfigDir,
-      untraced: flags.untraced,
-      traceChanged: flags.mode || true,
-    },
-    git: {
-      rootPath: await getRepositoryRoot({ log }),
-    },
-    storybook: {
-      baseDir: flags.storybookBaseDir,
-      configDir: flags.storybookConfigDir,
-    },
-  } as any;
   const stats = await readStatsFile(flags.statsFile);
   const changedFiles = input.map((f) => f.replace(/^\.\//, ''));
 
@@ -112,5 +95,19 @@ export async function main(argv: string[]) {
     );
   }
 
-  await getDependentStoryFiles(ctx, stats, flags.statsFile, changedFiles);
+  await getDependentStoryFiles(
+    {
+      log,
+      rootPath: await getRepositoryRoot({ log }),
+      baseDir: flags.storybookBaseDir,
+      configDir: flags.storybookConfigDir,
+      storybookConfigDir: flags.storybookConfigDir,
+      storybookBaseDir: flags.storybookBaseDir,
+      untraced: flags.untraced,
+      traceChanged: flags.mode || true,
+    },
+    stats,
+    flags.statsFile,
+    changedFiles
+  );
 }
