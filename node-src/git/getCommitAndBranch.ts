@@ -8,6 +8,7 @@ import customGitHubAction from '../ui/messages/info/customGitHubAction';
 import noCommitDetails from '../ui/messages/warnings/noCommitDetails';
 import travisInternalBuild from '../ui/messages/warnings/travisInternalBuild';
 import { GitDeps } from './execGit';
+import { getCiRunUrl } from './getCiRunUrl';
 import { getBranch, getCommit, hasPreviousCommit } from './git';
 
 const ORIGIN_PREFIX_REGEXP = /^origin\//;
@@ -156,6 +157,7 @@ export default async function getCommitAndBranch(
   }
 
   const ciService = process.env.CHROMATIC_ACTION ? 'chromaui/action' : service;
+  const ciRunUrl = getCiRunUrl();
   slug = slug || ciSlug;
 
   // On certain CI systems, a branch is not checked out
@@ -196,6 +198,7 @@ export default async function getCommitAndBranch(
       slug,
       fromCI,
       ciService,
+      ciRunUrl,
     })}`
   );
 
@@ -205,5 +208,6 @@ export default async function getCommitAndBranch(
     slug,
     fromCI,
     ciService,
+    ciRunUrl,
   };
 }

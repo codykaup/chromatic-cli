@@ -177,6 +177,8 @@ export interface Git {
   slug?: string;
   fromCI: boolean;
   ciService?: string;
+  /** URL pointing at the current CI run (and its logs), when running in a supported CI provider. */
+  ciRunUrl?: string;
   mergeCommit?: string;
   uncommittedHash?: string;
   parentCommits?: string[];

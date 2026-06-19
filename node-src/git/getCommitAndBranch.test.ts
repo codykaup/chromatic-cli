@@ -26,6 +26,7 @@ beforeEach(() => {
     'CHROMATIC_SLUG',
     'CI_BRANCH',
     'CI',
+    'CIRCLE_BUILD_URL',
     'GERRIT_BRANCH',
     'GITHUB_ACTIONS',
     'GITHUB_BASE_REF',
@@ -122,6 +123,14 @@ describe('getCommitAndBranch', () => {
       fromCI: true,
       ciService: 'ci-service',
     });
+  });
+
+  it('includes the CI run URL when available', async () => {
+    vi.stubEnv('GITHUB_EVENT_NAME', 'push');
+    vi.stubEnv('CIRCLE_BUILD_URL', 'https://circleci.com/gh/chromaui/cli/123');
+
+    const info = await getCommitAndBranch(ctx);
+    expect(info).toMatchObject({ ciRunUrl: 'https://circleci.com/gh/chromaui/cli/123' });
   });
 
   it('prefers prBranch over ciBranch', async () => {

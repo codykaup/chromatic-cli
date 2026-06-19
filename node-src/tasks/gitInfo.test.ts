@@ -80,6 +80,7 @@ const commitInfo = {
   isTravisPrBuild: false,
   fromCI: false,
   ciService: undefined,
+  ciRunUrl: undefined,
 };
 
 const client = { runQuery: vi.fn(), setAuthorization: vi.fn() };
