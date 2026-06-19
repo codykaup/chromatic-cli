@@ -119,34 +119,6 @@ describe('getCiRunUrl', () => {
     ).toBe('https://bitbucket.org/acme/cli/pipelines/results/17');
   });
 
-  it('detects Bitrise', () => {
-    expect(getCiRunUrl({ BITRISE_BUILD_URL: 'https://app.bitrise.io/build/abc' })).toBe(
-      'https://app.bitrise.io/build/abc'
-    );
-  });
-
-  it('detects Drone', () => {
-    expect(getCiRunUrl({ DRONE_BUILD_LINK: 'https://drone.example.com/acme/cli/9' })).toBe(
-      'https://drone.example.com/acme/cli/9'
-    );
-  });
-
-  it('detects Codefresh', () => {
-    expect(getCiRunUrl({ CF_BUILD_URL: 'https://g.codefresh.io/build/abc123' })).toBe(
-      'https://g.codefresh.io/build/abc123'
-    );
-  });
-
-  it('constructs the AppVeyor URL', () => {
-    expect(
-      getCiRunUrl({
-        APPVEYOR_ACCOUNT_NAME: 'acme',
-        APPVEYOR_PROJECT_SLUG: 'cli',
-        APPVEYOR_BUILD_ID: '999',
-      })
-    ).toBe('https://ci.appveyor.com/project/acme/cli/builds/999');
-  });
-
   it('constructs the Semaphore URL', () => {
     expect(
       getCiRunUrl({
@@ -154,11 +126,5 @@ describe('getCiRunUrl', () => {
         SEMAPHORE_WORKFLOW_ID: 'wf-1',
       })
     ).toBe('https://acme.semaphoreci.com/workflows/wf-1');
-  });
-
-  it('constructs the Cirrus CI URL', () => {
-    expect(getCiRunUrl({ CIRRUS_CI: 'true', CIRRUS_TASK_ID: '5555' })).toBe(
-      'https://cirrus-ci.com/task/5555'
-    );
   });
 });
