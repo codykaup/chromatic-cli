@@ -2,6 +2,7 @@ import eslint from '@eslint/js';
 import comments from '@eslint-community/eslint-plugin-eslint-comments/configs';
 import jsdoc from 'eslint-plugin-jsdoc';
 import noSecrets from 'eslint-plugin-no-secrets';
+import oxlint from 'eslint-plugin-oxlint';
 import prettier from 'eslint-plugin-prettier';
 import security from 'eslint-plugin-security';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
@@ -12,6 +13,12 @@ import tseslint from 'typescript-eslint';
 
 export default [
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
+  // Tradeoff of the hybrid setup: rules are split across oxlint and ESLint, so neither tool
+  // sees the full rule set. That means `report-unused-disable-directives` produces false
+  // positives in BOTH tools (e.g. an `eslint-disable unicorn/prevent-abbreviations` comment
+  // looks unused to oxlint because oxlint doesn't implement that rule). We therefore disable
+  // unused-directive reporting on both sides (ESLint v9 defaults it to "warn").
+  { linterOptions: { reportUnusedDisableDirectives: 'off' } },
   {
     ignores: [
       '**/node_modules/*',
@@ -272,4 +279,10 @@ export default [
       'unicorn/no-null': 'off', // GraphQL returns `null` when there is no value
     },
   },
+  // Turn off every rule that oxlint already runs (read from .oxlintrc.json), so the much slower
+  // ESLint pass only handles the rules oxlint can't yet cover natively: type-aware rules
+  // (@typescript-eslint/no-floating-promises), prettier, jsdoc, eslint-comments, security,
+  // no-secrets, simple-import-sort and sort-class-members.
+  // NOTE: must stay last so it overrides the rule activations above.
+  ...oxlint.buildFromOxlintConfigFile('./.oxlintrc.json'),
 ];
