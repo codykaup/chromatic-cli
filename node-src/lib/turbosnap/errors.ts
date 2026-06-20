@@ -4,11 +4,13 @@ import { HTTPClientError } from '../../io/httpClient';
  * Error thrown when a lockfile exceeds the configured maximum size and parsing is skipped.
  */
 export class LockFileSizeExceededError extends Error {
-  constructor(
-    public lockfilePath: string,
-    public lockfileSizeBytes: number
-  ) {
+  lockfilePath: string;
+  lockfileSizeBytes: number;
+
+  constructor(lockfilePath: string, lockfileSizeBytes: number) {
     super('Lock file too large to parse');
+    this.lockfilePath = lockfilePath;
+    this.lockfileSizeBytes = lockfileSizeBytes;
     this.name = 'LockFileSizeExceededError';
   }
 }
@@ -17,11 +19,11 @@ export class LockFileSizeExceededError extends Error {
  * Error thrown when the lockfile parser fails to produce a dependency graph.
  */
 export class LockFileParseFailedError extends Error {
-  constructor(
-    public lockfilePath: string,
-    options?: { cause?: unknown }
-  ) {
+  lockfilePath: string;
+
+  constructor(lockfilePath: string, options?: { cause?: unknown }) {
     super('Failed to parse dependency graph', options);
+    this.lockfilePath = lockfilePath;
     this.name = 'LockFileParseFailedError';
   }
 }
@@ -30,11 +32,11 @@ export class LockFileParseFailedError extends Error {
  * Error thrown when checking out a baseline file via `git show` fails.
  */
 export class BaselineCheckoutFailedError extends Error {
-  constructor(
-    public pathspec: string,
-    options?: { cause?: unknown }
-  ) {
+  pathspec: string;
+
+  constructor(pathspec: string, options?: { cause?: unknown }) {
     super(`Failed to check out baseline file: ${pathspec}`, options);
+    this.pathspec = pathspec;
     this.name = 'BaselineCheckoutFailedError';
   }
 }
@@ -44,11 +46,11 @@ export class BaselineCheckoutFailedError extends Error {
  * "bad object").
  */
 export class AncestorMissingError extends Error {
-  constructor(
-    public commit: string,
-    options?: { cause?: unknown }
-  ) {
+  commit: string;
+
+  constructor(commit: string, options?: { cause?: unknown }) {
     super(`Baseline commit not resolvable locally: ${commit}`, options);
+    this.commit = commit;
     this.name = 'AncestorMissingError';
   }
 }
@@ -57,11 +59,11 @@ export class AncestorMissingError extends Error {
  * Error thrown when the baseline build was a local build with uncommitted changes.
  */
 export class BaselineDirtyError extends Error {
-  constructor(
-    public commit: string,
-    options?: { cause?: unknown }
-  ) {
+  commit: string;
+
+  constructor(commit: string, options?: { cause?: unknown }) {
     super(`Baseline build had uncommitted changes: ${commit}`, options);
+    this.commit = commit;
     this.name = 'BaselineDirtyError';
   }
 }
@@ -90,11 +92,11 @@ export class NetworkError extends Error {
  * Error thrown when a `git` subprocess fails for an unknown reason.
  */
 export class GitCommandError extends Error {
-  constructor(
-    public command: string,
-    options?: { cause?: unknown }
-  ) {
+  command: string;
+
+  constructor(command: string, options?: { cause?: unknown }) {
     super(`Git command failed: ${command}`, options);
+    this.command = command;
     this.name = 'GitCommandError';
   }
 }

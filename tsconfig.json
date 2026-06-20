@@ -13,6 +13,7 @@
     "noImplicitAny": false, // Let this be a warning from ESLint until it becomes required
     "useUnknownInCatchVariables": false, // Treat caught errors as 'any' for now
     "resolveJsonModule": true,
+    "erasableSyntaxOnly": true,
     "lib": ["es6", "dom"]
   }
 }

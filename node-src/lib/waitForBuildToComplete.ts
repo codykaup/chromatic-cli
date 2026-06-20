@@ -30,13 +30,15 @@ export type BuildProgressMessage = z.infer<typeof BuildProgressMessageSchema>;
  * Error thrown when there's a problem with the notify service.
  */
 export class NotifyServiceError extends Error {
-  constructor(
-    message: string,
-    public readonly statusCode?: number,
-    public readonly reason?: string,
-    public readonly originalError?: Error
-  ) {
+  readonly statusCode?: number;
+  readonly reason?: string;
+  readonly originalError?: Error;
+
+  constructor(message: string, statusCode?: number, reason?: string, originalError?: Error) {
     super(message);
+    this.statusCode = statusCode;
+    this.reason = reason;
+    this.originalError = originalError;
     this.name = 'NotifyServiceError';
   }
 }
