@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import picomatch, { Matcher } from 'picomatch';
 
 export const lcfirst = (str: string) => `${str.charAt(0).toLowerCase()}${str.slice(1)}`;
@@ -63,9 +64,7 @@ export const groupUntracedFilesByGlob = (untracedFiles: { filepath: string; glob
   return [...filesByGlob.entries()]
     .map(
       ([glob, files]) =>
-        `  --untraced glob '${glob}' matched ${files.length} file${
-          files.length === 1 ? '' : 's'
-        }:\n${files.map((file) => `    ${file}`).join('\n')}`
+        chalk`Files matching {bold ${glob}}:\n{dim →} ${files.join(chalk`\n{dim →} `)}`
     )
     .join('\n');
 };

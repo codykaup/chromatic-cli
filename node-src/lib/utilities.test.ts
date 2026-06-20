@@ -1,6 +1,9 @@
+import chalk from 'chalk';
 import { describe, expect, it } from 'vitest';
 
 import { groupUntracedFilesByGlob, isPackageManifestFile, matchesFile } from './utilities';
+
+chalk.level = 0;
 
 describe('matchesFile', () => {
   it('matches file names', () => {
@@ -46,20 +49,20 @@ describe('groupUntracedFilesByGlob', () => {
     ]);
     expect(result).toBe(
       [
-        "  --untraced glob '**/stories/**' matched 2 files:",
-        '    src/stories/Button.jsx',
-        '    src/stories/Page.jsx',
-        "  --untraced glob '**/package.json' matched 1 file:",
-        '    package.json',
+        'Files matching **/stories/**:',
+        '→ src/stories/Button.jsx',
+        '→ src/stories/Page.jsx',
+        'Files matching **/package.json:',
+        '→ package.json',
       ].join('\n')
     );
   });
 
-  it('uses the singular form when a glob matches a single file', () => {
+  it('lists a single matched file under its glob', () => {
     const result = groupUntracedFilesByGlob([
       { filepath: 'package.json', glob: '**/package.json' },
     ]);
-    expect(result).toBe("  --untraced glob '**/package.json' matched 1 file:\n    package.json");
+    expect(result).toBe('Files matching **/package.json:\n→ package.json');
   });
 });
 
