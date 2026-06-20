@@ -59,7 +59,7 @@ export async function traceChangedFiles(ctx: Context, task: Task) {
         if (ctx.untracedFiles && ctx.untracedFiles.length > 0) {
           ctx.log.info(
             `Encountered ${ctx.untracedFiles.length} untraced files:\n${ctx.untracedFiles
-              .map((f) => `  ${f}`)
+              .map(({ filepath, glob }) => `  ${filepath} (matched --untraced glob '${glob}')`)
               .join('\n')}`
           );
         }

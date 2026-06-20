@@ -66,7 +66,9 @@ export default (
         ? `${chalk.magenta(
             `We detected some untraced files, this may affect your traced changes as 
     the untraced flag instructs TurboSnap to not trace dependencies for the files:`
-          )} \n  ${ctx.untracedFiles.join(',')}\n\n\n`
+          )} \n  ${ctx.untracedFiles
+            .map(({ filepath, glob }) => `${filepath} (matched --untraced glob '${glob}')`)
+            .join(',\n  ')}\n\n\n`
         : '';
     directoryDebug = `${rootPath}${basePath}${storybookPath}${bailReason}${untracedNotice}${traceSuggestions}`;
   }
