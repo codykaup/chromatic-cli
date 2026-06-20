@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isPackageManifestFile, matchesFile } from './utilities';
+import { groupUntracedFilesByGlob, isPackageManifestFile, matchesFile } from './utilities';
 
 describe('matchesFile', () => {
   it('matches file names', () => {
@@ -34,6 +34,32 @@ describe('matchesFile', () => {
 
   it('matches ./ prefix', () => {
     expect(matchesFile('src/*', './src/file.js')).toStrictEqual(true);
+  });
+});
+
+describe('groupUntracedFilesByGlob', () => {
+  it('groups files matched by the same glob together', () => {
+    const result = groupUntracedFilesByGlob([
+      { filepath: 'src/stories/Button.jsx', glob: '**/stories/**' },
+      { filepath: 'package.json', glob: '**/package.json' },
+      { filepath: 'src/stories/Page.jsx', glob: '**/stories/**' },
+    ]);
+    expect(result).toBe(
+      [
+        "  --untraced glob '**/stories/**' matched 2 files:",
+        '    src/stories/Button.jsx',
+        '    src/stories/Page.jsx',
+        "  --untraced glob '**/package.json' matched 1 file:",
+        '    package.json',
+      ].join('\n')
+    );
+  });
+
+  it('uses the singular form when a glob matches a single file', () => {
+    const result = groupUntracedFilesByGlob([
+      { filepath: 'package.json', glob: '**/package.json' },
+    ]);
+    expect(result).toBe("  --untraced glob '**/package.json' matched 1 file:\n    package.json");
   });
 });
 

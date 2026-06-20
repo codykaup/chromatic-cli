@@ -53,6 +53,23 @@ export const matchesFile = (glob: string, filepath: string) => {
   return fileMatchers[glob](filepath.replace(/^\.\//, ''));
 };
 
+export const groupUntracedFilesByGlob = (untracedFiles: { filepath: string; glob: string }[]) => {
+  const filesByGlob = new Map<string, string[]>();
+  for (const { filepath, glob } of untracedFiles) {
+    const files = filesByGlob.get(glob) ?? [];
+    files.push(filepath);
+    filesByGlob.set(glob, files);
+  }
+  return [...filesByGlob.entries()]
+    .map(
+      ([glob, files]) =>
+        `  --untraced glob '${glob}' matched ${files.length} file${
+          files.length === 1 ? '' : 's'
+        }:\n${files.map((file) => `    ${file}`).join('\n')}`
+    )
+    .join('\n');
+};
+
 export const isPackageManifestFile = (filePath: string) =>
   [/(^|\/)package\.json$/].some((re) => re.test(filePath));
 
