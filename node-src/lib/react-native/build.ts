@@ -23,9 +23,9 @@ export async function execWithBuildEnvironment(
   options: { env?: Record<string, string>; cwd?: string } = {},
   logStream: WriteStream
 ) {
-  const [cmd, ...parsedArgs] = parseCommandString(command);
+  const [cmd, ...parsedArguments] = parseCommandString(command);
   logStream.write(`\n[chromatic] build: "${command} ${args.join(' ')}"\n`);
-  return execa(cmd, [...parsedArgs, ...args], {
+  return execa(cmd, [...parsedArguments, ...args], {
     ...options,
     stdout: logStream,
     stderr: logStream,
