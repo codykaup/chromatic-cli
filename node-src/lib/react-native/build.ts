@@ -1,4 +1,4 @@
-import { execa } from 'execa';
+import { execa, parseCommandString } from 'execa';
 import { existsSync, mkdtempSync, renameSync, rmSync, type WriteStream } from 'fs';
 import os from 'os';
 import path from 'path';
@@ -23,8 +23,9 @@ export async function execWithBuildEnvironment(
   options: { env?: Record<string, string>; cwd?: string } = {},
   logStream: WriteStream
 ) {
+  const [cmd, ...parsedArgs] = parseCommandString(command);
   logStream.write(`\n[chromatic] build: "${command} ${args.join(' ')}"\n`);
-  return execa(command, args, {
+  return execa(cmd, [...parsedArgs, ...args], {
     ...options,
     stdout: logStream,
     stderr: logStream,
