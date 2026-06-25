@@ -3,7 +3,12 @@ import os from 'os';
 import pLimit from 'p-limit';
 import path from 'path';
 
-import { checkoutFile, findFilesFromRepositoryRoot, getRepositoryRoot } from '../../git/git';
+import {
+  checkoutFile,
+  fileExistsAtCommit,
+  findFilesFromRepositoryRoot,
+  getRepositoryRoot,
+} from '../../git/git';
 import { Context } from '../../types';
 import { matchesFile } from '../utilities';
 import { compareBaseline } from './compareBaseline';
@@ -119,6 +124,31 @@ export const findChangedDependencies = async (ctx: Context) => {
     await Promise.all(
       filteredPathPairs.map(([manifestPath, lockfilePath, commits]) =>
         headDependenciesLimit(async () => {
+          // A newly added manifest (or lockfile) has no baseline to compare against. Skip those
+          // baselines rather than bailing: a new package's dependencies, and the files that consume
+          // them, show up as changed files and are traced normally. This also prevents an unrelated
+          // added package.json — which often updates the root lockfile alongside it — from poisoning
+          // the analysis of every other manifest and forcing a full build.
+          const baselineExistence = await Promise.all(
+            commits.map(async (reference) =>
+              (await fileExistsAtCommit(ctx, reference, manifestPath)) &&
+              (await fileExistsAtCommit(ctx, reference, lockfilePath))
+                ? reference
+                : undefined
+            )
+          );
+          const baselineCommits = baselineExistence.filter(
+            (reference): reference is string => reference !== undefined
+          );
+
+          if (baselineCommits.length === 0) {
+            ctx.log.debug(
+              { manifestPath, lockfilePath },
+              `No baseline to compare against; skipping dependency diff`
+            );
+            return;
+          }
+
           // Create a temporary directory for the HEAD dependencies. We do this to isolate the
           // package.json and lock files from the rest of the repository because the `inspect` function
           // from `snyk-nodejs-plugin` used inside getDependencies.ts hardcodes the file paths based on
@@ -144,9 +174,8 @@ export const findChangedDependencies = async (ctx: Context) => {
 
           // Retrieve the union of dependencies which changed compared to each baseline.
           // A change means either the version number is different or the dependency was added/removed.
-          // If a manifest or lockfile is missing on the baseline, this throws and we'll end up bailing.
           await Promise.all(
-            commits.map((reference) =>
+            baselineCommits.map((reference) =>
               baseDependenciesLimit(async () => {
                 // Create a temporary directory for the baseline dependencies to also isolate the
                 // package.json and lock files for the `inspect` function from `snyk-nodejs-plugin` in

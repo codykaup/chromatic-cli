@@ -10,6 +10,7 @@ import * as execGit from './execGit';
 import {
   checkoutFile,
   commitExists,
+  fileExistsAtCommit,
   findFilesFromRepositoryRoot,
   getBranch,
   getChangedFiles,
@@ -164,6 +165,20 @@ describe('commitExists', () => {
       new Error(`fatal: Not a valid object name 1234567890^{commit}`)
     );
     expect(await commitExists(ctx, '1234567890')).toEqual(false);
+  });
+});
+
+describe('fileExistsAtCommit', () => {
+  it('returns true if the file exists at the commit', async () => {
+    execGitCommand.mockResolvedValue('');
+    expect(await fileExistsAtCommit(ctx, '1234567890', 'package.json')).toEqual(true);
+  });
+
+  it('returns false if the file does not exist at the commit', async () => {
+    execGitCommand.mockRejectedValueOnce(
+      new Error(`fatal: path 'package.json' exists on disk, but not in '1234567890'`)
+    );
+    expect(await fileExistsAtCommit(ctx, '1234567890', 'package.json')).toEqual(false);
   });
 });
 

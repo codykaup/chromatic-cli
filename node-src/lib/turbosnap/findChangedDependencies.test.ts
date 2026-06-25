@@ -34,6 +34,7 @@ mkdtempSync.mockReturnValue(tmpdir);
 
 const getRepositoryRoot = vi.mocked(git.getRepositoryRoot);
 const checkoutFile = vi.mocked(git.checkoutFile);
+const fileExistsAtCommit = vi.mocked(git.fileExistsAtCommit);
 const findFilesFromRepositoryRoot = vi.mocked(git.findFilesFromRepositoryRoot);
 const buildDepTree = vi.mocked(buildDepTreeFromFiles);
 const inspect = vi.mocked(snyk.inspect);
@@ -47,10 +48,13 @@ beforeEach(() => {
   );
   // always checkout files with the result path of "<commit>.<file>"
   checkoutFile.mockImplementation((_ctx, commit, file) => Promise.resolve(`${commit}.${file}`));
+  // by default, assume changed files exist at the baseline (i.e. they weren't newly added)
+  fileExistsAtCommit.mockResolvedValue(true);
 });
 afterEach(() => {
   getRepositoryRoot.mockReset();
   checkoutFile.mockReset();
+  fileExistsAtCommit.mockReset();
   findFilesFromRepositoryRoot.mockReset();
   buildDepTree.mockReset();
   inspect.mockReset();
@@ -222,6 +226,60 @@ describe('findChangedDependencies', () => {
       'react',
       'lodash',
     ]);
+  });
+
+  it('skips a manifest that did not exist at the baseline (newly added)', async () => {
+    // The subpackage manifest is newly added, so it has no baseline. The root manifest/lockfile
+    // (which may have changed alongside it) still exists at the baseline and is analyzed.
+    findFilesFromRepositoryRoot.mockImplementation((_, __, file) =>
+      Promise.resolve(file.startsWith('**') ? [file.replace('**', 'subdir')] : [file])
+    );
+    fileExistsAtCommit.mockImplementation((_ctx, _commit, file) =>
+      Promise.resolve(!file.startsWith('subdir/'))
+    );
+
+    mockInspect(
+      // HEAD /
+      ['react@18.2.0'],
+      // Baseline A /
+      ['react@18.3.0']
+    );
+    mockChangedPackagesGraph(['react@18.3.0']);
+
+    const context = getContext({
+      git: {
+        packageMetadataChanges: [
+          { changedFiles: ['package.json', 'subdir/package.json'], commit: 'A' },
+        ],
+      },
+    });
+
+    await expect(findChangedDependencies(context)).resolves.toEqual(['react']);
+
+    // The newly added subpackage manifest is never checked out against the baseline.
+    expect(checkoutFile).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'subdir/package.json',
+      expect.anything()
+    );
+  });
+
+  it('does not bail when only a newly added manifest changed', async () => {
+    // A single added manifest with no baseline yields no dependency changes rather than throwing.
+    findFilesFromRepositoryRoot.mockImplementation((_, __, file) =>
+      Promise.resolve(file.startsWith('**') ? [file.replace('**', 'subdir')] : [])
+    );
+    fileExistsAtCommit.mockResolvedValue(false);
+
+    const context = getContext({
+      git: {
+        packageMetadataChanges: [{ changedFiles: ['subdir/package.json'], commit: 'A' }],
+      },
+    });
+
+    await expect(findChangedDependencies(context)).resolves.toEqual([]);
+    expect(inspect).not.toHaveBeenCalled();
   });
 
   it('looks for manifest and lock files in subpackages', async () => {

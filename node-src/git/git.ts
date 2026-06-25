@@ -199,6 +199,24 @@ export async function commitExists(deps: GitDeps, commit: string) {
 }
 
 /**
+ * Check if a file exists at a given commit.
+ *
+ * @param deps Function dependencies.
+ * @param commit The commit (or other revision) to check.
+ * @param fileName The path to the file, relative to the repository root.
+ *
+ * @returns True if the file exists at the commit.
+ */
+export async function fileExistsAtCommit(deps: GitDeps, commit: string, fileName: string) {
+  try {
+    await execGitCommand(deps, `git cat-file -e "${commit}:${fileName}"`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get the changed files of a single commit or between two.
  *
  * @param deps Function dependencies.
