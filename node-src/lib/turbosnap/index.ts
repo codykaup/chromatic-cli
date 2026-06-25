@@ -34,9 +34,6 @@ export const traceChangedFiles = async (ctx: Context) => {
   let changedDependencyNames: void | string[] = [];
   let pendingError: unknown;
   let pendingPatch: Partial<ChangedPackageFilesBailReason> | undefined;
-  // Package files whose dependency changes we couldn't resolve from the lockfiles. We don't bail on
-  // these immediately because a changed (or newly added) package.json may belong to a monorepo
-  // package that isn't part of the Storybook build. Instead we defer the decision until we've read
   let unresolvedPackageFiles: string[] = [];
   if (packageMetadataChanges?.length) {
     changedDependencyNames = await findChangedDependencies(ctx).catch((err) => {
