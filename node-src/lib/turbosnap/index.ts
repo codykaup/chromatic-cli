@@ -37,7 +37,6 @@ export const traceChangedFiles = async (ctx: Context) => {
   // Package files whose dependency changes we couldn't resolve from the lockfiles. We don't bail on
   // these immediately because a changed (or newly added) package.json may belong to a monorepo
   // package that isn't part of the Storybook build. Instead we defer the decision until we've read
-  // the stats file, then only bail if one of these files is actually relevant to the build.
   let unresolvedPackageFiles: string[] = [];
   if (packageMetadataChanges?.length) {
     changedDependencyNames = await findChangedDependencies(ctx).catch((err) => {
@@ -93,7 +92,7 @@ export const traceChangedFiles = async (ctx: Context) => {
 
     ctx.log.debug(
       { unresolvedPackageFiles },
-      'Ignoring changed package files that are not part of the Storybook build'
+      'Ignoring changed package files that are not part of the Storybook'
     );
   }
 
