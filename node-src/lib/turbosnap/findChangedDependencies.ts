@@ -124,17 +124,20 @@ export const findChangedDependencies = async (ctx: Context) => {
     await Promise.all(
       filteredPathPairs.map(([manifestPath, lockfilePath, commits]) =>
         headDependenciesLimit(async () => {
-          // A newly added manifest (or lockfile) has no baseline to compare against. Skip those
-          // baselines rather than bailing: a new package's dependencies, and the files that consume
-          // them, show up as changed files and are traced normally. This also prevents an unrelated
-          // added package.json — which often updates the root lockfile alongside it — from poisoning
-          // the analysis of every other manifest and forcing a full build.
+          // A manifest that didn't exist at a baseline has no dependencies to diff against there: it
+          // was newly added (or moved). Skip those baselines rather than bailing, since a new
+          // package's dependencies — and the files that consume them — show up as changed files and
+          // are traced normally. This also prevents an unrelated added package.json (which often
+          // updates the root lockfile alongside it) from poisoning the analysis of every other
+          // manifest and forcing a full build.
+          //
+          // We deliberately gate on the manifest only, not the lockfile. A manifest that exists at
+          // the baseline but whose lockfile doesn't (e.g. a package that gained its own lockfile)
+          // may still have real dependency changes that wouldn't surface as changed files, so we let
+          // those fall through to the baseline checkout and bail rather than silently skipping them.
           const baselineExistence = await Promise.all(
             commits.map(async (reference) =>
-              (await fileExistsAtCommit(ctx, reference, manifestPath)) &&
-              (await fileExistsAtCommit(ctx, reference, lockfilePath))
-                ? reference
-                : undefined
+              (await fileExistsAtCommit(ctx, reference, manifestPath)) ? reference : undefined
             )
           );
           const baselineCommits = baselineExistence.filter(

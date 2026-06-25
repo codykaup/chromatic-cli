@@ -265,6 +265,25 @@ describe('findChangedDependencies', () => {
     );
   });
 
+  it('does not skip (and bails) when the manifest existed but its lockfile did not', async () => {
+    // The manifest existed at the baseline, so it may have real dependency changes. Even though the
+    // lockfile is newly added, we must not silently skip it; we attempt the baseline checkout, which
+    // fails and surfaces so we bail rather than under-snapshot.
+    fileExistsAtCommit.mockImplementation((_ctx, _commit, file) =>
+      Promise.resolve(file.endsWith('package.json'))
+    );
+    checkoutFile.mockImplementation((_ctx, _commit, file) =>
+      file.endsWith('yarn.lock')
+        ? Promise.reject(new Error('Failed to check out baseline file'))
+        : Promise.resolve(`baseline.${file}`)
+    );
+    mockInspect(/* HEAD */ ['react@18.2.0']);
+
+    const context = getContext({ git: { packageMetadataChanges: AMetadataChanges } });
+
+    await expect(findChangedDependencies(context)).rejects.toThrow();
+  });
+
   it('does not bail when only a newly added manifest changed', async () => {
     // A single added manifest with no baseline yields no dependency changes rather than throwing.
     findFilesFromRepositoryRoot.mockImplementation((_, __, file) =>
