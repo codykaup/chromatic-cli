@@ -26,15 +26,6 @@ export async function uploadMetadataFiles(ctx: Context) {
     return;
   }
 
-  // If the build never got published (e.g. an earlier task such as `prepare` failed), there's no
-  // valid location to host the metadata files. The only `ctx.build` we have in that case comes from
-  // a baseline build and lacks a `storybookUrl`, which would otherwise produce an invalid
-  // `undefined.chromatic/` upload target. Skip the upload for these invalid builds.
-  if (!ctx.build?.storybookUrl) {
-    ctx.log.warn('Build was not published, skipping metadata upload.');
-    return;
-  }
-
   try {
     return await withPausedLog(ctx, async () => {
       const metadataFiles = [

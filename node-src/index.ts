@@ -262,11 +262,20 @@ function shouldWriteDiagnosticsFile(ctx: Context): boolean {
  * --no-upload-metadata always wins. Otherwise we default to uploading when
  * TurboSnap was enabled.
  *
+ * Regardless of the above, we never upload metadata for a build that wasn't published (e.g. an
+ * earlier task such as `prepare` failed). In that case the only `ctx.build` we have comes from a
+ * baseline build and lacks a `storybookUrl`, which would otherwise produce an invalid
+ * `undefined.chromatic/` upload target.
+ *
  * @param ctx The context set when executing the CLI.
  *
  * @returns True if metadata files should be uploaded.
  */
 export function shouldUploadMetadata(ctx: Context): boolean {
+  if (!ctx.build?.storybookUrl) {
+    return false;
+  }
+
   return ctx.options.uploadMetadata ?? isTurboSnapEnabled(ctx);
 }
 
