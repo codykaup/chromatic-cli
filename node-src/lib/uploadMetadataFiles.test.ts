@@ -38,8 +38,23 @@ describe('uploadMetadataFiles', () => {
     expect(uploadFiles).not.toHaveBeenCalled();
   });
 
+  it('should skip if the build was not published (no storybookUrl)', async () => {
+    await uploadMetadataFiles({
+      ...baseContext,
+      options: { logFile: 'chromatic.log' },
+      announcedBuild: { id: '1' },
+      // A baseline build (e.g. from gitInfo) lacks a storybookUrl when an earlier task failed.
+      build: { id: '1' },
+    });
+    expect(uploadFiles).not.toHaveBeenCalled();
+  });
+
   it('should skip if there are no metadata files to upload', async () => {
-    await uploadMetadataFiles({ ...baseContext, announcedBuild: { id: '1' } });
+    await uploadMetadataFiles({
+      ...baseContext,
+      announcedBuild: { id: '1' },
+      build: { storybookUrl: 'https://sample-storybook.dev-chromatic.com' },
+    });
     expect(uploadFiles).not.toHaveBeenCalled();
   });
 
