@@ -85,6 +85,8 @@
     "postpack": "clean-package restore",
     "publish-action": "./scripts/publishAction.mjs",
     "trace": "./dist/bin.cjs trace",
+    "hash-manifest": "./dist/bin.cjs hash-manifest",
+    "hash-diff": "./dist/bin.cjs hash-diff",
     "trim-stats": "./dist/bin.cjs trim-stats-file",
     "storybook": "cross-env FORCE_COLOR=3 TERM=xterm-256color storybook dev -p 9009",
     "test": "vitest run --coverage",
