@@ -1,0 +1,4 @@
+# Bundled generator (build with esbuild — see README)
+generateManifest.cjs
+# Generated manifests / comparison output
+results/

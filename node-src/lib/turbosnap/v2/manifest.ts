@@ -70,13 +70,26 @@ export async function buildManifest(stats: Stats, projectRoot: string): Promise<
   // we need to parse the entire list of dependencies first.
   const storyFileNames = new Set<FilePath>();
 
-  for (const module of stats.modules) {
-    const sourceFilePath = normalizeStatsPath(module.name, projectRoot);
-    // Match story entry files against the raw importer names, since STORIES_ENTRY_FILES holds the
-    // builder's own entry paths (e.g. `./storybook-stories.js`).
-    const rawImporters = module.reasons?.map((reason) => reason.moduleName) ?? [];
+  // The set of module names whose direct imports are story files (the builder's story-entry files
+  // plus any lazy `require.context` modules that route to stories — see `collectStoryContainers`).
+  const storyContainers = collectStoryContainers(stats);
 
-    if (rawImporters.some((importer) => STORIES_ENTRY_FILES.has(importer))) {
+  for (const module of stats.modules) {
+    // Some builders (webpack/rspack) emit modules with a null/undefined `name` (e.g. runtime
+    // modules) — skip them so we don't crash or create a bogus entry.
+    if (!module.name) continue;
+    const sourceFilePath = normalizeStatsPath(module.name, projectRoot);
+    // Match story containers against the raw importer names, since they hold the builder's own
+    // entry/context paths (e.g. `./storybook-stories.js`). `entry`-type reasons have a null/undefined
+    // `moduleName` (they represent the entry point itself, with no importer) — drop them.
+    const rawImporters = (module.reasons ?? []).map((reason) => reason.moduleName).filter(Boolean);
+
+    // A story container (the entry or its lazy context) is itself imported by a story-entry file,
+    // so exclude it here — only its imports are real story files.
+    if (
+      !storyContainers.has(module.name) &&
+      rawImporters.some((importer) => storyContainers.has(importer))
+    ) {
       storyFileNames.add(sourceFilePath);
     }
 
@@ -112,6 +125,42 @@ export async function buildManifest(stats: Stats, projectRoot: string): Promise<
   const storybookHash = h64ToString([...storyFileHashes.values()].sort().join(''));
 
   return { files, storyFileHashes, storybookHash };
+}
+
+/**
+ * Detects whether a module name looks like a lazy `require.context` ("namespace object") module.
+ * webpack renders these with space separators (`./src lazy ... namespace object`) and rspack with
+ * pipes (`./src|lazy|...|namespace object`).
+ *
+ * @param name The raw stats module name.
+ *
+ * @returns Whether the module is a lazy context module.
+ */
+function isLazyContextModule(name: string): boolean {
+  return name.includes('namespace object') || /(^|[\s|])lazy([\s|])/.test(name);
+}
+
+/**
+ * Collects the set of module names whose direct imports are story files. It always includes the
+ * builder's story-entry files (e.g. `./storybook-stories.js`). The webpack and rspack builders
+ * don't import stories directly from the entry — they route them through a lazy `require.context`
+ * module — so any lazy context imported by a story-entry file is treated as a container too.
+ * Without this, no story files are found for those builders.
+ *
+ * @param stats The stats file to scan.
+ *
+ * @returns The set of raw story-container module names.
+ */
+function collectStoryContainers(stats: Stats): Set<string> {
+  const containers = new Set<string>(STORIES_ENTRY_FILES);
+  for (const module of stats.modules) {
+    if (!module.name || !isLazyContextModule(module.name)) continue;
+    const importedByEntry = (module.reasons ?? []).some(
+      (reason) => reason.moduleName && STORIES_ENTRY_FILES.has(reason.moduleName)
+    );
+    if (importedByEntry) containers.add(module.name);
+  }
+  return containers;
 }
 
 /**
@@ -175,9 +224,9 @@ async function hashFiles(stats: Stats, projectRoot: string): Promise<Map<FilePat
   // Collect every referenced module path once.
   const rawPaths = new Set<FilePath>();
   for (const module of stats.modules) {
-    rawPaths.add(module.name);
+    if (module.name) rawPaths.add(module.name);
     for (const reason of module.reasons ?? []) {
-      rawPaths.add(reason.moduleName);
+      if (reason.moduleName) rawPaths.add(reason.moduleName);
     }
   }
 

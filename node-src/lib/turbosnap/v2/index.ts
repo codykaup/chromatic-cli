@@ -1,12 +1,11 @@
 import GraphQLClient from '../../../io/graphqlClient';
 import { readStatsFile } from '../../../tasks/readStatsFile';
 import { TraceChangedFilesResult } from '../types';
-import { determineChangedFiles } from './api';
 import { buildManifest, writeManifest } from './manifest';
 
 interface TraceChangedFilesInput {
-  graphqlClient: GraphQLClient;
-  buildId: string;
+  graphqlClient?: GraphQLClient;
+  buildId?: string;
   statsPath: string;
   manifestOutputDirectory: string;
   projectRoot: string;
@@ -34,7 +33,9 @@ export async function traceChangedFiles(
 ): Promise<TraceChangedFilesV2Result> {
   const stats = await readStatsFile(input.statsPath);
   const manifest = await buildManifest(stats, input.projectRoot);
-  await determineChangedFiles(input.graphqlClient, input.buildId, manifest);
+  // NOTE: The call to `determineChangedFiles` (the `uploadBuildHashes` GraphQL mutation against the
+  // Index) is intentionally omitted here for local hash-manifest testing. The backend baseline is
+  // not wired up yet, so we only want to generate and inspect the manifest locally.
   writeManifest(manifest, input.manifestOutputDirectory);
 
   return { status: 'fallback' };

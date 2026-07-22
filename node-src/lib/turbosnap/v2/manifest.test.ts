@@ -51,6 +51,55 @@ describe('buildManifest', () => {
   });
 });
 
+describe('buildManifest builder compatibility', () => {
+  it('does not throw on null/undefined module names or reason moduleNames', async () => {
+    // webpack/rspack emit runtime modules with a null name and `entry`-type reasons whose
+    // moduleName is null/undefined. These must be skipped rather than crash the whole run.
+    const stats = {
+      modules: [
+        { id: 0, name: null, reasons: [{ moduleName: null }] },
+        {
+          id: 1,
+          name: '/repo/packages/ui/src/Button.stories.tsx',
+          reasons: [
+            { moduleName: undefined as unknown as string },
+            { moduleName: './storybook-stories.js' },
+          ],
+        },
+      ],
+    } as unknown as Stats;
+
+    const manifest = await buildManifest(stats, projectRoot);
+
+    expect([...manifest.storyFileHashes.keys()]).toEqual(['src/Button.stories.tsx']);
+  });
+
+  it('detects story files imported through a webpack/rspack lazy require.context', async () => {
+    // webpack routes stories through a lazy context ("namespace object") module rather than
+    // importing them directly from the story entry. The context module itself must not be
+    // mistaken for a story file.
+    const webpackContext = String.raw`./src/lib/ lazy ^\.\/.*$ include: ... namespace object`;
+    const stats: Stats = {
+      modules: [
+        {
+          id: 1,
+          name: webpackContext,
+          reasons: [{ moduleName: './storybook-stories.js' }],
+        },
+        {
+          id: 2,
+          name: '/repo/packages/ui/src/Button.stories.tsx',
+          reasons: [{ moduleName: webpackContext }],
+        },
+      ],
+    };
+
+    const manifest = await buildManifest(stats, projectRoot);
+
+    expect([...manifest.storyFileHashes.keys()]).toEqual(['src/Button.stories.tsx']);
+  });
+});
+
 describe('buildManifest leaf inclusion', () => {
   const story = '/repo/packages/ui/src/Button.stories.tsx';
   const leaf = '/repo/packages/ui/src/theme.ts';
