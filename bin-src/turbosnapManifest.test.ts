@@ -24,6 +24,12 @@ vi.mock('../node-src/lib/getFileHashes', () => ({
     Promise.resolve(Object.fromEntries(files.map((f) => [f, 'x']))),
 }));
 
+// The manifest reads the installed Storybook version off disk, which this fake project root has no
+// node_modules for. See node-src/lib/turbosnap/v2/storybookVersion.test.ts for the probe itself.
+vi.mock('../node-src/lib/turbosnap/v2/storybookVersion', () => ({
+  resolveStorybookVersion: () => '9.1.20',
+}));
+
 describe('turbosnap-manifest command', () => {
   let stdout: ReturnType<typeof vi.spyOn>;
 
@@ -59,6 +65,9 @@ describe('turbosnap-manifest command', () => {
     expect(typeof manifest.storybookHash).toBe('string');
     expect(Object.keys(manifest.storyFiles)).toEqual(['src/Button.stories.tsx']);
     expect(manifest.files['src/Button.stories.tsx'].dependencies).toEqual(['src/helper.ts']);
+    // The version survives serialization as a readable string, so the emitted manifest itself says
+    // which Storybook produced the build.
+    expect(manifest.storybookFiles['<storybookVersion>']).toBe('9.1.20');
   });
 
   it('resolves the stats file against the storybook base directory', async () => {

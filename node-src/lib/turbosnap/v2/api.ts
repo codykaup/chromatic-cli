@@ -31,8 +31,11 @@ const UploadBuildHashesMutation = `
  * `storybookHash` is the Index's top-level gate: if it is unchanged nothing in Storybook changed and
  * no story needs recapturing. When it moves, the Index drills into the two hash maps —
  * `storyFileHashes` attributes the change to individual stories, while any change to a
- * `storybookFileHashes` entry (a `.storybook/preview.*` file or the `<storybookGlobals>` catch-all)
- * means Storybook-wide config changed and everything must be recaptured.
+ * `storybookFileHashes` entry (a `.storybook/preview.*` file, the `<storybookGlobals>` catch-all, or
+ * the `<storybookVersion>` string) means Storybook-wide config changed and everything must be
+ * recaptured. Note that `<storybookVersion>` is a version string rather than a hash — it exists
+ * because the preview core runtime sits outside the module graph on webpack and rspack — so the Index
+ * must compare entry values for equality and never assume they are hashes.
  *
  * @param graphqlClient The GraphQL client to use.
  * @param buildId The build ID associated with the manifest.

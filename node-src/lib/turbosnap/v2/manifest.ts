@@ -10,6 +10,7 @@ import {
   StatsPathRoots,
   stripConcatenatedModuleSuffix,
 } from './paths';
+import { resolveStorybookVersion } from './storybookVersion';
 
 // Generated entry points that import all story files. We use this to determine if a file is a story
 // file because they may not always be *.stories.* files because it's configurable.
@@ -46,8 +47,14 @@ const PREVIEW_CONFIG_PATTERN = /(^|\/)\.storybook\/preview\.[cm]?[jt]sx?$/;
 // canonical relative path, so it can never collide with a real file.
 const STORYBOOK_GLOBALS_KEY = '<storybookGlobals>';
 
+// The synthetic `storybookFiles` key holding the installed Storybook version. Unlike every other
+// entry this is a version string rather than a hash, because the preview core runtime is served
+// outside the module graph on webpack and rspack; see resolveStorybookVersion.
+const STORYBOOK_VERSION_KEY = '<storybookVersion>';
+
 type FilePath = string;
 type FileHash = string;
+type StorybookVersion = string;
 
 interface TurboSnapFile {
   hash: FileHash;
@@ -64,12 +71,12 @@ export interface TurboSnapManifest {
   /** Rolled-up hash per story file, covering only that story's own transitive subtree. */
   storyFileHashes: Map<FilePath, FileHash>;
   /**
-   * Rolled-up hash per Storybook config file that no story imports: one entry per
-   * `.storybook/preview.*` plus the {@link STORYBOOK_GLOBALS_KEY} catch-all. A change to any entry
-   * means recapture everything, so the small map is enough for the backend to decide; the per-file
-   * breakdown behind each entry stays in `files` for debugging.
+   * One entry per `.storybook/preview.*` holding its rolled-up hash, plus the
+   * {@link STORYBOOK_GLOBALS_KEY} catch-all and the {@link STORYBOOK_VERSION_KEY} version string. A
+   * change to any entry means recapture everything, so the small map is enough for the backend to
+   * decide; the per-file breakdown behind each hash stays in `files` for debugging.
    */
-  storybookFiles: Map<FilePath, FileHash>;
+  storybookFiles: Map<FilePath, FileHash | StorybookVersion>;
   storybookHash: string;
 }
 
@@ -83,7 +90,7 @@ export interface TurboSnapManifest {
 interface ManifestFile {
   storybookHash: string;
   storyFiles: Record<FilePath, FileHash>;
-  storybookFiles: Record<FilePath, FileHash>;
+  storybookFiles: Record<FilePath, FileHash | StorybookVersion>;
   files: Record<FilePath, { hash: FileHash; dependencies: FilePath[] }>;
 }
 
@@ -148,12 +155,21 @@ export async function buildManifest(
     storyFileHashes.set(storyFile, rollUpHash(hashes, subtree, h64ToString));
   }
 
-  const storybookFiles = collectStorybookFiles(files, hashes, storyFileNames, h64ToString);
+  const storybookFiles: Map<FilePath, FileHash | StorybookVersion> = collectStorybookFiles(
+    files,
+    hashes,
+    storyFileNames,
+    h64ToString
+  );
+
+  // The preview core runtime is out of the module graph on webpack and rspack, so no file hash can
+  // see a Storybook upgrade there. Track the version instead; it is a plain string, not a hash.
+  storybookFiles.set(STORYBOOK_VERSION_KEY, resolveStorybookVersion(roots.projectRoot));
 
   // The backend's top-level "did Storybook change at all?" gate: every story hash plus every
-  // `storybookFiles` hash. If it moved, the backend drills into `storyFiles` and `storybookFiles` to
+  // `storybookFiles` value. If it moved, the backend drills into `storyFiles` and `storybookFiles` to
   // decide what to recapture. Each group is sorted independently so the result doesn't depend on
-  // module iteration order, and so a hash can't change meaning by moving between the two groups.
+  // module iteration order, and so a value can't change meaning by moving between the two groups.
   const storybookHash = h64ToString(
     [...storyFileHashes.values()].sort().join('') + [...storybookFiles.values()].sort().join('')
   );
@@ -210,11 +226,12 @@ export function writeManifest(manifest: TurboSnapManifest, outputDirectory: stri
 }
 
 /**
- * Builds the `storybookFiles` section: a rolled-up hash for each Storybook config file that no story
- * imports. Every hashable file lands in exactly one hashing home — a story's own subtree, a keyed
- * `.storybook/preview.*` entry, or the {@link STORYBOOK_GLOBALS_KEY} catch-all — so nothing goes
- * unhashed and the backend can still attribute a change to the preview config or to a
- * Storybook/framework global.
+ * Builds the file-hash entries of the `storybookFiles` section: a rolled-up hash for each Storybook
+ * config file that no story imports. Every hashable file lands in exactly one hashing home — a
+ * story's own subtree, a keyed `.storybook/preview.*` entry, or the {@link STORYBOOK_GLOBALS_KEY}
+ * catch-all — so nothing goes unhashed and the backend can still attribute a change to the preview
+ * config or to a Storybook/framework global. The {@link STORYBOOK_VERSION_KEY} entry is added by the
+ * caller, since it is a version string rather than a hash of graph files.
  *
  * @param files The map of files to their hashes and dependencies.
  * @param hashes The content hashes keyed by canonical file path; a missing entry means no real file.

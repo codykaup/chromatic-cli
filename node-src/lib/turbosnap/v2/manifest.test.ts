@@ -21,6 +21,16 @@ vi.mock('../../../lib/getFileHashes', () => ({
     Promise.resolve(Object.fromEntries(files.map((f) => [f, fileHashesRef.current[f] ?? 'x']))),
 }));
 
+// The version is read off the resolved Storybook package on disk, which no fixture here installs;
+// stub it so these tests exercise graph hashing only. See storybookVersion.test.ts for the probe.
+const { storybookVersionRef } = vi.hoisted(() => ({
+  storybookVersionRef: { current: '9.1.20' },
+}));
+
+vi.mock('./storybookVersion', () => ({
+  resolveStorybookVersion: () => storybookVersionRef.current,
+}));
+
 // Manifest keys anchor at the git root, so a project in a subdirectory keys its files by their
 // repo-relative path (e.g. `packages/ui/src/...`). See StatsPathRoots for why the two roots differ.
 const projectRoot = '/repo/packages/ui';
@@ -29,6 +39,7 @@ const roots = { projectRoot, gitRoot };
 
 beforeEach(() => {
   fileHashesRef.current = {};
+  storybookVersionRef.current = '9.1.20';
 });
 
 describe('serializeManifest', () => {
@@ -722,10 +733,39 @@ describe('buildManifest storybookFiles', () => {
         roots
       );
 
-      expect([...manifest.storybookFiles.keys()]).toEqual([]);
+      // The version entry is unconditional, so it is the only key left once the catch-all is gone.
+      expect([...manifest.storybookFiles.keys()]).toEqual(['<storybookVersion>']);
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('records the installed Storybook version as its own entry, verbatim rather than hashed', async () => {
+    // The value is deliberately legible: the preview core runtime is served outside the module graph
+    // on webpack and rspack, so a version is the only signal of a Storybook upgrade there, and
+    // keeping it readable means the manifest itself says which Storybook produced the build.
+    storybookVersionRef.current = '10.6.0-alpha.3';
+    fileHashesRef.current = { ...baseHashes };
+
+    const manifest = await buildManifest(makeStats(), roots);
+
+    expect(manifest.storybookFiles.get('<storybookVersion>')).toBe('10.6.0-alpha.3');
+  });
+
+  it('changes the storybookHash when only the Storybook version changes', async () => {
+    // A Storybook upgrade that touches no graph file must still force a recapture, which is the
+    // whole point of the entry: on webpack and rspack no file hash can see it.
+    fileHashesRef.current = { ...baseHashes };
+    storybookVersionRef.current = '9.1.19';
+    const before = await buildManifest(makeStats(), roots);
+
+    fileHashesRef.current = { ...baseHashes };
+    storybookVersionRef.current = '9.1.20';
+    const after = await buildManifest(makeStats(), roots);
+
+    expect(after.storybookHash).not.toBe(before.storybookHash);
+    // Only the Storybook-wide gate moves; no individual story subtree changed.
+    expect([...after.storyFileHashes]).toEqual([...before.storyFileHashes]);
   });
 
   it('produces identical storybookFiles and storybook hash when building the same stats twice', async () => {
