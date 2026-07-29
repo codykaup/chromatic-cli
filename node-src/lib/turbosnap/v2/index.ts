@@ -2,6 +2,7 @@ import GraphQLClient from '../../../io/graphqlClient';
 import { readStatsFile } from '../../../tasks/readStatsFile';
 import { TraceChangedFilesResult } from '../types';
 import { determineChangedFiles } from './api';
+import { getBuilderViteFallbackReason } from './builderViteCompatibility';
 import { buildManifest, writeManifest } from './manifest';
 
 interface TraceChangedFilesInput {
@@ -17,7 +18,9 @@ interface TraceChangedFilesInput {
  * The result of running TurboSnap v2. In addition to the shared trace statuses, v2 can return
  * 'fallback' to tell the caller it can't be trusted to trace this build and v1 should run instead.
  */
-export type TraceChangedFilesV2Result = TraceChangedFilesResult | { status: 'fallback' };
+export type TraceChangedFilesV2Result =
+  | TraceChangedFilesResult
+  | { status: 'fallback'; reason?: string };
 
 /**
  * Determines which story files are affected by the changed source file hashes, bailing out of
@@ -36,6 +39,11 @@ export async function traceChangedFiles(
   input: TraceChangedFilesInput
 ): Promise<TraceChangedFilesV2Result> {
   const stats = await readStatsFile(input.statsPath);
+  const fallbackReason = getBuilderViteFallbackReason(stats, input.projectRoot);
+  if (fallbackReason) {
+    return { status: 'fallback', reason: fallbackReason };
+  }
+
   const manifest = await buildManifest(stats, {
     projectRoot: input.projectRoot,
     gitRoot: input.gitRoot,

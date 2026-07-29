@@ -122,6 +122,12 @@ bash parity.sh ui-webpack   # webpack — gates
 bash parity.sh ui-rsbuild   # rspack  — informational only
 ```
 
+The production `--only-changed` path has an additional compatibility gate: Vite stats produced by
+`@storybook/builder-vite` versions before `10.6.0-alpha.4` fall back to TurboSnap v1 instead of
+uploading v2 hashes. That is a temporary builder-stats trust gate, not a correctness fix for the
+invisible CJS-dependency blind spot — v1 can miss that case too. The `turbosnap-manifest` harness
+command intentionally bypasses this gate so local patched-builder stats can still be measured.
+
 The two sides are driven differently, because v1 is not stats-only:
 
 - **v1** — `chromatic trace --json`. A source edit passes the file path; a dependency bump passes
@@ -169,7 +175,7 @@ story count and the `storybookFiles` line together — "0 stories changed" is no
   it lands in the bucket because the importer edge from `Button.tsx` is missing from the vite stats
   (edge loss), not because it was pre-bundled away.
 
-Bucket sizes at that measurement: vite 29 of 39 files, webpack 49 of 288, rsbuild 201 of 202.
+Bucket sizes at that measurement: vite 29 of 39 files, webpack 49 of 284, rsbuild 201 of 202.
 
 If any of these change, the algorithm's behavior has changed — investigate before assuming the
 harness is wrong.

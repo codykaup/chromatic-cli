@@ -49,8 +49,9 @@ export async function traceChangedFiles(ctx: Context): Promise<TraceChangedFiles
       gitRoot,
     });
 
-    if (result.status !== 'fallback') {
-      return result;
+    if (result.status !== 'fallback') return result;
+    if (result.reason) {
+      ctx.log.info(`TurboSnap v2 unavailable: ${result.reason}; falling back to v1`);
     }
   } catch (error) {
     ctx.log.error('Error running TurboSnap v2, falling back to v1:', error);
