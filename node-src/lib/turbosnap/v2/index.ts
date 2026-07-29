@@ -12,6 +12,8 @@ interface TraceChangedFilesInput {
   manifestOutputDirectory: string;
   projectRoot: string;
   gitRoot: string;
+  configDir: string;
+  staticDirs: string[];
 }
 
 /**
@@ -32,6 +34,9 @@ export type TraceChangedFilesV2Result =
  * @param input.projectRoot The absolute Storybook project root used to read source files off disk.
  * @param input.gitRoot The absolute git repository root used to anchor manifest keys; see
  * {@link StatsPathRoots} for why the two roots differ.
+ * @param input.configDir The project-relative Storybook config directory, hashed off disk because it
+ * is never a bundler input.
+ * @param input.staticDirs The project-relative static directories, hashed off disk for the same reason.
  *
  * @returns The TurboSnap result.
  */
@@ -45,10 +50,11 @@ export async function traceChangedFiles(
     return { status: 'fallback', reason: fallbackReason };
   }
 
-  const manifest = await buildManifest(stats, {
-    projectRoot: input.projectRoot,
-    gitRoot: input.gitRoot,
-  });
+  const manifest = await buildManifest(
+    stats,
+    { projectRoot: input.projectRoot, gitRoot: input.gitRoot },
+    { configDir: input.configDir, staticDirs: input.staticDirs }
+  );
   await determineChangedFiles(input.graphqlClient, input.buildId, manifest);
   writeManifest(manifest, input.manifestOutputDirectory);
 

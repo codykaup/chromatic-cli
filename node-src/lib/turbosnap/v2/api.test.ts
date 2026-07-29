@@ -20,6 +20,8 @@ const manifest: TurboSnapManifest = {
     previewSubtree: new Set(['.storybook/preview.ts']),
     storybookGlobals: new Set(),
   },
+  // Present on the manifest for the S3 debug file, but deliberately not uploaded to the Index.
+  outOfGraphFiles: { storybookConfigFiles: new Map(), staticFiles: new Map() },
 };
 
 beforeEach(() => {

@@ -30,6 +30,8 @@ const input = {
   manifestOutputDirectory: '/repo/packages/ui/.chromatic',
   projectRoot: '/repo/packages/ui',
   gitRoot: '/repo',
+  configDir: '.storybook',
+  staticDirs: ['.storybook/static'],
 };
 
 beforeEach(() => {
@@ -63,6 +65,10 @@ describe('traceChangedFiles', () => {
       {
         projectRoot: '/repo/packages/ui',
         gitRoot: '/repo',
+      },
+      {
+        configDir: '.storybook',
+        staticDirs: ['.storybook/static'],
       }
     );
     expect(determineChangedFiles).toHaveBeenCalledWith(input.graphqlClient, 'build-id', {

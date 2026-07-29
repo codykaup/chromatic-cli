@@ -10,7 +10,7 @@ see which stories *would* be recaptured. Full findings: [`../turbosnap-v2-test-r
 |---|---|
 | `gen.sh <pkg> <out.json> [stats.json]` | Build a v2 manifest for one fixture package. Pass a stats file to read the graph from a snapshot. |
 | `tsdiff.mjs <base.json> <cur.json>` | Diff two manifests → Storybook-hash change, every changed per-story hash, **and** every changed `storybookFiles` entry. The core "which stories recapture?" assertion. |
-| `bucket.mjs <manifest.json> [path-substring]` | List `<storybookGlobals>` membership, or report which set a given file was attributed to. See [Seeing what's in the bucket](#seeing-whats-in-the-bucket). |
+| `bucket.mjs <manifest.json> [path-substring]` | List `<storybookGlobals>` membership, or report which set a given file was attributed to. See [Seeing what's in the bucket](#seeing-whats-in-the-bucket). Covers the graph only — for config and static files see [Out-of-graph inputs](#out-of-graph-inputs). |
 | `trace.mjs <manifest.json> <story-substring>` | Print a story's transitive deps, split into first-party vs. node_modules. Use to see *why* a story did/didn't change. Walks the **pruned** graph — use `bucket.mjs`, never this, to ask what is in the bucket. |
 | `matrix.sh <pkg>` | Run the full edit matrix (leaf / transitive / isolated / story-file / cross-package / preview / main / node_modules) for one builder and print results. |
 | `parity.mjs <base.json> <cur.json> <v1.json>` | Compare what v1 would recapture against what v2 would recapture, and print a verdict. |
@@ -52,9 +52,14 @@ bash matrix.sh ui-rsbuild
 
 ```
 Badge.stories.tsx    → Badge.tsx                                  (leaf)
-Button.stories.tsx   → Button.tsx   → @myorg/shared (capitalize), moment
+Button.stories.tsx   → Button.tsx   → @myorg/shared (capitalize), moment, src/theme.ts
 UserCard.stories.tsx → UserCard.tsx → Badge.tsx, @myorg/shared (formatDate)
+
+.storybook/preview.ts → .storybook/test.ts, src/theme.ts          (shares theme.ts with Button)
 ```
+
+`src/theme.ts` is imported by **both** `preview.ts` and `Button.tsx` on purpose — it is the only file
+in the fixture that exercises the preview-subtree-vs-flat-hash regression class. Keep both importers.
 
 `@myorg/shared` = `packages/shared/src/index.ts`, a barrel re-exporting every util (so editing it
 recaptures every story that imports *anything* from it — Button **and** UserCard).
@@ -104,6 +109,35 @@ node bucket.mjs /tmp/base.json                  # counts + full <storybookGlobal
 node bucket.mjs /tmp/base.json moment           # which set(s) matching files landed in
 jq -r '.attribution.storybookGlobals[]' /tmp/base.json
 ```
+
+## Out-of-graph inputs
+
+`files` and `attribution` describe the **bundle graph**. Storybook's config directory and its static
+assets are never bundler inputs — `main.ts` is Node-side config, and assets are referenced by URL
+string — so they get their own sections and are deliberately kept out of both. (Putting them in `files`
+would sweep them into `<storybookGlobals>`, since the catch-all is defined by *absence* from
+`storyReachable`/`previewSubtree`, which they satisfy by construction.)
+
+| `storybookFiles` entry | Rolled up from | Catches |
+|---|---|---|
+| `<storybookConfig>` | `storybookConfigFiles` — content hash of every file in the config dir, `preview.*` included | any config file's **bytes** changing |
+| `<staticFiles>` | `staticFiles` — content hash of every file under each `staticDirs` entry | any asset change |
+| `.storybook/preview.*` | its graph subtree (unchanged) | changes to preview's **imports** |
+
+```sh
+jq '.storybookConfigFiles, .staticFiles' /tmp/base.json   # the per-file debug detail
+jq '.storybookFiles' /tmp/base.json                       # what the Index actually compares
+```
+
+`preview.*` is covered **twice on purpose**: bytes-changed and imports-changed are different failure
+modes. Dropping its graph-rolled entry for a flat content hash is a silent under-capture — `src/theme.ts`
+in the fixture is imported by both `preview.ts` and `Button.tsx`, so editing it would recapture Button
+only, where v1 bails. Static dirs win over the config dir (they nest under `.storybook/static`),
+mirroring v1 testing `isStaticFile` before `isStorybookFile`. Each key is omitted entirely when its
+section is empty, as `<storybookGlobals>` is.
+
+`gen.sh` reads `staticDirs` out of `main.*` the same way a real build does. Pass
+`--static-dir a,b` to `turbosnap-manifest` to override, and `-c` for a non-default config dir.
 
 > **Never reconstruct these sets by walking `files` from the stories.** `pruneSyntheticFiles` runs
 > *after* hashing by design, so the written graph has holes where synthetic nodes (require-context
@@ -179,8 +213,14 @@ Re-measured 2026-07-29. A `storybookFiles` entry moving means **recapture everyt
 story count and the `storybookFiles` line together — "0 stories changed" is not "nothing recaptures".
 
 - Leaf / transitive / isolated / story-file / cross-package edits → the exact dependent stories, no more.
-- `.storybook/preview.ts` → **0 stories**, but its keyed `storybookFiles` entry changes ⇒ recapture everything.
-- `.storybook/main.ts` → **0 stories**, no entry moves (never in the module graph).
+- `.storybook/preview.ts` → **0 stories**, but **two** entries move: its keyed `storybookFiles` entry
+  (graph-rolled, covers its *imports*) and `<storybookConfig>` (covers its *bytes*). Double coverage is
+  deliberate — see [Out-of-graph inputs](#out-of-graph-inputs).
+- `.storybook/main.ts` → **0 stories**, `<storybookConfig>` moves ⇒ recapture everything.
+- `.storybook/static/*` → **0 stories**, `<staticFiles>` moves ⇒ recapture everything.
+- `src/theme.ts` (imported by **both** `preview.ts` and `Button.tsx`) → Button's story hash **and** the
+  keyed `preview.ts` entry move; `<storybookConfig>` does **not** (theme.ts is outside the config dir).
+  This is the fixture for the one regression class `parity.sh` could not otherwise see.
 - `moment` → **Button only** on vite (`moment/dist/moment.js`) and webpack (`moment/moment.js`, and
   each `moment/locale/*.js`); the bucket does **not** move. On **rsbuild** 0 stories are detected at
   all, so `moment` is in the bucket and any edit recaptures everything.
@@ -205,7 +245,8 @@ So the missing edge is **not** a further instance of the `?commonjs-es-import` u
 bump moves `<storybookGlobals>` (recapture everything) *and* changes `react/jsx-runtime.js`, which is
 story-attributed, so all 3 stories recapture regardless.
 
-Bucket sizes at that measurement: vite **27 of 39** files, webpack 49 of 284, rsbuild 201 of 202.
+Bucket sizes at that measurement: vite **27 of 40** files, webpack 49 of 284, rsbuild 201 of 202. (The
+vite total went 39 → 40 when `src/theme.ts` joined the fixture graph; the bucket itself is unchanged.)
 
 If any of these change, the algorithm's behavior has changed — investigate before assuming the
 harness is wrong.
@@ -213,7 +254,7 @@ harness is wrong.
 > The fixture repo may be edited by concurrent sessions. If a baseline you took earlier disagrees
 > with a fresh one, regenerate the baseline immediately before the probe rather than reusing it.
 
-## Two traps that have already produced wrong conclusions
+## Three traps that have already produced wrong conclusions
 
 1. **The fixture is shared and gets rebuilt mid-run.** A concurrent `build-storybook` swaps the module
    graph underneath a running probe and silently changes results — `preview-stats.json` changed three
@@ -224,3 +265,10 @@ harness is wrong.
    works from the package *name*) and v2 (which works from the *file*) **two different changes**, and
    reads as a false "v2 MISSES". `depfile.mjs` picks the file from the builder's own graph, and
    `parity.sh` prints which file it edited.
+3. **`parity.sh` and `matrix.sh` revert edits with `git checkout`, which discards *uncommitted* fixture
+   changes.** They take one baseline up front, so a `git checkout` that reverts a change you had staged
+   in the working tree leaves every later test comparing against a stale baseline. This turned four
+   `parity` verdicts into spurious "v2 wider" ones while `src/theme.ts` was still uncommitted — safe
+   verdicts, so the run did not fail, and the contamination was only visible as `<storybookConfig>`
+   moving on an unrelated `moment` bump. **Commit fixture changes in the monorepo before running
+   either script.**

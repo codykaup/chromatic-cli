@@ -47,6 +47,10 @@ export async function traceChangedFiles(ctx: Context): Promise<TraceChangedFiles
       manifestOutputDirectory: path.join(ctx.sourceDir, '.chromatic'),
       projectRoot,
       gitRoot,
+      // The config and static directories are project-relative, matching how v1 reads them. An
+      // explicit --storybook-config-dir wins over the discovered one, as it does in v1.
+      configDir: ctx.options?.storybookConfigDir ?? ctx.storybook?.configDir ?? '.storybook',
+      staticDirs: ctx.storybook?.staticDir ?? [],
     });
 
     if (result.status !== 'fallback') return result;

@@ -16,6 +16,7 @@ vi.mock('./v1', () => ({
 function makeContext(overrides: { rootPath?: string; baseDir?: string }) {
   return {
     turboSnap: {},
+    options: {},
     git: { changedFiles: ['./src/Button.tsx'], rootPath: overrides.rootPath },
     fileInfo: { statsPath: '/tmp/stats.json' },
     client: {},

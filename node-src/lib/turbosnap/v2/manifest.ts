@@ -12,6 +12,12 @@ import {
   TurboSnapFile,
 } from './graph';
 import {
+  hashOutOfGraphFiles,
+  OutOfGraphFiles,
+  OutOfGraphInput,
+  rollUpOutOfGraphFiles,
+} from './outOfGraphFiles';
+import {
   normalizeStatsPath,
   resolveStatsPath,
   StatsPathRoots,
@@ -64,14 +70,18 @@ export interface TurboSnapManifest {
   storyFileHashes: Map<FilePath, FileHash>;
   /**
    * One entry per `.storybook/preview.*` holding its rolled-up hash, plus the
-   * {@link STORYBOOK_GLOBALS_KEY} catch-all and the {@link STORYBOOK_VERSION_KEY} version string. A
+   * {@link STORYBOOK_GLOBALS_KEY} catch-all, the {@link STORYBOOK_VERSION_KEY} version string and the
+   * `<storybookConfig>` / `<staticFiles>` out-of-graph roll-ups (see {@link rollUpOutOfGraphFiles}). A
    * change to any entry means recapture everything, so the small map is enough for the backend to
-   * decide; the per-file breakdown behind each hash stays in `files` for debugging.
+   * decide; the per-file breakdown behind each hash stays in `files` (graph) or in the out-of-graph
+   * detail sections for debugging.
    */
   storybookFiles: Map<FilePath, FileHash | StorybookVersion>;
   storybookHash: string;
   /** Where each real file was hashed; see {@link FileAttribution}. */
   attribution: FileAttribution;
+  /** The per-file detail behind the out-of-graph roll-ups; see {@link OutOfGraphFiles}. */
+  outOfGraphFiles: OutOfGraphFiles;
 }
 
 /**
@@ -87,6 +97,8 @@ interface ManifestFile {
   storybookFiles: Record<FilePath, FileHash | StorybookVersion>;
   files: Record<FilePath, { hash: FileHash; dependencies: FilePath[] }>;
   attribution: Record<keyof FileAttribution, FilePath[]>;
+  storybookConfigFiles: Record<FilePath, FileHash>;
+  staticFiles: Record<FilePath, FileHash>;
 }
 
 /**
@@ -94,13 +106,16 @@ interface ManifestFile {
  *
  * @param stats The stats file to parse.
  * @param roots The project and git roots used to anchor module paths; see {@link StatsPathRoots}.
+ * @param outOfGraph Where to find the Storybook inputs that are never bundler inputs; see
+ * {@link OutOfGraphInput}.
  *
  * @returns The manifest containing the file hashes, story file hashes, Storybook config file hashes,
  * and Storybook hash.
  */
 export async function buildManifest(
   stats: Stats,
-  roots: StatsPathRoots
+  roots: StatsPathRoots,
+  outOfGraph: OutOfGraphInput
 ): Promise<TurboSnapManifest> {
   const hashes = await hashFiles(stats, roots);
   const files = new Map<FilePath, TurboSnapFile>();
@@ -161,6 +176,13 @@ export async function buildManifest(
   // see a Storybook upgrade there. Track the version instead; it is a plain string, not a hash.
   storybookFiles.set(STORYBOOK_VERSION_KEY, resolveStorybookVersion(roots.projectRoot));
 
+  // Storybook's config directory and static assets are never bundler inputs, so nothing above can see
+  // them change. They get their own roll-ups; see rollUpOutOfGraphFiles.
+  const outOfGraphFiles = await hashOutOfGraphFiles(outOfGraph, roots);
+  for (const [key, hash] of rollUpOutOfGraphFiles(outOfGraphFiles, h64ToString)) {
+    storybookFiles.set(key, hash);
+  }
+
   // The backend's top-level "did Storybook change at all?" gate: every story hash plus every
   // `storybookFiles` value. If it moved, the backend drills into `storyFiles` and `storybookFiles` to
   // decide what to recapture. Each group is sorted independently so the result doesn't depend on
@@ -172,7 +194,7 @@ export async function buildManifest(
   // Done after hashing so the graph used above is complete.
   pruneSyntheticFiles(files, hashes);
 
-  return { files, storyFileHashes, storybookFiles, storybookHash, attribution };
+  return { files, storyFileHashes, storybookFiles, storybookHash, attribution, outOfGraphFiles };
 }
 
 /**
@@ -211,6 +233,12 @@ export function serializeManifest(manifest: TurboSnapManifest): ManifestFile {
     storybookFiles,
     files,
     attribution,
+    // The per-file detail behind the out-of-graph roll-ups. Kept out of `files` and `attribution`,
+    // which describe the bundle graph: the globals catch-all is defined by *absence* from
+    // storyReachable/previewSubtree (storybookFiles.ts:76-79), which these files satisfy by
+    // construction, so putting them in `files` would double-hash them into the catch-all.
+    storybookConfigFiles: Object.fromEntries(manifest.outOfGraphFiles.storybookConfigFiles),
+    staticFiles: Object.fromEntries(manifest.outOfGraphFiles.staticFiles),
   };
 }
 
