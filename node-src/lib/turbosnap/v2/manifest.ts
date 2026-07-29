@@ -62,6 +62,20 @@ interface TurboSnapFile {
 }
 
 /**
+ * Which of the three hashing homes each real file landed in, recorded by the same pass that builds
+ * the hashes. The graph in `files` is pruned of synthetic nodes after hashing, so a reachability walk
+ * over the written manifest cannot reconstruct these sets — it reports attributed files as orphans.
+ */
+export interface FileAttribution {
+  /** Files in some story's transitive subtree, hashed into that story's `storyFiles` entry. */
+  storyReachable: Set<FilePath>;
+  /** Files in a `.storybook/preview.*` subtree, hashed into that preview's `storybookFiles` entry. */
+  previewSubtree: Set<FilePath>;
+  /** Files in neither of the above, rolled into the {@link STORYBOOK_GLOBALS_KEY} catch-all. */
+  storybookGlobals: Set<FilePath>;
+}
+
+/**
  * The TurboSnap manifest holds the hash of every file in the Storybook project and the dependencies
  * of each file, along with the derived per-story, Storybook-config and whole-Storybook hashes. This
  * is uploaded as a static file to S3 for debugging purposes.
@@ -78,6 +92,8 @@ export interface TurboSnapManifest {
    */
   storybookFiles: Map<FilePath, FileHash | StorybookVersion>;
   storybookHash: string;
+  /** Where each real file was hashed; see {@link FileAttribution}. */
+  attribution: FileAttribution;
 }
 
 /**
@@ -92,6 +108,7 @@ interface ManifestFile {
   storyFiles: Record<FilePath, FileHash>;
   storybookFiles: Record<FilePath, FileHash | StorybookVersion>;
   files: Record<FilePath, { hash: FileHash; dependencies: FilePath[] }>;
+  attribution: Record<keyof FileAttribution, FilePath[]>;
 }
 
 /**
@@ -155,7 +172,7 @@ export async function buildManifest(
     storyFileHashes.set(storyFile, rollUpHash(hashes, subtree, h64ToString));
   }
 
-  const storybookFiles: Map<FilePath, FileHash | StorybookVersion> = collectStorybookFiles(
+  const { storybookFiles, attribution } = collectStorybookFiles(
     files,
     hashes,
     storyFileNames,
@@ -177,7 +194,7 @@ export async function buildManifest(
   // Done after hashing so the graph used above is complete.
   pruneSyntheticFiles(files, hashes);
 
-  return { files, storyFileHashes, storybookFiles, storybookHash };
+  return { files, storyFileHashes, storybookFiles, storybookHash, attribution };
 }
 
 /**
@@ -203,11 +220,19 @@ export function serializeManifest(manifest: TurboSnapManifest): ManifestFile {
     };
   }
 
+  // Sorted so a manifest diff between two runs shows only real membership changes.
+  const attribution = {
+    storyReachable: [...manifest.attribution.storyReachable].sort(),
+    previewSubtree: [...manifest.attribution.previewSubtree].sort(),
+    storybookGlobals: [...manifest.attribution.storybookGlobals].sort(),
+  };
+
   return {
     storybookHash: manifest.storybookHash,
     storyFiles,
     storybookFiles,
     files,
+    attribution,
   };
 }
 
@@ -238,14 +263,15 @@ export function writeManifest(manifest: TurboSnapManifest, outputDirectory: stri
  * @param storyFileNames The detected story files.
  * @param h64ToString The hash function.
  *
- * @returns The rolled-up hash per Storybook config file.
+ * @returns The rolled-up hash per Storybook config file, and the {@link FileAttribution} recording
+ * which of the three hashing homes each real file landed in.
  */
 function collectStorybookFiles(
   files: Map<FilePath, TurboSnapFile>,
   hashes: Map<FilePath, FileHash>,
   storyFileNames: Set<FilePath>,
   h64ToString: (input: string) => string
-): Map<FilePath, FileHash> {
+): { storybookFiles: Map<FilePath, FileHash>; attribution: FileAttribution } {
   // The union of every story's subtree, used to tell Storybook globals apart from story code.
   const storyReachable = new Set<FilePath>();
   for (const storyFile of storyFileNames) {
@@ -278,7 +304,16 @@ function collectStorybookFiles(
     storybookFiles.set(STORYBOOK_GLOBALS_KEY, rollUpHash(hashes, orphanGlobals, h64ToString));
   }
 
-  return storybookFiles;
+  // Report only real files, matching how the catch-all is defined, so the three sets cover exactly
+  // the hashed files. The walks pass through synthetic nodes (globs, externals, virtual modules),
+  // which have no hash. A file can be both story-reachable and in a preview subtree.
+  const attribution: FileAttribution = {
+    storyReachable: new Set([...storyReachable].filter((filePath) => hashes.has(filePath))),
+    previewSubtree: new Set([...previewSubtree].filter((filePath) => hashes.has(filePath))),
+    storybookGlobals: new Set(orphanGlobals),
+  };
+
+  return { storybookFiles, attribution };
 }
 
 /**

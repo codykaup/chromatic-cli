@@ -15,6 +15,11 @@ const manifest: TurboSnapManifest = {
     ['<storybookGlobals>', 'globals-hash'],
   ]),
   storybookHash: 'storybook-hash',
+  attribution: {
+    storyReachable: new Set(['src/Button.stories.ts']),
+    previewSubtree: new Set(['.storybook/preview.ts']),
+    storybookGlobals: new Set(),
+  },
 };
 
 beforeEach(() => {

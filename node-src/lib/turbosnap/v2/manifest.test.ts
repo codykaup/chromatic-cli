@@ -489,6 +489,16 @@ function withGlobAbsent(run: () => Promise<void>) {
   return run().finally(() => spy.mockRestore());
 }
 
+// The builder's generated entries and require-context globs have no file at these paths in a real
+// project. The shared `fs` mock says every path exists, so spy to make them absent.
+function withSyntheticAbsent(run: () => Promise<void>) {
+  const synthetic = ['storybook-stories.js', 'storybook-config-entry.js', 'lazy'];
+  const spy = vi
+    .spyOn(fs, 'existsSync')
+    .mockImplementation((candidate) => !synthetic.some((name) => String(candidate).includes(name)));
+  return run().finally(() => spy.mockRestore());
+}
+
 describe('buildManifest story detection through a require-context', () => {
   // Webpack/rspack don't import story files directly from the entry: the entry imports a lazy
   // require-context (a glob module that is not a real file), and that context imports the stories.
@@ -573,6 +583,112 @@ describe('buildManifest story detection through a config-entry require-context',
       fileHashesRef.current = { [story]: 'S', [impl]: 'B' };
       const manifest = await buildManifest(stats, roots);
       expect([...manifest.storyFileHashes.keys()]).not.toContain('.storybook/preview.ts');
+    });
+  });
+});
+
+describe('buildManifest attribution', () => {
+  const story = '/repo/packages/ui/src/Button.stories.tsx';
+  const storyDep = '/repo/packages/ui/node_modules/moment/moment.js';
+  const preview = '/repo/packages/ui/.storybook/preview.ts';
+  const previewHelper = '/repo/packages/ui/.storybook/theme.ts';
+  const orphan = '/repo/packages/ui/node_modules/@storybook/react/dist/entry-preview.js';
+  const configEntry = './storybook-config-entry.js';
+
+  const stats: Stats = {
+    modules: [
+      { id: 1, name: story, reasons: [{ moduleName: './storybook-stories.js' }] },
+      { id: 2, name: storyDep, reasons: [{ moduleName: story }] },
+      { id: 3, name: preview, reasons: [{ moduleName: configEntry }] },
+      { id: 4, name: previewHelper, reasons: [{ moduleName: preview }] },
+      { id: 5, name: orphan, reasons: [{ moduleName: configEntry }] },
+    ],
+  };
+
+  const hashes = {
+    [story]: 'S',
+    [storyDep]: 'M',
+    [preview]: 'P',
+    [previewHelper]: 'PT',
+    [orphan]: 'EP',
+  };
+
+  it('records each real file in the set that hashes it', async () => {
+    await withSyntheticAbsent(async () => {
+      fileHashesRef.current = { ...hashes };
+
+      const { attribution } = await buildManifest(stats, roots);
+
+      expect([...attribution.storyReachable].sort()).toEqual([
+        'packages/ui/node_modules/moment/moment.js',
+        'packages/ui/src/Button.stories.tsx',
+      ]);
+      expect([...attribution.previewSubtree].sort()).toEqual([
+        'packages/ui/.storybook/preview.ts',
+        'packages/ui/.storybook/theme.ts',
+      ]);
+      expect([...attribution.storybookGlobals]).toEqual([
+        'packages/ui/node_modules/@storybook/react/dist/entry-preview.js',
+      ]);
+    });
+  });
+
+  it('reports a file reached only through a synthetic node as story-reachable', async () => {
+    // The defect this exists to prevent: pruning runs after hashing, so the written graph has a hole
+    // where the require-context was. A reachability walk over it calls a correctly-attributed file
+    // an orphan — the artifact behind the false "moment is in the bucket" reading.
+    const lazyGlob = './src/lib/ lazy namespace object';
+    const throughGlob = '/repo/packages/ui/src/lib/Widget.stories.tsx';
+
+    await withSyntheticAbsent(async () => {
+      fileHashesRef.current = { [throughGlob]: 'W' };
+      const manifest = await buildManifest(
+        {
+          modules: [
+            { id: 1, name: lazyGlob, reasons: [{ moduleName: './storybook-stories.js' }] },
+            { id: 2, name: throughGlob, reasons: [{ moduleName: lazyGlob }] },
+          ],
+        },
+        roots
+      );
+
+      expect([...manifest.attribution.storyReachable]).toEqual([
+        'packages/ui/src/lib/Widget.stories.tsx',
+      ]);
+      expect([...manifest.attribution.storybookGlobals]).toEqual([]);
+      // The synthetic node is gone from the written graph, so this attribution is unreconstructable.
+      expect([...manifest.files.keys()].some((key) => key.includes('lazy'))).toBe(false);
+    });
+  });
+
+  it('omits synthetic nodes from every set', async () => {
+    await withSyntheticAbsent(async () => {
+      fileHashesRef.current = { ...hashes };
+
+      const { attribution } = await buildManifest(stats, roots);
+
+      const all = [
+        ...attribution.storyReachable,
+        ...attribution.previewSubtree,
+        ...attribution.storybookGlobals,
+      ];
+      expect(all.some((filePath) => filePath.includes('storybook-config-entry'))).toBe(false);
+      expect(all.some((filePath) => filePath.includes('storybook-stories'))).toBe(false);
+    });
+  });
+
+  it('serializes each set as a sorted, JSON-safe array', async () => {
+    await withSyntheticAbsent(async () => {
+      fileHashesRef.current = { ...hashes };
+
+      const serialized = serializeManifest(await buildManifest(stats, roots));
+
+      expect(serialized.attribution.previewSubtree).toEqual([
+        'packages/ui/.storybook/preview.ts',
+        'packages/ui/.storybook/theme.ts',
+      ]);
+      // eslint-disable-next-line unicorn/prefer-structured-clone
+      expect(JSON.parse(JSON.stringify(serialized))).toEqual(serialized);
     });
   });
 });

@@ -21,6 +21,19 @@ for (const s of allStories) {
   if (bh !== ch) changed.push(`${s}  (${bh ?? 'ABSENT'} -> ${ch ?? 'ABSENT'})`);
 }
 
+// A storybookFiles entry moving means "recapture everything", so it has to be diffed alongside the
+// story hashes — a change can land in either group, and only one of them moves the stories.
+const changedStorybookFiles = [];
+const allStorybookFiles = new Set([
+  ...Object.keys(base.storybookFiles ?? {}),
+  ...Object.keys(cur.storybookFiles ?? {}),
+]);
+for (const key of allStorybookFiles) {
+  const bh = (base.storybookFiles ?? {})[key];
+  const ch = (cur.storybookFiles ?? {})[key];
+  if (bh !== ch) changedStorybookFiles.push(`${key}  (${bh ?? 'ABSENT'} -> ${ch ?? 'ABSENT'})`);
+}
+
 console.log(
   `storybookHash: ${base.storybookHash} -> ${cur.storybookHash}  ` +
     (base.storybookHash === cur.storybookHash ? 'SAME' : 'CHANGED')
@@ -28,3 +41,5 @@ console.log(
 console.log(`stories total: ${allStories.size}`);
 console.log(`stories changed: ${changed.length}`);
 for (const c of changed) console.log(`  ✎ ${c}`);
+console.log(`storybookFiles changed: ${changedStorybookFiles.length}`);
+for (const c of changedStorybookFiles) console.log(`  ✎ ${c}`);
