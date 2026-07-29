@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TurboSnap bail-reason audit — fixture-repo behavioural verification</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1d21; --muted: #5d666f; --line: #dfe3e8;
+    --panel: #f7f8fa; --code: #f1f3f5;
+    --ok: #1a7f4b; --ok-bg: #e6f4ec;
+    --miss: #a4262c; --miss-bg: #fbeaea;
+    --over: #8a5a00; --over-bg: #fdf3e2;
+    --unex: #4b5563; --unex-bg: #eef0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a; --fg: #e8eaed; --muted: #9aa3ad; --line: #2c3237;
+      --panel: #1b1f23; --code: #22272c;
+      --ok: #6cd39a; --ok-bg: #14301f;
+      --miss: #ff9b9b; --miss-bg: #3a1a1c;
+      --over: #f0c26b; --over-bg: #362a12;
+      --unex: #aab2bb; --unex-bg: #24292e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1.25rem 5rem;
+    background: var(--bg); color: var(--fg);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 68rem; margin: 0 auto; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .35rem; }
+  h2 { font-size: 1.25rem; margin: 2.75rem 0 .75rem; padding-bottom: .35rem; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 1rem; margin: 1.75rem 0 .5rem; }
+  p, li { max-width: 62rem; }
+  .sub { color: var(--muted); margin: 0 0 1.5rem; font-size: .9rem; }
+  code, kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .86em;
+    background: var(--code); padding: .1em .35em; border-radius: 3px; }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1rem 0; border: 1px solid var(--line); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; min-width: 60rem; font-size: .87rem; }
+  th, td { text-align: left; vertical-align: top; padding: .5rem .65rem; border-bottom: 1px solid var(--line); }
+  thead th { background: var(--panel); font-weight: 600; white-space: nowrap; position: sticky; top: 0; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .v { display: inline-block; padding: .1rem .45rem; border-radius: 4px; font-size: .78rem;
+    font-weight: 600; white-space: nowrap; }
+  .v-ok { color: var(--ok); background: var(--ok-bg); }
+  .v-miss { color: var(--miss); background: var(--miss-bg); }
+  .v-over { color: var(--over); background: var(--over-bg); }
+  .v-unex { color: var(--unex); background: var(--unex-bg); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--muted);
+    border-radius: 6px; padding: .85rem 1rem; margin: 1.25rem 0; }
+  .panel.warn { border-left-color: var(--miss); }
+  .panel h3 { margin-top: 0; }
+  .gap { border: 1px solid var(--line); border-radius: 6px; padding: .9rem 1.1rem; margin: .9rem 0; background: var(--panel); }
+  .gap header { display: flex; flex-wrap: wrap; gap: .6rem; align-items: baseline; margin-bottom: .4rem; }
+  .gap h3 { margin: 0; font-size: 1rem; }
+  .sev { font-size: .72rem; font-weight: 700; letter-spacing: .04em; padding: .15rem .45rem; border-radius: 4px; }
+  .sev-p0 { color: var(--miss); background: var(--miss-bg); }
+  .sev-p1 { color: var(--over); background: var(--over-bg); }
+  .sev-p2 { color: var(--unex); background: var(--unex-bg); }
+  .gap dl { margin: .5rem 0 0; display: grid; grid-template-columns: max-content 1fr; gap: .25rem .8rem; font-size: .88rem; }
+  .gap dt { color: var(--muted); font-weight: 600; }
+  .gap dd { margin: 0; }
+  ul.tight { margin: .4rem 0; padding-left: 1.25rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: .5rem 1rem; font-size: .82rem; margin: 1rem 0; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>TurboSnap bail-reason audit — fixture-repo behavioural verification</h1>
+<p class="sub">
+  Measured 2026-07-29 against <code>~/Projects/turbosnap-monorepo</code> with <code>chromatic-cli</code> @
+  <code>cody/turbosnap-v2</code> (<code>b4ff35c8</code>, rebuilt immediately before every run).
+  Stats snapshots: <code>ui</code> 316438d4388b · <code>ui-webpack</code> 325971bda0b9 ·
+  <code>ui-rsbuild</code> 6a2faead8cd2 · <code>marketing-ui</code> ab19d993092b.
+  Installed <code>@storybook/builder-vite</code> = <strong>10.6.0-alpha.3, locally patched</strong> with the
+  CJS-edge fork.
+</p>
+
+<div class="panel warn">
+<h3>Read this first — v2 emits no bail reasons today</h3>
+<p><code>node-src/lib/turbosnap/v2/index.ts:56</code> unconditionally returns
+<code>{ status: 'fallback' }</code> (<em>"Until we want to lean on the v2 output, we always fallback to
+v1"</em>), and the dispatcher at <code>lib/turbosnap/index.ts:52</code> then runs v1. So in production
+<strong>every</strong> bail reason is produced by <code>gitInfo.ts</code>,
+<code>tasks/initialize/index.ts</code>, or the v1 path. v2 is a side-effecting shadow run that builds a
+manifest, uploads hashes, and discards its own verdict.</p>
+<p>The <code>turbosnap-manifest</code> harness command bypasses that, so every "v2" column below describes
+<strong>the evidence the v2 manifest would carry if the fallback were removed</strong> — not a decision the
+CLI ships today. That is the right question to audit now, because removing the fallback is the plan.</p>
+</div>
+
+<h2>Verdict legend</h2>
+<div class="legend">
+  <span><span class="v v-ok">correct</span> fires when it should, and the alternative evidence was not finer</span>
+  <span><span class="v v-miss">should-bail-but-doesn't</span> attribution incomplete, build proceeds, too little captured</span>
+  <span><span class="v v-over">bails-unnecessarily</span> recaptures everything although evidence was sufficient</span>
+  <span><span class="v v-unex">unexercised</span> cannot be triggered in these fixtures</span>
+</div>
+
+<h2>1. Per-reason × builder verdicts</h2>
+
+<p>Builders: <strong>vite</strong> = <code>ui</code> + <code>marketing-ui</code> (<code>@storybook/react-vite</code>),
+<strong>webpack5</strong> = <code>ui-webpack</code>, <strong>rspack</strong> = <code>ui-rsbuild</code>
+(informational, never gates). vite + webpack are the bar.</p>
+
+<div class="scroll">
+<table>
+<thead>
+<tr>
+  <th>Reason</th><th>Source</th><th>Builder</th>
+  <th>v1 verdict</th><th>v2 verdict</th><th>Measurement</th>
+</tr>
+</thead>
+<tbody>
+
+<tr>
+  <td rowspan="1"><code>noAncestorBuild</code></td>
+  <td><code>tasks/gitInfo.ts:287</code><br><code>parentCommits.length === 0</code></td>
+  <td>all</td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td>Pre-algorithm; set before either algorithm runs, so v1 and v2 cannot differ. Needs a real
+      published build with no ancestor. Not reachable from <code>trace</code> or
+      <code>turbosnap-manifest</code>. Not attempted (no build published).</td>
+</tr>
+
+<tr>
+  <td><code>rebuild</code></td>
+  <td><code>tasks/gitInfo.ts:304</code><br><code>rebuildForBuildId</code> (same commit + prior build)</td>
+  <td>all</td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td>Pre-algorithm, backend-dependent (<code>app.lastBuild</code>). Same reasoning as above.</td>
+</tr>
+
+<tr>
+  <td><code>invalidChangedFiles</code></td>
+  <td><code>tasks/gitInfo.ts:387</code><br>generic <code>catch</code> around the changed-files assembly</td>
+  <td>all</td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td>Pre-algorithm. Catch-all over ≥5 failure modes; also nulls <code>git.changedFiles</code> and
+      <code>git.replacementBuildIds</code>, which is the documented self-perpetuating cascade. Needs
+      synthetic git history.</td>
+</tr>
+
+<tr>
+  <td><code>changedExternalFiles</code></td>
+  <td><code>tasks/gitInfo.ts:398</code><br><code>externals</code> glob vs <code>git.changedFiles</code></td>
+  <td>all</td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td>Pure glob match on a git diff, no graph involvement, so builder-independent by construction.
+      Fixtures configure no <code>--externals</code> and the harness has no git-diff surface.</td>
+</tr>
+
+<tr>
+  <td rowspan="2"><code>missingStatsFile</code></td>
+  <td rowspan="2"><code>lib/turbosnap/index.ts:29</code> +
+      <code>v1/index.ts:34</code><br><code>!ctx.fileInfo?.statsPath</code> — a <em>throw</em>, not a bail key</td>
+  <td>all — <em>path unset</em></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td>The dispatcher check at <code>index.ts:23</code> runs before v2, so it gates both. Shared and
+      builder-independent (only the message wording varies on Storybook ≥ 8).</td>
+</tr>
+<tr>
+  <td>all — <em>path set but unreadable</em></td>
+  <td><span class="v v-miss">should-bail-but-doesn't</span></td>
+  <td><span class="v v-miss">should-bail-but-doesn't</span></td>
+  <td>Measured: <code>gen.sh ui out.json /nope/stats.json</code> and the equivalent v1 call both emit a
+      raw <code>ENOENT: no such file or directory</code>. No bail reason is produced. In v2 that throw is
+      swallowed by <code>lib/turbosnap/index.ts:56</code> into a silent v1 fallback; in v1 it propagates
+      as an error. A corrupt or truncated stats file has no named reason at all.</td>
+</tr>
+
+<tr>
+  <td><code>changedPackageFiles</code> — Path A<br><span class="sub">lockfile parse failed</span></td>
+  <td><code>v1/index.ts:79</code><br><code>findChangedDependencies</code> rejected, then
+      <code>findChangedPackageFiles().length &gt; 0</code></td>
+  <td>all</td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td><span class="v v-miss">should-bail-but-doesn't</span></td>
+  <td>v1: needs a lockfile diff that <code>findChangedDependencies</code> fails on;
+      <code>bin-src/trace.ts:130</code> explicitly refuses package-manifest inputs, so it is unreachable
+      from the harness. v2: <strong>no equivalent exists</strong>. Measured — every manifest contains
+      <code>package.json</code>: 0 entries, lockfiles: 0 entries (<code>ui</code> 39 files,
+      <code>ui-webpack</code> 284 files).</td>
+</tr>
+
+<tr>
+  <td rowspan="3"><code>changedPackageFiles</code> — Path B<br><span class="sub">
+      <code>bailSubreason: nodeModulesMissingInStats</code></span></td>
+  <td rowspan="3"><code>v1/getDependentStoryFiles.ts:263</code><br>
+      <code>nodeModules.size === 0 &amp;&amp; changedDependencies.length &gt; 0</code></td>
+  <td>vite</td>
+  <td><span class="v v-unex">unexercised</span> + <span class="v v-miss">should-bail-but-doesn't</span></td>
+  <td><span class="v v-miss">should-bail-but-doesn't</span></td>
+  <td><strong>The condition can never fire here.</strong> Measured <code>nodeModules.size</code>:
+      <code>ui</code> 30, <code>marketing-ui</code> 24 — never 0. It only guards a wholly incomplete stats
+      file, never a single missing package. Measured single-package case:
+      <code>trace -d core-js</code> on <code>ui</code> → <code>{"status":"traced"}</code>,
+      <strong>0 story files, no bail</strong>, 0 traced files. <code>-d typescript</code> → identical.
+      v2 side: <code>core-js</code> has 0 entries in the <code>ui</code> manifest, so a bump is invisible
+      there too. This is the mechanism behind the invisible-CJS class.</td>
+</tr>
+<tr>
+  <td>webpack5</td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td><code>nodeModules.size</code> = 264. Ground truth for the same bump:
+      <code>trace -d core-js</code> → <strong>4 story files</strong>, <code>traced</code>;
+      <code>-d moment</code> → 2 story files. v2 manifest holds 84 <code>core-js</code> files, so the
+      hashes move. Webpack's answer is the correct one and both algorithms give it.</td>
+</tr>
+<tr>
+  <td>rspack</td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td><span class="v v-over">bails-unnecessarily</span></td>
+  <td><code>nodeModules.size</code> = 198. v1 <code>-d moment</code> → 1 story file. v2 indexes 0 stories,
+      so all 198 land in <code>&lt;storybookGlobals&gt;</code> and any bump recaptures everything.</td>
+</tr>
+
+<tr>
+  <td rowspan="5"><code>changedStorybookFiles</code></td>
+  <td rowspan="5"><code>v1/getDependentStoryFiles.ts:294</code><br>
+      <code>name.startsWith(`${storybookDirectory}/`) &amp;&amp; !storiesEntryFiles.includes(name)</code></td>
+  <td>vite (<code>ui</code>) — <code>preview.ts</code></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td>v1 <code>bailed</code>, <code>changedStorybookFiles: [packages/ui/.storybook/preview.ts]</code>.
+      v2: <code>storybookHash 3da0…→6546…</code>, 0 story hashes moved but the keyed
+      <code>storybookFiles</code> entry <code>packages/ui/.storybook/preview.ts</code> moved ⇒ recapture
+      all 3. Bucket: <code>previewSubtree</code>. Same outcome, so v1's bail is not blunt.</td>
+</tr>
+<tr>
+  <td>vite (<code>ui</code>) — <code>test.ts</code></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td>v1 bails. v2: <code>test.ts</code> is in <code>previewSubtree</code>, so the
+      <code>preview.ts</code> entry moved (<code>f038…→e200…</code>) ⇒ recapture all 3.</td>
+</tr>
+<tr>
+  <td>vite (<code>marketing-ui</code>) — <code>preview.ts</code></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td><span class="v v-miss">should-bail-but-doesn't</span></td>
+  <td>v1 <code>bailed: changedStorybookFiles</code>. v2: <strong>nothing moved</strong> —
+      <code>storybookHash 7d24…→7d24… SAME</code>, 0 stories, 0 <code>storybookFiles</code>.
+      Cause: this <code>preview.ts</code> is a <strong>0-line file</strong>, so vite elides it and it never
+      appears in <code>modules[]</code>; the manifest's <code>storybookFiles</code> keys are only
+      <code>&lt;storybookGlobals&gt;</code> and <code>&lt;storybookVersion&gt;</code>, and
+      <code>previewSubtree</code> is empty. v2's preview key exists only if the builder emits the module.</td>
+</tr>
+<tr>
+  <td>webpack5 — <code>preview.ts</code> / <code>test.ts</code></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td>v1 bails, reporting <em>both</em> <code>preview.ts</code> and <code>test.ts</code> (concatenated
+      module siblings — the documented partial-list behaviour). v2 moves the keyed
+      <code>preview.ts</code> entry ⇒ recapture all 3.</td>
+</tr>
+<tr>
+  <td><strong>all four packages — <code>main.ts</code></strong></td>
+  <td><span class="v v-ok">correct</span></td>
+  <td><span class="v v-miss">should-bail-but-doesn't</span></td>
+  <td><strong>The single widest v2 hole.</strong> v1 bails on all four:
+      <code>changedStorybookFiles: [packages/&lt;pkg&gt;/.storybook/main.ts]</code>. v2 on all four:
+      <code>storybookHash</code> <em>unchanged</em>, 0 story hashes, 0 <code>storybookFiles</code> entries,
+      and <code>bucket.mjs</code> reports <em>"no attributed file matches main.ts"</em>.
+      <code>main.ts</code> is never in any builder's module graph, so no stats rebuild fixes this — a
+      commit touching only <code>viteFinal</code>, <code>staticDirs</code>, <code>docs</code> options or a
+      builder option recaptures <strong>nothing</strong>.</td>
+</tr>
+
+<tr>
+  <td rowspan="2"><code>changedStaticFiles</code></td>
+  <td rowspan="2"><code>v1/getDependentStoryFiles.ts:288</code><br>
+      <code>staticDirectories.some(d =&gt; name.startsWith(`${d}/`))</code>, checked
+      <em>before</em> the config-dir test at <code>:284-292</code></td>
+  <td>vite + webpack5</td>
+  <td><span class="v v-ok">correct</span></td>
+  <td><span class="v v-miss">should-bail-but-doesn't</span></td>
+  <td>v1, with <code>ctx.storybook.staticDir = ['.storybook/static']</code> as
+      <code>findStaticDirectories</code> produces it: editing
+      <code>packages/&lt;pkg&gt;/.storybook/static/mockServiceWorker.js</code> →
+      <code>bailed</code>, <code>changedStaticFiles: [that file]</code> on both. <strong>The CAP-4422
+      check-order mis-categorization is fixed.</strong> v2 on both:
+      <code>storybookHash</code> unchanged, 0 stories, 0 <code>storybookFiles</code>; the file is not in
+      the module graph and is not hashed at all.</td>
+</tr>
+<tr>
+  <td>rspack</td>
+  <td><span class="v v-ok">correct</span></td>
+  <td><span class="v v-miss">should-bail-but-doesn't</span></td>
+  <td>Same as above; v1 bails, v2's manifest is byte-identical across the edit.</td>
+</tr>
+
+<tr>
+  <td><code>unavailable</code></td>
+  <td><code>tasks/initialize/index.ts:70</code><br>
+      <code>app.turboSnapAvailability === 'UNAVAILABLE'</code></td>
+  <td>all</td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td>Backend-driven; short-circuits both algorithms at <code>lib/turbosnap/index.ts:21</code>.
+      Not reachable without a published build.</td>
+</tr>
+
+</tbody>
+</table>
+</div>
+
+<h2>2. v2-only conditions with no name in the taxonomy</h2>
+
+<p>These are real fallback/abort paths. None sets <code>bailReason</code>, none reaches the backend, none
+appears in analytics — so <strong>v2's bail behaviour is currently unauditable in production</strong>.</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>Condition</th><th>Source</th><th>Builder</th><th>Verdict</th><th>Measurement / reasoning</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>builder-vite</code> known-invalid version gate</td>
+  <td><code>v2/builderViteCompatibility.ts:39-42</code><br>
+      <code>semver.lt(version, '10.6.0-alpha.4')</code></td>
+  <td>vite</td>
+  <td><span class="v v-over">bails-unnecessarily</span></td>
+  <td>Measured directly: <code>ui</code> → <em>"@storybook/builder-vite@10.6.0-alpha.3 is known to drop
+      Vite CJS importer edges"</em>; <code>marketing-ui</code> → same. <strong>The installed builder is
+      patched with the CJS-edge fork and produces good stats, but the version string is unchanged, so the
+      gate fires anyway.</strong> The gate is a version-string proxy for a behavioural property. On
+      fallback (<code>v2/index.ts:43-46</code>) the CLI logs at <code>info</code> only — and because the
+      gate runs before <code>buildManifest</code>, a gated project also uploads <strong>no hashes and
+      writes no manifest</strong>.</td>
+</tr>
+<tr>
+  <td>same gate, non-vite stats</td>
+  <td><code>:28</code> <code>if (!isBuilderViteStats(stats)) return undefined</code></td>
+  <td>webpack5, rspack</td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td>Measured: both return <code>null</code>. Correct in isolation, but note the asymmetry — rspack's
+      graph is measurably far worse than patched vite's (0 stories indexed) and is not gated at all.</td>
+</tr>
+<tr>
+  <td>unconditional fallback</td>
+  <td><code>v2/index.ts:56</code> <code>return { status: 'fallback' }</code></td>
+  <td>all</td>
+  <td><span class="v v-over">bails-unnecessarily</span></td>
+  <td>By construction. No <code>reason</code> string, so <code>lib/turbosnap/index.ts:53</code>
+      (<code>if (result.reason)</code>) logs <strong>nothing</strong>. This is the dominant path today and
+      is invisible in logs.</td>
+</tr>
+<tr>
+  <td><code>&lt;storybookGlobals&gt;</code> catch-all absorbing first-party files</td>
+  <td><code>v2/storybookFiles.ts:77-83</code> — membership by <em>absence</em> from both
+      <code>storyReachable</code> and <code>previewSubtree</code></td>
+  <td>rspack</td>
+  <td><span class="v v-over">bails-unnecessarily</span></td>
+  <td>Measured buckets: vite <strong>27/39</strong>, webpack <strong>49/284</strong>,
+      rspack <strong>201/202</strong>, marketing-ui 29/36. On vite, webpack and marketing-ui the bucket
+      contains <strong>zero first-party files</strong> — confirmed by filtering
+      <code>attribution.storybookGlobals</code> — so a bucket move means a genuine Storybook/React
+      runtime change and is correct. On rspack, editing <code>Badge.tsx</code> moves
+      <code>&lt;storybookGlobals&gt;</code> (<code>d075…→6ac8…</code>) ⇒ recapture everything, while v1
+      correctly traces it to 2 stories. Informational only.</td>
+</tr>
+<tr>
+  <td>Silent under-hashing (no fallback at all)</td>
+  <td><code>v2/manifest.ts:336-338</code> — skip if <code>!existsSync</code> or path
+      <code>includes('virtual:')</code>; <code>v2/graph.ts:30</code> substitutes <code>''</code></td>
+  <td>all (worst on vite)</td>
+  <td><span class="v v-miss">should-bail-but-doesn't</span></td>
+  <td>Not directly measurable — a missing hash is indistinguishable from an absent file in the written
+      manifest. Reasoning from code: a file that vanishes between build and trace, or any Vite virtual
+      module, contributes an empty string to its roll-up hash. No error, no fallback, no name; the hash is
+      simply weaker than it looks.</td>
+</tr>
+<tr>
+  <td>Storybook version unresolvable / manifest build throw / hash-upload failure</td>
+  <td><code>v2/storybookVersion.ts:56</code>, <code>v2/api.ts:53-62</code>, generic catch at
+      <code>lib/turbosnap/index.ts:56</code></td>
+  <td>all</td>
+  <td><span class="v v-unex">unexercised</span></td>
+  <td>Three distinct root causes collapse into one <code>log.error</code> + v1 fallback. Ordering hazard
+      worth noting: hashes are uploaded at <code>v2/index.ts:52</code> <em>before</em> the manifest is
+      written at <code>:53</code>, so "upload succeeded, manifest write failed" leaves the backend holding
+      hashes with no local artifact.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h2>3. Ranked gaps — these are the ticket candidates</h2>
+
+<div class="gap">
+<header><span class="sev sev-p0">P0</span><h3>v2 is blind to every Storybook input that is not a module in the builder graph</h3></header>
+<p>v2 hashes only what appears in <code>modules[]</code>. Everything else — <code>main.ts</code>,
+<code>staticDirs</code> content, <code>preview-head.html</code>/<code>preview-body.html</code>,
+<code>manager.ts</code>, <code>package.json</code>, lockfiles — has no hash and therefore no way to move
+any entry. v1 bails on all of them. This is not builder-specific and no stats rebuild fixes it.</p>
+<dl>
+  <dt>Measured</dt><dd><code>main.ts</code> edit on <code>ui</code>, <code>ui-webpack</code>,
+    <code>ui-rsbuild</code>, <code>marketing-ui</code>: <code>storybookHash</code> unchanged, 0 stories,
+    0 <code>storybookFiles</code>. <code>.storybook/static/mockServiceWorker.js</code> edit on all three
+    packages that have one: identical. v1 bails on every one of these.</dd>
+  <dt>Blast radius</dt><dd>If the v2 fallback is removed as-is, config-only commits capture nothing at all.</dd>
+</dl>
+</div>
+
+<div class="gap">
+<header><span class="sev sev-p0">P0</span><h3>No guard for “a changed dependency traced to nothing”</h3></header>
+<p><code>nodeModulesMissingInStats</code> requires <code>nodeModules.size === 0</code> — a whole-file
+completeness check. There is no per-dependency check, and no downstream guard on a
+<code>traced</code> result with 0 story files: <code>lib/upload.ts:196</code> reports
+<code>APPLIED</code>, and <code>tasks/prepare/index.ts:70</code> treats <code>[]</code> as truthy. Affects
+v1 and v2 identically.</p>
+<dl>
+  <dt>Measured</dt><dd><code>nodeModules.size</code> = 30 / 264 / 198 / 24 across the four fixtures, so
+    the existing condition <strong>never fires anywhere</strong>. <code>trace -d core-js</code> on
+    <code>ui</code> → <code>traced</code>, 0 story files, no bail, 0 traced files; the same bump on
+    <code>ui-webpack</code> → 4 story files. <code>-d typescript</code> on <code>ui</code> → same silent
+    zero.</dd>
+  <dt>Caveat</dt><dd><code>core-js</code> is a babel-injected polyfill that genuinely is not in the vite
+    bundle, so 0 is arguably right <em>there</em>. The transferable finding is that the CLI has
+    <strong>no way to distinguish</strong> "genuinely not in the bundle" (correct) from "the builder
+    dropped the edge" (the invisible-CJS silent miss) — and emits nothing either way. The detectable
+    signal already exists: <code>changedDependencies.length &gt; 0 &amp;&amp; tracedFiles.length === 0</code>.</dd>
+</dl>
+</div>
+
+<div class="gap">
+<header><span class="sev sev-p1">P1</span><h3>The builder-vite gate fires on stats that are actually fine, and reports nothing when it does</h3></header>
+<p>The gate compares a version string, not the stats. A patched or forked builder that emits correct edges
+is rejected; conversely any future vite defect at a version ≥ <code>10.6.0-alpha.4</code> passes. The
+fallback is <code>log.info</code> only — no bail reason, no Sentry event, no analytics — and because it
+runs before <code>buildManifest</code>, a gated project uploads no hashes and writes no manifest, so
+there is no local artifact to diagnose from either.</p>
+<dl>
+  <dt>Measured</dt><dd><code>getBuilderViteFallbackReason</code> on the two vite fixtures returns
+    <em>"@storybook/builder-vite@10.6.0-alpha.3 is known to drop Vite CJS importer edges"</em> even though
+    that installed copy carries the CJS-edge patch (<code>COMMONJS_PROXY_SUFFIX</code> present at
+    <code>dist/index.js:1221</code>) and its stats demonstrably trace <code>react</code> to all 3
+    stories.</dd>
+  <dt>Asymmetry</dt><dd>rspack returns <code>null</code> — ungated — while measurably producing a far
+    worse graph (0 stories indexed, 201/202 files bucketed).</dd>
+</dl>
+</div>
+
+<div class="gap">
+<header><span class="sev sev-p1">P1</span><h3><code>changedPackageFiles</code> has no v2 counterpart at all</h3></header>
+<p>Both v1 paths key off <code>package.json</code> / lockfile diffs. v2 never hashes either file, so a
+lockfile change that does not alter <code>node_modules</code> content on disk — or a bump of a package
+absent from the graph — is completely invisible. Four of the nine taxonomy reasons
+(<code>changedPackageFiles</code> ×2, <code>changedStorybookFiles</code>, <code>changedStaticFiles</code>)
+lose their producer the moment v2 stops falling back, and the bail vocabulary that
+<code>ui/messages/warnings/bailFile.ts</code> and <code>tasks/verify/publishBuild.ts:44-61</code> depend on
+will need re-mapping.</p>
+<dl><dt>Measured</dt><dd>0 <code>package.json</code> entries and 0 lockfile entries in all four manifests
+  (39 / 284 / 202 / 36 files).</dd></dl>
+</div>
+
+<div class="gap">
+<header><span class="sev sev-p2">P2</span><h3>v2's <code>previewSubtree</code> key exists only if the builder chose to emit the preview module</h3></header>
+<p>Same family as <code>react/index.js</code> being bucketed on vite: v2 inherits whatever the transpiler
+decided to keep. Anything elided — type-only imports, dead code, an empty module — has no hash and no key.</p>
+<dl>
+  <dt>Measured</dt><dd><code>marketing-ui/.storybook/preview.ts</code> is 0 lines; vite elides it, it is
+    absent from <code>modules[]</code>, <code>previewSubtree</code> is empty, and the manifest's
+    <code>storybookFiles</code> keys are only <code>&lt;storybookGlobals&gt;</code> and
+    <code>&lt;storybookVersion&gt;</code>. An edit to it moves nothing while v1 bails.</dd>
+  <dt>Honest bound</dt><dd>A commit that adds real content to that file would appear in the <em>same</em>
+    build's stats and create the key, so v2 recovers in that case. The residual miss is narrower: a
+    preview change that leaves the module still fully elided.</dd>
+</dl>
+</div>
+
+<div class="gap">
+<header><span class="sev sev-p2">P2</span><h3>A set-but-unreadable stats file has no named reason</h3></header>
+<p><code>missingStatsFile</code> only covers <code>!ctx.fileInfo?.statsPath</code>. A path that is set but
+missing, truncated or corrupt throws a raw <code>ENOENT</code>/parse error — which v2's generic catch turns
+into a silent v1 fallback, and v1 surfaces as an error rather than a bail.</p>
+<dl><dt>Measured</dt><dd>Both algorithms pointed at <code>/nope/stats.json</code>:
+  <code>Error: ENOENT: no such file or directory, open '/nope/stats.json'</code>. No bail reason.</dd></dl>
+</div>
+
+<div class="gap">
+<header><span class="sev sev-p2">P2</span><h3>The five pre-algorithm reasons are unexercised and untestable by this harness</h3></header>
+<p><code>noAncestorBuild</code>, <code>rebuild</code>, <code>invalidChangedFiles</code>,
+<code>changedExternalFiles</code>, <code>unavailable</code>. All are set before either algorithm runs, so
+v1 and v2 cannot disagree about them — which is why they are not a correctness risk for the v2 rollout. But
+nothing in the fixture repo covers them, so a regression there would go unnoticed.</p>
+</div>
+
+<div class="gap">
+<header><span class="sev sev-p2">P2 · informational</span><h3>rspack: the catch-all makes every edit recapture everything</h3></header>
+<p>Already tracked as its own ticket (v2 indexes 0 stories on rspack while v1 detects 3). Recorded here
+because it is the reason every rspack row above reads <em>bails-unnecessarily</em> rather than
+<em>correct</em>: with 0 stories detected, <code>storyReachable</code> is empty and 201 of 202 files fall
+into <code>&lt;storybookGlobals&gt;</code> by absence.</p>
+<dl><dt>Measured</dt><dd><code>Badge.tsx</code> edit → <code>&lt;storybookGlobals&gt;</code> moves
+  <code>d075…→6ac8…</code>; v1 correctly traces it to Badge + UserCard.</dd></dl>
+</div>
+
+<h2>4. Regression check (context, not a gap)</h2>
+<p><code>parity.sh</code> was re-run on this build: <strong>0 regressions on vite and 0 on webpack</strong>,
+across leaf / transitive / story-file / cross-package / preview / <code>moment</code> / <code>react</code>
+edits. Every verdict was <code>parity</code>. So none of the gaps above is a v2-vs-v1 recapture regression
+on the paths <code>parity.sh</code> can see — they are all in the classes it structurally cannot see:
+non-module inputs, and dependencies with no file in v2's graph.</p>
+
+<h2>5. Corrections to the previously established facts</h2>
+<ul class="tight">
+  <li><strong><code>react</code> on vite no longer shows v1 recapturing 0 stories.</strong> The harness
+    README records <em>"v1 recaptures 0 stories; v2 recaptures all 3 via <code>&lt;storybookGlobals&gt;</code>"</em>
+    and concludes <em>"parity cannot justify the vite edge-loss fix — v1 fails this case too."</em>
+    Measured today against the currently installed <strong>patched</strong> builder (stats built 11:09),
+    v1 recaptures <strong>3/3</strong> for <code>node_modules/react/index.js</code>, verdict
+    <code>parity</code>. That conclusion is stale for a patched builder; it presumably still holds for an
+    unpatched one, which I could not measure.</li>
+  <li><strong>The CAP-4422 <code>shouldBail</code> check-order mis-categorization is fixed.</strong>
+    <code>getDependentStoryFiles.ts:284-292</code> now tests <code>isStaticFile</code> before
+    <code>isStorybookFile</code>, and a static file under <code>.storybook/static</code> is correctly
+    reported as <code>changedStaticFiles</code>.</li>
+  <li><strong><code>missingStatsFile</code> is a throw, not a bail key</strong>, so the taxonomy is
+    8 producible reasons + 1 backend-supplied, not 9 symmetric ones.</li>
+  <li><strong>The vite bucket contains no first-party files</strong> — re-confirmed (27/39, all
+    <code>node_modules</code>), as do webpack (49/284) and marketing-ui (29/36). Established facts hold.</li>
+</ul>
+
+<h2>6. Method traps found (candidates for the harness README)</h2>
+<ol class="tight">
+  <li><strong><code>chromatic trace</code> can never emit <code>changedStaticFiles</code>.</strong>
+    <code>bin-src/trace.ts</code> never populates <code>ctx.storybook.staticDir</code>, so
+    <code>staticDirectories</code> is <code>[]</code>, <code>isStaticFile</code> is always false, and a
+    static file is mis-reported as <code>changedStorybookFiles</code>. Exercise it by calling
+    <code>getDependentStoryFiles</code> directly with <code>staticDir</code> set.</li>
+  <li><strong><code>staticDir</code> entries are <code>path.posix.join(baseDir, entry)</code></strong>
+    (<code>getDependentStoryFiles.ts:115</code>), matching <code>findStaticDirectories</code>, which joins
+    them onto the <em>config</em> dir. Pass <code>.storybook/static</code>, not
+    <code>packages/ui/.storybook/static</code> — a repo-relative path silently disables the check instead
+    of failing.</li>
+  <li><strong>Don't test <code>missingStatsFile</code> by deleting the file.</strong>
+    <code>readStatsFile</code> throws raw <code>ENOENT</code>; the bail only covers an <em>unset</em> path.</li>
+  <li><strong><code>marketing-ui</code>'s <code>.storybook/preview.ts</code> is empty</strong>, so that
+    package has <em>no</em> preview <code>storybookFiles</code> key. Any preview probe there reads as a v2
+    miss unless you know that.</li>
+  <li><strong>Content-only edits cannot distinguish "permanently invisible" from "would appear once it has
+    content."</strong> <code>main.ts</code> is never a module in any build; an empty <code>preview.ts</code>
+    would become one. Both look identical to <code>tsdiff.mjs</code>.</li>
+  <li><strong>The fixture's <code>builder-vite</code> is patched but still reports 10.6.0-alpha.3</strong>,
+    so the production v2 gate fires on every vite fixture. Record
+    <code>getBuilderViteFallbackReason</code>'s verdict alongside every vite measurement, or you will
+    describe manifest evidence that production never computes.</li>
+</ol>
+
+<h2>7. What could not be measured, and why</h2>
+<ul class="tight">
+  <li><code>noAncestorBuild</code>, <code>rebuild</code>, <code>invalidChangedFiles</code>,
+    <code>changedExternalFiles</code>, <code>unavailable</code> — need a real published build with git
+    history and/or a backend response. No build was published.</li>
+  <li><code>changedPackageFiles</code> Path A — needs a lockfile diff that
+    <code>findChangedDependencies</code> fails to parse; <code>trace</code> refuses manifest inputs.</li>
+  <li>The unpatched-vite invisible-CJS case — the installed builder is patched, and reverting it would
+    have disturbed a shared fixture mid-audit. The established fact is taken as given, and the same
+    <em>guard-absence</em> mechanism was measured independently via <code>-d core-js</code>.</li>
+  <li>Whether the <code>&lt;storybookGlobals&gt;</code> bucket over-captures in a way that <em>matters</em>
+    — all three fixture stories depend on everything in the bucket, so over-capture is unobservable here.
+    A fixture with a story that uses neither React nor the Storybook runtime would be needed.</li>
+  <li>Silent under-hashing (missing hash → empty string in the roll-up) — indistinguishable from an absent
+    file in the written manifest. Would need instrumentation, not a diff.</li>
+</ul>
+
+<footer>
+Generated for the wayfinder ticket <em>“Audit every bail reason against the fixture repo”</em>.
+Companion summary: <code>bail-audit-summary.md</code>. Harness: <code>docs/turbosnap-v2-harness/</code>.
+</footer>
+
+</main>
+</body>
+</html>
