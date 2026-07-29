@@ -5,11 +5,19 @@ import xxHashWasm from 'xxhash-wasm';
 import { getFileHashes } from '../../../lib/getFileHashes';
 import { Module, Stats } from '../../../types';
 import {
+  collectTransitiveDependencies,
+  FileHash,
+  FilePath,
+  rollUpHash,
+  TurboSnapFile,
+} from './graph';
+import {
   normalizeStatsPath,
   resolveStatsPath,
   StatsPathRoots,
   stripConcatenatedModuleSuffix,
 } from './paths';
+import { collectStorybookFiles, FileAttribution } from './storybookFiles';
 import { resolveStorybookVersion } from './storybookVersion';
 
 // Generated entry points that import all story files. We use this to determine if a file is a story
@@ -38,42 +46,12 @@ const CONFIG_ENTRY_FILES = new Set([
   './node_modules/.cache/storybook/storybook-rsbuild-builder/storybook-config-entry.js',
 ]);
 
-// Matches `.storybook/preview.*` on a canonical manifest path. Path matching is the only consistent
-// way to find the preview config: the config-entry import edge is spelled three incompatible ways
-// across builders (vite has no such edge at all, leaving preview a detached root).
-const PREVIEW_CONFIG_PATTERN = /(^|\/)\.storybook\/preview\.[cm]?[jt]sx?$/;
-
-// The synthetic `storybookFiles` key holding every orphan global. Angle brackets can't appear in a
-// canonical relative path, so it can never collide with a real file.
-const STORYBOOK_GLOBALS_KEY = '<storybookGlobals>';
-
 // The synthetic `storybookFiles` key holding the installed Storybook version. Unlike every other
 // entry this is a version string rather than a hash, because the preview core runtime is served
 // outside the module graph on webpack and rspack; see resolveStorybookVersion.
 const STORYBOOK_VERSION_KEY = '<storybookVersion>';
 
-type FilePath = string;
-type FileHash = string;
 type StorybookVersion = string;
-
-interface TurboSnapFile {
-  hash: FileHash;
-  dependencies: Set<FilePath>;
-}
-
-/**
- * Which of the three hashing homes each real file landed in, recorded by the same pass that builds
- * the hashes. The graph in `files` is pruned of synthetic nodes after hashing, so a reachability walk
- * over the written manifest cannot reconstruct these sets — it reports attributed files as orphans.
- */
-export interface FileAttribution {
-  /** Files in some story's transitive subtree, hashed into that story's `storyFiles` entry. */
-  storyReachable: Set<FilePath>;
-  /** Files in a `.storybook/preview.*` subtree, hashed into that preview's `storybookFiles` entry. */
-  previewSubtree: Set<FilePath>;
-  /** Files in neither of the above, rolled into the {@link STORYBOOK_GLOBALS_KEY} catch-all. */
-  storybookGlobals: Set<FilePath>;
-}
 
 /**
  * The TurboSnap manifest holds the hash of every file in the Storybook project and the dependencies
@@ -248,126 +226,6 @@ export function writeManifest(manifest: TurboSnapManifest, outputDirectory: stri
     path.join(outputDirectory, 'turbosnap-manifest.json'),
     JSON.stringify(serializeManifest(manifest))
   );
-}
-
-/**
- * Builds the file-hash entries of the `storybookFiles` section: a rolled-up hash for each Storybook
- * config file that no story imports. Every hashable file lands in exactly one hashing home — a
- * story's own subtree, a keyed `.storybook/preview.*` entry, or the {@link STORYBOOK_GLOBALS_KEY}
- * catch-all — so nothing goes unhashed and the backend can still attribute a change to the preview
- * config or to a Storybook/framework global. The {@link STORYBOOK_VERSION_KEY} entry is added by the
- * caller, since it is a version string rather than a hash of graph files.
- *
- * @param files The map of files to their hashes and dependencies.
- * @param hashes The content hashes keyed by canonical file path; a missing entry means no real file.
- * @param storyFileNames The detected story files.
- * @param h64ToString The hash function.
- *
- * @returns The rolled-up hash per Storybook config file, and the {@link FileAttribution} recording
- * which of the three hashing homes each real file landed in.
- */
-function collectStorybookFiles(
-  files: Map<FilePath, TurboSnapFile>,
-  hashes: Map<FilePath, FileHash>,
-  storyFileNames: Set<FilePath>,
-  h64ToString: (input: string) => string
-): { storybookFiles: Map<FilePath, FileHash>; attribution: FileAttribution } {
-  // The union of every story's subtree, used to tell Storybook globals apart from story code.
-  const storyReachable = new Set<FilePath>();
-  for (const storyFile of storyFileNames) {
-    collectTransitiveDependencies(files, storyFile, storyReachable);
-  }
-
-  const storybookFiles = new Map<FilePath, FileHash>();
-  const previewSubtree = new Set<FilePath>();
-  for (const filePath of files.keys()) {
-    if (!hashes.has(filePath) || !PREVIEW_CONFIG_PATTERN.test(filePath)) continue;
-    // Collect each subtree on its own, then union: sharing one accumulator would leak one preview's
-    // files into another's rolled-up hash.
-    const subtree = collectTransitiveDependencies(files, filePath);
-    storybookFiles.set(filePath, rollUpHash(hashes, subtree, h64ToString));
-    for (const dependency of subtree) {
-      previewSubtree.add(dependency);
-    }
-  }
-
-  // Everything else real goes in one catch-all bucket. Membership is defined by *absence* from the
-  // story graph and the preview subtree rather than by an import edge, because those edges are
-  // unreliable — vite has no config-to-preview edge and rspack drops importer edges. Framework
-  // preview annotations and the React runtime land here, and they affect rendering, so leaving them
-  // unhashed would be a real blind spot.
-  const orphanGlobals = [...files.keys()].filter(
-    (filePath) =>
-      hashes.has(filePath) && !storyReachable.has(filePath) && !previewSubtree.has(filePath)
-  );
-  if (orphanGlobals.length > 0) {
-    storybookFiles.set(STORYBOOK_GLOBALS_KEY, rollUpHash(hashes, orphanGlobals, h64ToString));
-  }
-
-  // Report only real files, matching how the catch-all is defined, so the three sets cover exactly
-  // the hashed files. The walks pass through synthetic nodes (globs, externals, virtual modules),
-  // which have no hash. A file can be both story-reachable and in a preview subtree.
-  const attribution: FileAttribution = {
-    storyReachable: new Set([...storyReachable].filter((filePath) => hashes.has(filePath))),
-    previewSubtree: new Set([...previewSubtree].filter((filePath) => hashes.has(filePath))),
-    storybookGlobals: new Set(orphanGlobals),
-  };
-
-  return { storybookFiles, attribution };
-}
-
-/**
- * Rolls a set of files up into a single hash. Content-hashes are combined in sorted-hash order so
- * the result depends only on the set of contents, not on where the files live — this keeps a hash
- * stable when the project or a dependency moves within the repository. Reading from `hashes` (not
- * `files`) also includes leaf dependencies.
- *
- * This is the shared recipe for both a story-file hash and a `storybookFiles` entry, so the two are
- * directly comparable.
- *
- * @param hashes The content hashes keyed by canonical file path.
- * @param filePaths The files to roll up.
- * @param h64ToString The hash function.
- *
- * @returns The rolled-up hash.
- */
-function rollUpHash(
-  hashes: Map<FilePath, FileHash>,
-  filePaths: Iterable<FilePath>,
-  h64ToString: (input: string) => string
-): FileHash {
-  const combined = [...filePaths]
-    .map((filePath) => hashes.get(filePath) ?? '')
-    .sort()
-    .join('');
-  return h64ToString(combined);
-}
-
-/**
- * Walks the dependency graph from a file, collecting it and every file it transitively depends
- * on.
- *
- * @param files The map of files to their hashes and dependencies.
- * @param filePath The file to collect the transitive dependencies of.
- * @param dependencies The set of dependencies to add to.
- *
- * @returns A set of all the files that the given file transitively depends on.
- */
-function collectTransitiveDependencies(
-  files: Map<FilePath, TurboSnapFile>,
-  filePath: string,
-  dependencies = new Set<string>()
-) {
-  if (dependencies.has(filePath)) {
-    return dependencies;
-  }
-
-  dependencies.add(filePath);
-  for (const dependency of files.get(filePath)?.dependencies ?? []) {
-    collectTransitiveDependencies(files, dependency, dependencies);
-  }
-
-  return dependencies;
 }
 
 /**
