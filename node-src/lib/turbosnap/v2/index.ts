@@ -39,6 +39,7 @@ export async function traceChangedFiles(
   input: TraceChangedFilesInput
 ): Promise<TraceChangedFilesV2Result> {
   const stats = await readStatsFile(input.statsPath);
+  // TODO: rename this. We want it to be as generic as possible.
   const fallbackReason = getBuilderViteFallbackReason(stats, input.projectRoot);
   if (fallbackReason) {
     return { status: 'fallback', reason: fallbackReason };
@@ -51,5 +52,6 @@ export async function traceChangedFiles(
   await determineChangedFiles(input.graphqlClient, input.buildId, manifest);
   writeManifest(manifest, input.manifestOutputDirectory);
 
+  // Until we want to lean on the v2 output, we always fallback to v1.
   return { status: 'fallback' };
 }

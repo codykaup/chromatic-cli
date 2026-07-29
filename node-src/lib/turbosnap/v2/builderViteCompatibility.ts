@@ -24,6 +24,7 @@ export function getBuilderViteFallbackReason(
   stats: Stats,
   projectRoot: string
 ): string | undefined {
+  // TODO: rename this function because it doesn't state its purpose
   if (!isBuilderViteStats(stats)) return undefined;
 
   const version = resolvePackageVersion(projectRoot, BUILDER_VITE_PACKAGE);
@@ -36,6 +37,7 @@ export function getBuilderViteFallbackReason(
   }
 
   if (semver.lt(version, FIRST_BUILDER_VITE_VERSION_WITH_CJS_EDGE_FIX)) {
+    // TODO: update this return reason
     return `${BUILDER_VITE_PACKAGE}@${version} is known to drop Vite CJS importer edges`;
   }
 
