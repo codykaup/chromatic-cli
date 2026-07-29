@@ -59,6 +59,7 @@
   .sev-p0 { color: var(--miss); background: var(--miss-bg); }
   .sev-p1 { color: var(--over); background: var(--over-bg); }
   .sev-p2 { color: var(--unex); background: var(--unex-bg); }
+  .sev-acc { color: var(--ok); background: var(--ok-bg); }
   .gap dl { margin: .5rem 0 0; display: grid; grid-template-columns: max-content 1fr; gap: .25rem .8rem; font-size: .88rem; }
   .gap dt { color: var(--muted); font-weight: 600; }
   .gap dd { margin: 0; }
@@ -206,7 +207,10 @@ CLI ships today. That is the right question to audit now, because removing the f
       <code>trace -d core-js</code> on <code>ui</code> → <code>{"status":"traced"}</code>,
       <strong>0 story files, no bail</strong>, 0 traced files. <code>-d typescript</code> → identical.
       v2 side: <code>core-js</code> has 0 entries in the <code>ui</code> manifest, so a bump is invisible
-      there too. This is the mechanism behind the invisible-CJS class.</td>
+      there too. <s>This is the mechanism behind the invisible-CJS class.</s> <strong>Corrected
+      2026-07-29:</strong> both <code>core-js</code> and <code>typescript</code> are the
+      <em>legitimate</em> case — not in the vite bundle at all, so 0 is right. Left as an accepted gap;
+      see the ranked-gaps entry for why no per-package guard is possible.</td>
 </tr>
 <tr>
   <td>webpack5</td>
@@ -412,7 +416,10 @@ any entry. v1 bails on all of them. This is not builder-specific and no stats re
 </div>
 
 <div class="gap">
-<header><span class="sev sev-p0">P0</span><h3>No guard for “a changed dependency traced to nothing”</h3></header>
+<header><span class="sev sev-acc">ACCEPTED GAP</span><h3>No guard for “a changed dependency traced to nothing”</h3></header>
+<p><strong>Downgraded from P0 and closed as an accepted gap on 2026-07-29</strong> — v2 matches v1 here
+deliberately. The ranking and the proposed signal below were both wrong; the underlying mechanism is
+real but is a <code>builder-vite</code> defect already fixed at source. Reasoning follows the table.</p>
 <p><code>nodeModulesMissingInStats</code> requires <code>nodeModules.size === 0</code> — a whole-file
 completeness check. There is no per-dependency check, and no downstream guard on a
 <code>traced</code> result with 0 story files: <code>lib/upload.ts:196</code> reports
@@ -427,8 +434,40 @@ v1 and v2 identically.</p>
   <dt>Caveat</dt><dd><code>core-js</code> is a babel-injected polyfill that genuinely is not in the vite
     bundle, so 0 is arguably right <em>there</em>. The transferable finding is that the CLI has
     <strong>no way to distinguish</strong> "genuinely not in the bundle" (correct) from "the builder
-    dropped the edge" (the invisible-CJS silent miss) — and emits nothing either way. The detectable
-    signal already exists: <code>changedDependencies.length &gt; 0 &amp;&amp; tracedFiles.length === 0</code>.</dd>
+    dropped the edge" (the invisible-CJS silent miss) — and emits nothing either way.</dd>
+  <dt>Why not a bail</dt><dd>Three separate states produce the same <em>evidence</em> (a dependency name
+    with no files in the stats), and only the third is a defect: <strong>A</strong> the name has files
+    that trace to no story — already handled, those files sit in <code>&lt;storybookGlobals&gt;</code> and
+    a bump recaptures everything; <strong>B1</strong> the name is genuinely not a preview input
+    (<code>eslint</code>, <code>typescript</code>, and <code>core-js</code> under vite) — capturing
+    nothing is correct, and this is the <em>majority</em>, because
+    <code>v1/getDependencies.ts:52</code> passes <code>dev: true</code> and so every devDependency bump
+    reaches this path; <strong>B2</strong> the builder dropped the module entirely — the real silent
+    miss. So the signal this section originally proposed,
+    <code>changedDependencies.length &gt; 0 &amp;&amp; tracedFiles.length === 0</code>, is
+    <strong>unusable</strong>: it fires on every dev-dep bump, which bails far wider than v1 and fails
+    the map's v1-parity bar in the opposite direction. <code>core-js</code> demonstrates B1, not B2 —
+    <code>ui-webpack/.babelrc</code> sets <code>useBuiltIns: "usage"</code>, so babel injects 84
+    <code>core-js</code> modules into webpack's graph while vite injects none. The two builders ship
+    genuinely different code, so their disagreement is correct, and webpack-as-ground-truth does not
+    apply to polyfill-injected packages.</dd>
+  <dt>Where B2 lives</dt><dd>Unpatched <code>builder-vite</code> only, via one line:
+    <code>isUserCode</code> drops any id starting with <code>\0</code>, and
+    <code>@rollup/plugin-commonjs</code> rewrites an ESM→CJS import to
+    <code>\0&lt;path&gt;?commonjs-es-import</code>. The fork commit <code>49cd7635df7</code> fixes it by
+    unwrapping the proxy <em>before</em> the filter (<code>builder-vite/dist/index.js:1255</code>), which
+    restores both the module and its importer edge. Not addressable from <code>chromatic-cli</code>, and
+    v1 misses it identically, so there is no v1-parity regression to fix.</dd>
+  <dt>Also correct</dt><dd><code>APPLIED</code> with an empty <code>onlyStoryFiles</code> is
+    <strong>not</strong> a defect. The Index treats an empty list as “no stories changed, capture
+    nothing”, which is the right outcome for a dev-dep-only commit and is what TurboSnap exists to do.
+    Reporting <code>BAILED</code> there would be false.</dd>
+  <dt>Rejected</dt><dd>A v2-side completeness check — enumerate installed packages, compare against the
+    manifest, bail when a runtime-looking dependency is wholly absent — was ruled
+    <strong>out of scope</strong>. It is the same class as the already-rejected
+    <code>iframe.html</code> stats-completeness guard, and strictly worse: that one tests a short closed
+    set, whereas “is this installed package a runtime preview input?” is exactly the B1/B2 question that
+    has no sound answer.</dd>
 </dl>
 </div>
 
@@ -565,8 +604,15 @@ non-module inputs, and dependencies with no file in v2's graph.</p>
   <li><code>changedPackageFiles</code> Path A — needs a lockfile diff that
     <code>findChangedDependencies</code> fails to parse; <code>trace</code> refuses manifest inputs.</li>
   <li>The unpatched-vite invisible-CJS case — the installed builder is patched, and reverting it would
-    have disturbed a shared fixture mid-audit. The established fact is taken as given, and the same
-    <em>guard-absence</em> mechanism was measured independently via <code>-d core-js</code>.</li>
+    have disturbed a shared fixture mid-audit. <s>The established fact is taken as given, and the same
+    <em>guard-absence</em> mechanism was measured independently via <code>-d core-js</code>.</s>
+    <strong>Corrected 2026-07-29:</strong> that inference was invalid — <code>-d core-js</code> measured
+    the legitimate case (B1), not the defect. So this case has <strong>never been observed
+    end-to-end</strong>; its existence rests on reading <code>isUserCode</code> plus the pre-patch probe
+    result. Left <strong>knowingly unmeasured</strong>: the decision is “no guard, match v1”, which is
+    invariant to the result, so measuring would only sharpen a gap we have chosen not to act on at the
+    cost of disturbing a shared fixture. Re-establish it first if this ever becomes actionable — e.g. if
+    the <code>builder-vite</code> gate is changed to trust unpatched builders.</li>
   <li>Whether the <code>&lt;storybookGlobals&gt;</code> bucket over-captures in a way that <em>matters</em>
     — all three fixture stories depend on everything in the bucket, so over-capture is unobservable here.
     A fixture with a story that uses neither React nor the Storybook runtime would be needed.</li>
