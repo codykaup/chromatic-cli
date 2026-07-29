@@ -55,6 +55,17 @@ export async function traceChangedFiles(
     { projectRoot: input.projectRoot, gitRoot: input.gitRoot },
     { configDir: input.configDir, staticDirs: input.staticDirs }
   );
+
+  // A graph we found no stories in can only ever recapture everything through `<storybookGlobals>`,
+  // which is wider than v1. Write the manifest anyway so the degenerate graph is still debuggable.
+  if (manifest.storyFileHashes.size === 0) {
+    writeManifest(manifest, input.manifestOutputDirectory);
+    return {
+      status: 'fallback',
+      reason: 'no story files were found in the Storybook module graph',
+    };
+  }
+
   await determineChangedFiles(input.graphqlClient, input.buildId, manifest);
   writeManifest(manifest, input.manifestOutputDirectory);
 

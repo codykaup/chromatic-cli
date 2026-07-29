@@ -163,6 +163,15 @@ uploading v2 hashes. That is a temporary builder-stats trust gate, not a correct
 invisible CJS-dependency blind spot — v1 can miss that case too. The `turbosnap-manifest` harness
 command intentionally bypasses this gate so local patched-builder stats can still be measured.
 
+Because the version is a proxy for the defect, the gate also rejects a *patched* builder that still
+reports an unfixed version. Set `CHROMATIC_TURBOSNAP_TRUST_BUILDER_STATS=1` to assert the installed
+builder's stats are sound and skip the gate. It is deleted along with the gate once the fix ships.
+
+A second, builder-agnostic guard falls back when v2 indexes **no story files at all**, because such a
+graph can only recapture everything through `<storybookGlobals>` — wider than v1, which *Agreed
+design 2* forbids. Today this fires on rspack only (`storyReachable: 0`, all three story files in the
+bucket), and stops firing on its own once rspack story detection is fixed.
+
 To measure the blind spot after applying the parked `builder-vite` patch locally:
 
 ```sh

@@ -75,6 +75,14 @@ describe('getBuilderViteFallbackReason', () => {
     expect(getBuilderViteFallbackReason(viteStats(), projectRoot)).toBeUndefined();
   });
 
+  it('does not fall back when the builder stats are explicitly trusted', () => {
+    vi.stubEnv('CHROMATIC_TURBOSNAP_TRUST_BUILDER_STATS', '1');
+
+    expect(getBuilderViteFallbackReason(viteStats(), projectRoot)).toBeUndefined();
+
+    vi.unstubAllEnvs();
+  });
+
   it('falls back when Vite stats are detected but builder-vite cannot be resolved', () => {
     mockResolve.mockImplementation(() => {
       throw new Error('Cannot find module');

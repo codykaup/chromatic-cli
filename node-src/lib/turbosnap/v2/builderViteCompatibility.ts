@@ -27,6 +27,11 @@ export function getBuilderViteFallbackReason(
   // TODO: rename this function because it doesn't state its purpose
   if (!isBuilderViteStats(stats)) return undefined;
 
+  // The version is a proxy for the stats defect, so it rejects a patched or forked builder that
+  // still reports an unfixed version. This lets whoever patched it assert their stats are sound.
+  // Read inline rather than through getEnvironment because it is deleted along with this gate.
+  if (process.env.CHROMATIC_TURBOSNAP_TRUST_BUILDER_STATS) return undefined;
+
   const version = resolvePackageVersion(projectRoot, BUILDER_VITE_PACKAGE);
   if (!version) {
     return `could not resolve ${BUILDER_VITE_PACKAGE} from ${projectRoot}`;
