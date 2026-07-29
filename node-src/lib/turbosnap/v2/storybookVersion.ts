@@ -3,7 +3,8 @@ import { createRequire } from 'module';
 import path from 'path';
 
 // The packages that own Storybook's preview runtime, newest layout first: Storybook >= 9 ships it in
-// `storybook`, Storybook 8 in `@storybook/core`.
+// `storybook`, Storybook 8 in `@storybook/core`. If a future major moves the runtime into some other
+// package, prepend it here.
 const STORYBOOK_CORE_PACKAGES = ['storybook', '@storybook/core'];
 
 /**
@@ -14,6 +15,15 @@ const STORYBOOK_CORE_PACKAGES = ['storybook', '@storybook/core'];
  * `__STORYBOOK_MODULE_*__` globals and loaded from a prebuilt `sb-preview/runtime.js`, so it never
  * appears in `preview-stats.json` and content hashing cannot see it. Tracking the version means a
  * Storybook upgrade still forces a recapture.
+ *
+ * We track only the core package, not every `@storybook/*` version: everything else that executes in
+ * the preview is in the module graph and hashed by content, so a wider list would over-capture on
+ * addon-only bumps that cannot change a snapshot. That relies on the runtime shipping from the core
+ * package, and a future major moving it would break coverage silently — prepend the new package above
+ * if that happens.
+ *
+ * Emitted on every builder, including vite, where the runtime is bundled into the graph and content
+ * hashing already covers it: one unconditional entry beats a per-builder branch.
  *
  * We deliberately do not reuse `ctx.storybook.version`: that reports the *view layer* package (e.g.
  * `@storybook/react`), resolves it relative to the working directory without walking up to a hoisted
