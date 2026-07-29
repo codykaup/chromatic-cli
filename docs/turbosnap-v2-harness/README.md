@@ -16,6 +16,7 @@ see which stories *would* be recaptured. Full findings: [`../turbosnap-v2-test-r
 | `parity.mjs <base.json> <cur.json> <v1.json>` | Compare what v1 would recapture against what v2 would recapture, and print a verdict. |
 | `parity.sh <pkg>` | Run the v1-vs-v2 comparison across the edit matrix for one builder. Exits non-zero on a regression. |
 | `depfile.mjs <manifest.json> <pkg>` | Pick a file of `<pkg>` from the graph, to stand in for a version bump. |
+| `cjs-edge-probe.sh [pkg]` | Vite-only structural probe: temporarily imports a CJS-only dependency from one story, rebuilds patched-builder stats, and verifies a dependency edit recaptures only that story. |
 
 ## Prerequisites
 
@@ -127,6 +128,18 @@ The production `--only-changed` path has an additional compatibility gate: Vite 
 uploading v2 hashes. That is a temporary builder-stats trust gate, not a correctness fix for the
 invisible CJS-dependency blind spot — v1 can miss that case too. The `turbosnap-manifest` harness
 command intentionally bypasses this gate so local patched-builder stats can still be measured.
+
+To measure the blind spot after applying the parked `builder-vite` patch locally:
+
+```sh
+bash cjs-edge-probe.sh ui
+```
+
+The probe creates a temporary CJS-only package under the fixture's `node_modules`, imports it from
+`Button.stories.tsx`, rebuilds Vite stats, asserts the package ships in `modules[]`, then edits that
+dependency and verifies only the Button story file hash changes. It restores the fixture source and
+temporary package with a trap, rebuilds the normal patched stats, and prints the patched
+`<storybookGlobals>` bucket listing for the follow-on classification ticket.
 
 The two sides are driven differently, because v1 is not stats-only:
 
