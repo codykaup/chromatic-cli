@@ -164,9 +164,10 @@ no per-story evidence was lost), and `v2 MISSES a story v1 caught` — the only 
 Measured 2026-07-29: **0 regressions on vite and webpack.** Where the two differ:
 
 - **`react` on vite** — v1 recaptures **0 stories**; v2 recaptures all 3 via `<storybookGlobals>`.
-  Both algorithms lose the importer edge (they read the same stats); v2's bucket is what keeps it
-  safe. So **parity cannot justify the vite edge-loss fix — v1 fails this case too** — and the bucket
-  must not shrink before the edges are restored.
+  Neither reaches `react/index.js` from a story, because esbuild elides the type-only
+  `import React from 'react'` (see *Why `react/index.js` is bucketed on vite but not on webpack*);
+  v2's bucket is what keeps it safe. So **parity cannot justify the vite edge-loss fix — v1 fails
+  this case too** — and the bucket must not shrink before the edges are restored.
 - **rspack** — v2 indexes **0 stories** while v1 detects all 3, so every rspack verdict is vacuous
   until story detection is fixed. Reported, never gated.
 - **A dependency absent from a builder's graph** — `parity.sh` skips it, stating that v2 cannot see
@@ -183,12 +184,28 @@ story count and the `storybookFiles` line together — "0 stories changed" is no
 - `moment` → **Button only** on vite (`moment/dist/moment.js`) and webpack (`moment/moment.js`, and
   each `moment/locale/*.js`); the bucket does **not** move. On **rsbuild** 0 stories are detected at
   all, so `moment` is in the bucket and any edit recaptures everything.
-- `react` → **all 3 stories on webpack**, bucket unchanged. On **vite**, **0 stories** but the
-  **`<storybookGlobals>` entry changes** ⇒ still recaptures everything. React is *in* the vite graph;
-  it lands in the bucket because the importer edge from `Button.tsx` is missing from the vite stats
-  (edge loss), not because it was pre-bundled away.
+- `react/index.js` → **`storyReachable` on webpack**; **`<storybookGlobals>` on vite** (bucket moves
+  ⇒ recapture everything). **This asymmetry is not edge loss** — see below.
+- `react/jsx-runtime.js` → **`storyReachable` on both**; an edit recaptures all 3 stories.
 
-Bucket sizes at that measurement: vite 29 of 39 files, webpack 49 of 284, rsbuild 201 of 202.
+### Why `react/index.js` is bucketed on vite but not on webpack
+
+The two builders transpile the same source differently, so their stats truthfully describe two
+different graphs. Every fixture component writes `import React from 'react'` but uses `React` only
+in a **type** position (`React.CSSProperties`):
+
+- **esbuild (vite)** elides the import entirely — the emitted module imports only
+  `react/jsx-runtime`, `@myorg/shared` and `moment`. There is no `Button.tsx → react/index.js` edge
+  to lose.
+- **babel (webpack)** preserves `import React from 'react'` alongside the injected
+  `react/jsx-runtime` import, so the edge is real there.
+
+So the missing edge is **not** a further instance of the `?commonjs-es-import` unwrap gap, and the
+`builder-vite` fork commit is not incomplete on this point. Both outcomes are safe: on vite a `react`
+bump moves `<storybookGlobals>` (recapture everything) *and* changes `react/jsx-runtime.js`, which is
+story-attributed, so all 3 stories recapture regardless.
+
+Bucket sizes at that measurement: vite **27 of 39** files, webpack 49 of 284, rsbuild 201 of 202.
 
 If any of these change, the algorithm's behavior has changed — investigate before assuming the
 harness is wrong.
