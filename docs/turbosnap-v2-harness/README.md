@@ -23,6 +23,20 @@ see which stories *would* be recaptured. Full findings: [`../turbosnap-v2-test-r
 | `static-identity-probe.sh [pkg]` | The static-file cases the matrix can't express: rename, content swap, symlinked asset, symlinked directory. See [Static file identity](#static-file-identity). |
 | `structural-probe.sh <pkg> [case…]` | The cases that need the module graph to change shape: a new import, a new/deleted story file, a moved module, a moved story file, a first import of an unused dependency, a removed import. **Rebuilds Storybook per case** so the stats regenerate. See [Structural changes](#structural-changes) and [`structural-audit.md`](./structural-audit.md). |
 
+### Cost, rather than correctness
+
+The scripts above ask *what does v2 catch?*. These ask *what does it cost?*, and are not fixture-bound —
+point them at any repo with a `preview-stats.json`. Findings:
+[`manifest-cost.md`](./manifest-cost.md).
+
+| Script | Purpose |
+|---|---|
+| `cost-e2e.sh <repo> <runs> -- <cli args>` | Wall clock and **absolute** peak RSS of the real compiled `dist/bin.cjs`, under `/usr/bin/time -l`. Use it for both `turbosnap-manifest` (v2) and `trace` (v1) so the two are comparable. |
+| `cost-phases.mjs --project <dir> --stats <file>` | `buildManifest` broken down per phase — stats read, graph discovery, graph hashing, config dir, static dirs, assembly/roll-ups — over N runs with the spread. `--concurrency-sweep` times `getFileHashes` at several `pLimit` levels. |
+| `cost-scale.mjs` | Synthetic scaling. Sweeps story count and shared-module count independently against real generated projects, plus the three suspected non-linear cases: a wide `staticDir`, one very large file, many byte-identical files. Also sweeps hashing concurrency one fresh process per level, which is the only way to read its peak memory. |
+| `cost-profile.mjs --project <dir> --stats <file>` | V8 CPU profile of `buildManifest`, aggregated as self time per function. Read it as clusters (path work / roll-ups / I/O), not single rows. |
+| `cost-lib.mjs` | Shared plumbing. The phase scripts load the TurboSnap v2 **TypeScript source** through a Vite SSR server, because `dist/bin.cjs` is minified so its internals aren't addressable — so their absolute memory figures are meaningless and they report RSS *growth*. `cost-e2e.sh` is what measures the shipped binary. |
+
 ## Prerequisites
 
 1. **Build the CLI** — the scripts run the compiled `dist/bin.cjs`, so rebuild after any code change:
