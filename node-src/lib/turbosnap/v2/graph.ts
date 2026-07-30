@@ -34,6 +34,43 @@ export function rollUpHash(
 }
 
 /**
+ * Rolls a set of files up into a single hash that depends on both content and path. Entries are
+ * sorted so the result doesn't depend on iteration order.
+ *
+ * This is the recipe for files whose path is part of their meaning: a static asset is served at its
+ * path and a Storybook config file is loaded by name, so a byte-preserving rename changes what
+ * Storybook renders and has to move the hash. Contrast {@link rollUpHash}, where a module's path is
+ * incidental.
+ *
+ * @param entries The path/content-hash pairs to roll up.
+ * @param h64ToString The hash function.
+ *
+ * @returns The rolled-up hash.
+ */
+export function rollUpPathSensitiveHash(
+  entries: Iterable<[FilePath, FileHash]>,
+  h64ToString: (input: string) => string
+): FileHash {
+  const combined = [...entries]
+    .map((entry) => hashEntryIdentity(entry))
+    .sort()
+    .join('');
+  return h64ToString(combined);
+}
+
+/**
+ * Encodes a key and value as a single string, length-prefixing each so no pair of entries can
+ * concatenate into the same bytes as a different pair.
+ *
+ * @param entry The key/value pair to encode.
+ *
+ * @returns The encoded entry.
+ */
+export function hashEntryIdentity([key, value]: [string, string]): string {
+  return `${key.length}:${key}${value.length}:${value}`;
+}
+
+/**
  * Walks the dependency graph from a file, collecting it and every file it transitively depends on.
  *
  * @param files The map of files to their hashes and dependencies.

@@ -3,7 +3,7 @@ import path from 'path';
 
 import { getFileHashes } from '../../getFileHashes';
 import { posix } from '../../posix';
-import { FileHash, FilePath, rollUpHash } from './graph';
+import { FileHash, FilePath, rollUpPathSensitiveHash } from './graph';
 import { StatsPathRoots } from './paths';
 
 // The synthetic `storybookFiles` keys covering Storybook inputs that are never bundler inputs, so no
@@ -98,7 +98,12 @@ export async function hashOutOfGraphFiles(
  * A section with no files contributes no entry at all, matching how the `<storybookGlobals>` catch-all
  * is omitted when empty.
  *
+ * Both roll-ups are path-sensitive, unlike the graph-rolled entries: a static asset is served at its
+ * path and a config file is loaded by name, so a byte-preserving rename changes what Storybook
+ * renders even though the multiset of contents is untouched.
+ *
  * @param outOfGraphFiles The per-file hashes to roll up.
+ * @param roots The project and git roots, used to take path identity inside the project.
  * @param h64ToString The hash function.
  *
  * @returns The synthetic `storybookFiles` entries, keyed by {@link STORYBOOK_CONFIG_KEY} and
@@ -106,6 +111,7 @@ export async function hashOutOfGraphFiles(
  */
 export function rollUpOutOfGraphFiles(
   outOfGraphFiles: OutOfGraphFiles,
+  roots: StatsPathRoots,
   h64ToString: (input: string) => string
 ): Map<FilePath, FileHash> {
   const sections = [
@@ -116,8 +122,32 @@ export function rollUpOutOfGraphFiles(
   return new Map(
     sections
       .filter(([, files]) => files.size > 0)
-      .map(([key, files]) => [key, rollUpHash(files, files.keys(), h64ToString)])
+      .map(([key, files]) => [
+        key,
+        rollUpPathSensitiveHash(
+          [...files].map(([filePath, hash]): [FilePath, FileHash] => [
+            projectRelativePath(filePath, roots),
+            hash,
+          ]),
+          h64ToString
+        ),
+      ])
   );
+}
+
+/**
+ * Re-keys a canonical (git-root-relative) manifest path to project-root-relative, which is the path
+ * identity the roll-ups hash. Taking identity inside the project is what keeps a project move from
+ * moving the roll-up: the assets are still served at the same URLs and the config still loads from
+ * the same names, so only a rename *within* the project is a real change.
+ *
+ * @param filePath The canonical manifest path.
+ * @param roots The project and git roots.
+ *
+ * @returns The path relative to the project root.
+ */
+function projectRelativePath(filePath: FilePath, roots: StatsPathRoots): FilePath {
+  return posix(path.relative(roots.projectRoot, path.resolve(roots.gitRoot, filePath)));
 }
 
 /**

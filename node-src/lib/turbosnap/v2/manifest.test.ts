@@ -1072,6 +1072,41 @@ describe('buildManifest out-of-graph inputs', () => {
     expect(after.storybookHash).not.toBe(before.storybookHash);
   });
 
+  it('moves the storybook hash when a static asset is renamed without changing its bytes', async () => {
+    const before = await buildManifest(stats, roots, outOfGraph);
+
+    // Static assets are served by URL, so the same bytes at a new path render differently. A
+    // content-only roll-up left both `<staticFiles>` and the storybook hash byte-identical here.
+    directoryTreeRef.current = {
+      '/repo/packages/ui/.storybook': ['main.ts', 'static'],
+      '/repo/packages/ui/.storybook/static': ['sw.js'],
+    };
+    const renamed = '/repo/packages/ui/.storybook/static/sw.js';
+    fileHashesRef.current = { [story]: 'S', [mainConfig]: 'M', [renamed]: 'A' };
+    const after = await buildManifest(stats, roots, outOfGraph);
+
+    expect(after.storybookHash).not.toBe(before.storybookHash);
+  });
+
+  it('moves the storybook hash when two static assets swap contents', async () => {
+    directoryTreeRef.current = {
+      '/repo/packages/ui/.storybook': ['main.ts', 'static'],
+      '/repo/packages/ui/.storybook/static': ['a.png', 'b.png'],
+    };
+    const [a, b] = [
+      '/repo/packages/ui/.storybook/static/a.png',
+      '/repo/packages/ui/.storybook/static/b.png',
+    ];
+    fileHashesRef.current = { [story]: 'S', [mainConfig]: 'M', [a]: 'A', [b]: 'B' };
+    const before = await buildManifest(stats, roots, outOfGraph);
+
+    // The multiset of contents is unchanged, so only path-sensitive hashing sees this.
+    fileHashesRef.current = { [story]: 'S', [mainConfig]: 'M', [a]: 'B', [b]: 'A' };
+    const after = await buildManifest(stats, roots, outOfGraph);
+
+    expect(after.storybookHash).not.toBe(before.storybookHash);
+  });
+
   it('keeps out-of-graph files out of files and attribution, so they miss the globals catch-all', async () => {
     const manifest = await buildManifest(stats, roots, outOfGraph);
 

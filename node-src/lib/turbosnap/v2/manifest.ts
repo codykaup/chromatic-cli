@@ -8,6 +8,7 @@ import {
   collectTransitiveDependencies,
   FileHash,
   FilePath,
+  hashEntryIdentity,
   rollUpHash,
   TurboSnapFile,
 } from './graph';
@@ -179,7 +180,7 @@ export async function buildManifest(
   // Storybook's config directory and static assets are never bundler inputs, so nothing above can see
   // them change. They get their own roll-ups; see rollUpOutOfGraphFiles.
   const outOfGraphFiles = await hashOutOfGraphFiles(outOfGraph, roots);
-  for (const [key, hash] of rollUpOutOfGraphFiles(outOfGraphFiles, h64ToString)) {
+  for (const [key, hash] of rollUpOutOfGraphFiles(outOfGraphFiles, roots, h64ToString)) {
     storybookFiles.set(key, hash);
   }
 
@@ -258,10 +259,6 @@ export function writeManifest(manifest: TurboSnapManifest, outputDirectory: stri
     path.join(outputDirectory, 'turbosnap-manifest.json'),
     JSON.stringify(serializeManifest(manifest))
   );
-}
-
-function hashEntryIdentity([key, value]: [FilePath, FileHash | StorybookVersion]) {
-  return `${key.length}:${key}${value.length}:${value}`;
 }
 
 /**

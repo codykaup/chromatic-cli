@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { hashOutOfGraphFiles, rollUpOutOfGraphFiles } from './outOfGraphFiles';
+import { hashOutOfGraphFiles, OutOfGraphInput, rollUpOutOfGraphFiles } from './outOfGraphFiles';
+import { StatsPathRoots } from './paths';
 
 // An in-memory tree of absolute directory -> entry names. A key that maps to entries is a directory;
 // anything else named by a parent is a file. Backing the sweep this way keeps these tests off disk.
@@ -253,7 +254,7 @@ describe('rollUpOutOfGraphFiles', () => {
       '/repo/packages/ui/.storybook/static': ['logo.svg'],
     };
 
-    const rollUps = rollUpOutOfGraphFiles(await hashOutOfGraphFiles(input, roots), h64ToString);
+    const rollUps = await rollUp();
 
     expect([...rollUps.keys()]).toEqual(['<storybookConfig>', '<staticFiles>']);
   });
@@ -261,10 +262,10 @@ describe('rollUpOutOfGraphFiles', () => {
   it('moves the config roll-up when a config file content changes', async () => {
     directoryTreeRef.current = { '/repo/packages/ui/.storybook': ['main.ts'] };
     fileHashesRef.current = { '/repo/packages/ui/.storybook/main.ts': 'M1' };
-    const before = rollUpOutOfGraphFiles(await hashOutOfGraphFiles(input, roots), h64ToString);
+    const before = await rollUp();
 
     fileHashesRef.current = { '/repo/packages/ui/.storybook/main.ts': 'M2' };
-    const after = rollUpOutOfGraphFiles(await hashOutOfGraphFiles(input, roots), h64ToString);
+    const after = await rollUp();
 
     expect(after.get('<storybookConfig>')).not.toBe(before.get('<storybookConfig>'));
   });
@@ -276,35 +277,104 @@ describe('rollUpOutOfGraphFiles', () => {
     };
     const staticFile = '/repo/packages/ui/.storybook/static/logo.svg';
     fileHashesRef.current = { '/repo/packages/ui/.storybook/main.ts': 'M', [staticFile]: 'A1' };
-    const before = rollUpOutOfGraphFiles(await hashOutOfGraphFiles(input, roots), h64ToString);
+    const before = await rollUp();
 
     fileHashesRef.current = { '/repo/packages/ui/.storybook/main.ts': 'M', [staticFile]: 'A2' };
-    const after = rollUpOutOfGraphFiles(await hashOutOfGraphFiles(input, roots), h64ToString);
+    const after = await rollUp();
 
     expect(after.get('<staticFiles>')).not.toBe(before.get('<staticFiles>'));
     expect(after.get('<storybookConfig>')).toBe(before.get('<storybookConfig>'));
   });
 
+  it('moves the static roll-up when an asset is renamed without changing its bytes', async () => {
+    directoryTreeRef.current = {
+      '/repo/packages/ui/.storybook': ['main.ts', 'static'],
+      '/repo/packages/ui/.storybook/static': ['logo.svg'],
+    };
+    fileHashesRef.current = { '/repo/packages/ui/.storybook/static/logo.svg': 'A' };
+    const before = await rollUp();
+
+    // Same bytes at a different URL renders differently, so the multiset of contents isn't enough.
+    directoryTreeRef.current = {
+      '/repo/packages/ui/.storybook': ['main.ts', 'static'],
+      '/repo/packages/ui/.storybook/static': ['brand.svg'],
+    };
+    fileHashesRef.current = { '/repo/packages/ui/.storybook/static/brand.svg': 'A' };
+    const after = await rollUp();
+
+    expect(after.get('<staticFiles>')).not.toBe(before.get('<staticFiles>'));
+  });
+
+  it('moves the static roll-up when two assets swap contents', async () => {
+    directoryTreeRef.current = {
+      '/repo/packages/ui/.storybook': ['main.ts', 'static'],
+      '/repo/packages/ui/.storybook/static': ['a.png', 'b.png'],
+    };
+    const [a, b] = [
+      '/repo/packages/ui/.storybook/static/a.png',
+      '/repo/packages/ui/.storybook/static/b.png',
+    ];
+    fileHashesRef.current = { [a]: 'A', [b]: 'B' };
+    const before = await rollUp();
+
+    // The multiset of contents is identical, but each URL now serves the other's bytes.
+    fileHashesRef.current = { [a]: 'B', [b]: 'A' };
+    const after = await rollUp();
+
+    expect(after.get('<staticFiles>')).not.toBe(before.get('<staticFiles>'));
+  });
+
+  it('moves the config roll-up when a config file is renamed without changing its bytes', async () => {
+    directoryTreeRef.current = { '/repo/packages/ui/.storybook': ['preview-head.html'] };
+    fileHashesRef.current = { '/repo/packages/ui/.storybook/preview-head.html': 'H' };
+    const before = await rollUp();
+
+    // Storybook loads config files by name, so the same bytes under a new name inject elsewhere.
+    directoryTreeRef.current = { '/repo/packages/ui/.storybook': ['preview-body.html'] };
+    fileHashesRef.current = { '/repo/packages/ui/.storybook/preview-body.html': 'H' };
+    const after = await rollUp();
+
+    expect(after.get('<storybookConfig>')).not.toBe(before.get('<storybookConfig>'));
+  });
+
   it('omits a section that has no files, matching how the globals catch-all behaves', async () => {
     directoryTreeRef.current = { '/repo/packages/ui/.storybook': ['main.ts'] };
 
-    const rollUps = rollUpOutOfGraphFiles(await hashOutOfGraphFiles(input, roots), h64ToString);
+    const rollUps = await rollUp();
 
     expect(rollUps.has('<staticFiles>')).toBe(false);
   });
 
-  it('keeps a roll-up stable when the project moves, since it hashes content not paths', async () => {
-    directoryTreeRef.current = { '/repo/packages/ui/.storybook': ['main.ts'] };
-    fileHashesRef.current = { '/repo/packages/ui/.storybook/main.ts': 'M' };
-    const before = rollUpOutOfGraphFiles(await hashOutOfGraphFiles(input, roots), h64ToString);
+  it('keeps both roll-ups stable when the project moves, since path identity is project-relative', async () => {
+    directoryTreeRef.current = {
+      '/repo/packages/ui/.storybook': ['main.ts', 'static'],
+      '/repo/packages/ui/.storybook/static': ['logo.svg'],
+    };
+    fileHashesRef.current = {
+      '/repo/packages/ui/.storybook/main.ts': 'M',
+      '/repo/packages/ui/.storybook/static/logo.svg': 'A',
+    };
+    const before = await rollUp();
 
-    directoryTreeRef.current = { '/repo/apps/web/.storybook': ['main.ts'] };
-    fileHashesRef.current = { '/repo/apps/web/.storybook/main.ts': 'M' };
-    const after = rollUpOutOfGraphFiles(
-      await hashOutOfGraphFiles(input, { projectRoot: '/repo/apps/web', gitRoot: '/repo' }),
-      h64ToString
-    );
+    directoryTreeRef.current = {
+      '/repo/apps/web/.storybook': ['main.ts', 'static'],
+      '/repo/apps/web/.storybook/static': ['logo.svg'],
+    };
+    fileHashesRef.current = {
+      '/repo/apps/web/.storybook/main.ts': 'M',
+      '/repo/apps/web/.storybook/static/logo.svg': 'A',
+    };
+    const after = await rollUp(input, { projectRoot: '/repo/apps/web', gitRoot: '/repo' });
 
     expect(after.get('<storybookConfig>')).toBe(before.get('<storybookConfig>'));
+    expect(after.get('<staticFiles>')).toBe(before.get('<staticFiles>'));
   });
 });
+
+async function rollUp(theInput: OutOfGraphInput = input, theRoots: StatsPathRoots = roots) {
+  return rollUpOutOfGraphFiles(
+    await hashOutOfGraphFiles(theInput, theRoots),
+    theRoots,
+    h64ToString
+  );
+}

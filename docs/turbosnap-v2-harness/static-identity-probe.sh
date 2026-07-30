@@ -4,17 +4,19 @@
 # bytes exist but the walk never reaches them. These are the classes attribution-matrix.sh can't express:
 # a content swap needs a matched pair, and a symlink can't be made by appending to a file.
 #
-#   1. rename an asset, bytes kept        -> <staticFiles> path-independent (accepted gap G1)
-#   2. swap two assets' contents          -> same hash multiset, different URLs (accepted gap G1)
+#   1. rename an asset, bytes kept        -> path is part of the identity (G1, fixed)
+#   2. swap two assets' contents          -> same hash multiset, different URLs (G1, fixed)
 #   3. symlinked asset, target changes    -> hashed by target bytes (G2, fixed)
 #   4. symlinked directory of assets      -> descended into (G2, fixed)
 #
-# Cases 1-2 are a KNOWN, ACCEPTED gap and must keep reporting UNDER-CAPTURES: rollUpHash is
-# path-independent by design (graph.ts:29), which is right for modules (identical bytes render
-# identically) and wrong for static files (the URL is the identity).
+# Cases 1-2 were gap G1, a PATH miss: <staticFiles> used the path-independent rollUpHash, which is
+# right for modules (identical bytes render identically) and wrong for static files (the URL is the
+# identity). Fixed — the out-of-graph sections now use rollUpPathSensitiveHash.
 #
 # Cases 3-4 were gap G2, a CONTENT miss rather than a path one, and are FIXED: the walk now follows
-# symlinks. They must report `as expected`; a regression here shows up as UNDER-CAPTURES.
+# symlinks.
+#
+# All four must report `as expected`; a regression in any of them shows up as UNDER-CAPTURES.
 #
 # Nothing tracked by git is touched: every asset this creates is untracked and removed by the trap.
 # Env overrides: CHROMATIC_CLI, MONOREPO (see gen.sh).
