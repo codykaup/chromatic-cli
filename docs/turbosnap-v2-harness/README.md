@@ -11,6 +11,7 @@ see which stories *would* be recaptured. Full findings: [`../turbosnap-v2-test-r
 | `gen.sh <pkg> <out.json> [stats.json]` | Build a v2 manifest for one fixture package. Pass a stats file to read the graph from a snapshot. |
 | `tsdiff.mjs <base.json> <cur.json>` | Diff two manifests → Storybook-hash change, every changed per-story hash, **and** every changed `storybookFiles` entry. The core "which stories recapture?" assertion. |
 | `bucket.mjs <manifest.json> [path-substring]` | List `<storybookGlobals>` membership, or report which set a given file was attributed to. See [Seeing what's in the bucket](#seeing-whats-in-the-bucket). Covers the graph only — for config and static files see [Out-of-graph inputs](#out-of-graph-inputs). |
+| `attrdiff.mjs <base.json> <cur.json>` | Diff two manifests' `attribution` sections and `files` key sets → which files entered or left the graph, and which moved between hashing homes. The companion to `tsdiff.mjs` for structural probes: `tsdiff` answers *what recaptures*, this answers *how the graph changed shape*. |
 | `trace.mjs <manifest.json> <story-substring>` | Print a story's transitive deps, split into first-party vs. node_modules. Use to see *why* a story did/didn't change. Walks the **pruned** graph — use `bucket.mjs`, never this, to ask what is in the bucket. |
 | `matrix.sh <pkg>` | Run the full edit matrix (leaf / transitive / isolated / story-file / cross-package / preview / main / node_modules) for one builder and print results. |
 | `parity.mjs <base.json> <cur.json> <v1.json>` | Compare what v1 would recapture against what v2 would recapture, and print a verdict. |
@@ -20,6 +21,7 @@ see which stories *would* be recaptured. Full findings: [`../turbosnap-v2-test-r
 | `resolution-probe.sh [pkg]` | Vite-only probe: removes `jsnext:main` from installed `moment` so it resolves a different build, and asserts v2 notices a *resolution*-only manifest change and scopes it to the importer. See [Resolution changes](#resolution-changes). |
 | `attribution-matrix.sh <pkg>` | Probes **every** manifest entry for over- and under-capture — graph hashes, `<storybookConfig>`, `<staticFiles>`, `<storybookVersion>`, the bucket — against a fixed stats snapshot. One JSON line per probe. Backs [`attribution-audit.html`](./attribution-audit.html). |
 | `static-identity-probe.sh [pkg]` | The static-file cases the matrix can't express: rename, content swap, symlinked asset, symlinked directory. See [Static file identity](#static-file-identity). |
+| `structural-probe.sh <pkg> [case…]` | The cases that need the module graph to change shape: a new import, a new/deleted story file, a moved module, a moved story file, a first import of an unused dependency, a removed import. **Rebuilds Storybook per case** so the stats regenerate. See [Structural changes](#structural-changes) and [`structural-audit.md`](./structural-audit.md). |
 
 ## Prerequisites
 
@@ -84,7 +86,36 @@ temp manifests to a `mktemp -d` dir that's cleaned up on exit.
 
 > If you want to test **structural** changes (a *new* import, a new story file, a moved file), a
 > content-only edit is not enough — you must rebuild the Storybook so `preview-stats.json` reflects
-> the new graph, then regenerate the manifest.
+> the new graph, then regenerate the manifest. `structural-probe.sh` does exactly that; see
+> [Structural changes](#structural-changes).
+
+## Structural changes
+
+```sh
+bash structural-probe.sh ui           # vite    (patched builder-vite)
+bash structural-probe.sh ui-webpack   # webpack5
+bash structural-probe.sh ui move-component move-story-autotitle   # or name individual cases
+```
+
+Twelve cases, each rebuilding the fixture's Storybook so the graph really changes: `new-import`,
+`new-story`, `delete-story`, `move-module`, `move-component`, `move-package`, `move-story`,
+`move-story-autotitle`, `new-dep`, `remove-import`, `remove-dep`, `orphan-to-bucket`. Per case it
+prints `tsdiff.mjs` (what recaptures), `attrdiff.mjs` (how the graph changed shape) and the story IDs
+Storybook actually indexed — the last of these is what makes the autotitle case legible. The fixture
+is restored with a trap and Storybook rebuilt at the end, so `preview-stats.json` is left matching the
+committed source.
+
+Two constraints are enforced by the script rather than left to the reader: it **refuses to run on
+`marketing-ui`** (rebuilding destroys the unpatched-vite control) and it **refuses to run on a dirty
+fixture tree**, because restoring uses `git checkout` + `git clean`. Set `FORCE_DIRTY=1` only to
+discard those changes deliberately.
+
+Full results and verdicts: [`structural-audit.md`](./structural-audit.md). Headline: attribution is
+correct for every case where some file's bytes change, and **blind to every move that changes no
+bytes** — `rollUpHash` is path-independent by design (`v2/graph.ts:29`) and `storybookHash` excludes
+story file paths on purpose (`v2/manifest.ts`), so a directory-index rename leaves the entire manifest
+gate bit-identical. Measured on both builders, including one case where that silently renames a
+story ID.
 
 ## Doing a one-off manual test
 
@@ -156,7 +187,9 @@ static dir. One class it does *not* catch, measurable with `static-identity-prob
   leaves `<staticFiles>` and `storybookHash` unmoved even though the bytes served at each URL changed.
   This is a **knowingly accepted** gap: correct for modules (identical bytes render identically), wrong for
   static files (the URL is the identity), but exotic enough, and almost always accompanied by a source edit
-  that moves a story hash. v1 *does* bail on it, so it is a knowing parity exception.
+  that moves a story hash. v1 *does* bail on it, so it is a knowing parity exception. Note that "correct
+  for modules" holds only for modules whose path does not reach the output — see
+  [`structural-audit.md`](./structural-audit.md) for the two exceptions, one of them measured.
 
 **Symlinks used to be skipped entirely** and are now followed, so cases 3 and 4 of the probe report `as
 expected` where they once reported `UNDER-CAPTURES`. A symlinked asset is hashed by its target's bytes and
