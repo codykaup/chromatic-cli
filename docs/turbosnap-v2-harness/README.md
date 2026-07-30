@@ -17,6 +17,9 @@ see which stories *would* be recaptured. Full findings: [`../turbosnap-v2-test-r
 | `parity.sh <pkg>` | Run the v1-vs-v2 comparison across the edit matrix for one builder. Exits non-zero on a regression. |
 | `depfile.mjs <manifest.json> <pkg>` | Pick a file of `<pkg>` from the graph, to stand in for a version bump. |
 | `cjs-edge-probe.sh [pkg]` | Vite-only structural probe: temporarily imports a CJS-only dependency from one story, rebuilds patched-builder stats, and verifies a dependency edit recaptures only that story. |
+| `resolution-probe.sh [pkg]` | Vite-only probe: removes `jsnext:main` from installed `moment` so it resolves a different build, and asserts v2 notices a *resolution*-only manifest change and scopes it to the importer. See [Resolution changes](#resolution-changes). |
+| `attribution-matrix.sh <pkg>` | Probes **every** manifest entry for over- and under-capture — graph hashes, `<storybookConfig>`, `<staticFiles>`, `<storybookVersion>`, the bucket — against a fixed stats snapshot. One JSON line per probe. Backs [`attribution-audit.html`](./attribution-audit.html). |
+| `static-identity-probe.sh [pkg]` | The static-file cases the matrix can't express: rename, content swap, symlinked asset, symlinked directory. See [Static file identity](#static-file-identity). |
 
 ## Prerequisites
 
@@ -60,6 +63,10 @@ UserCard.stories.tsx → UserCard.tsx → Badge.tsx, @myorg/shared (formatDate)
 
 `src/theme.ts` is imported by **both** `preview.ts` and `Button.tsx` on purpose — it is the only file
 in the fixture that exercises the preview-subtree-vs-flat-hash regression class. Keep both importers.
+It exists in `ui`, `ui-webpack` and `ui-rsbuild`; both importers must be present in each, or the probe
+silently degrades to `{"error":"missing file ..."}` rather than failing. `marketing-ui` deliberately
+lacks it — adding it means rebuilding that package's stats, which is what makes it an unpatched-vite
+control (see [The two vite fixtures are different builders](#the-two-vite-fixtures-are-different-builders)).
 
 `@myorg/shared` = `packages/shared/src/index.ts`, a barrel re-exporting every util (so editing it
 recaptures every story that imports *anything* from it — Button **and** UserCard).
@@ -138,6 +145,64 @@ section is empty, as `<storybookGlobals>` is.
 
 `gen.sh` reads `staticDirs` out of `main.*` the same way a real build does. Pass
 `--static-dir a,b` to `turbosnap-manifest` to override, and `-c` for a non-default config dir.
+
+### Static file identity
+
+`<staticFiles>` catches an asset's **bytes** changing, plus additions and deletions, on every fixture with a
+static dir. One class it does *not* catch, measurable with `static-identity-probe.sh`:
+
+- **Renames and content swaps are invisible** — `rollUpHash` is path-independent by design
+  (`graph.ts:29`), so the roll-up depends only on the multiset of contents. Swapping two assets' bytes
+  leaves `<staticFiles>` and `storybookHash` unmoved even though the bytes served at each URL changed.
+  This is a **knowingly accepted** gap: correct for modules (identical bytes render identically), wrong for
+  static files (the URL is the identity), but exotic enough, and almost always accompanied by a source edit
+  that moves a story hash. v1 *does* bail on it, so it is a knowing parity exception.
+
+**Symlinks used to be skipped entirely** and are now followed, so cases 3 and 4 of the probe report `as
+expected` where they once reported `UNDER-CAPTURES`. A symlinked asset is hashed by its target's bytes and
+keyed by the link's own path (the URL it is served at), and a symlinked *directory* is descended into, so
+`.storybook/static/vendor -> ../../node_modules/pkg/dist` is no longer invisible. The walk resolves each
+directory before descending, so a symlink cycle terminates instead of diverging; a broken symlink
+contributes nothing, like a configured-but-missing `staticDir`. **Cases 1 and 2 must stay
+`UNDER-CAPTURES`** — that is the accepted path-independence gap above, not a regression.
+
+Note that **no fixture story references a static asset by URL** — the three packages with a static dir hold
+only `mockServiceWorker.js`, and `marketing-ui`, whose components render images by URL prop, has no
+`staticDirs`. So the *consequence* of the accepted class is unexercised; only the mechanism is measured. Add
+a story that renders an asset if you need to observe it end to end.
+
+### The two vite fixtures are different builders
+
+`ui`'s `preview-stats.json` is built against the **patched** `builder-vite` — `react/jsx-runtime.js` carries
+`reasons` from all three story components. `marketing-ui`'s predates the fork commit and has **no `reasons`
+entry for `jsx-runtime` at all**, which makes it a useful live **unpatched-vite control** rather than a stale
+fixture. Any `react`-cluster result has to say which of the two it came from, or it reads as a regression.
+
+### Resolution changes
+
+`package.json` and lockfiles are **deliberately not** out-of-graph inputs, unlike the config and static
+files above. v1 needed them because it works from the package *name* and must diff a lockfile to derive
+one; v2 works from the file and content-hashes the installed tree, so a dependency change that alters
+bundled bytes already moves the importing story's hash. Hashing manifest bytes on top of that would
+recapture everything on lockfile churn that v1 correctly captures nothing for.
+
+The one class that is neither bytes nor names is a manifest change that alters **resolution**. It is
+covered, and scoped to the importer:
+
+```sh
+bash resolution-probe.sh ui
+```
+
+The probe removes `jsnext:main` from installed `moment`, so vite resolves `moment/moment.js` instead of
+`moment/dist/moment.js`, then asserts `storybookHash` moves, exactly one story moves (Button, the sole
+importer), and no `storybookFiles` entry moves. It restores the manifest with a trap and rebuilds to
+confirm the manifest returns to baseline. Nothing tracked by git is touched, and there is no install.
+
+Note that `rollUpHash` is **path-independent by design** (`v2/graph.ts:29`) — content hashes are combined
+in sorted-hash order so a project or dependency moving within the repo doesn't churn hashes. So a
+resolution change to a *byte-identical* file at a different path is invisible, correctly: identical bytes
+render identically. The probe therefore has to change the resolved file's **content**, which is also what
+a real `resolutions`/`overrides` pin does.
 
 > **Never reconstruct these sets by walking `files` from the stories.** `pruneSyntheticFiles` runs
 > *after* hashing by design, so the written graph has holes where synthetic nodes (require-context
@@ -229,7 +294,9 @@ story count and the `storybookFiles` line together — "0 stories changed" is no
 - `.storybook/static/*` → **0 stories**, `<staticFiles>` moves ⇒ recapture everything.
 - `src/theme.ts` (imported by **both** `preview.ts` and `Button.tsx`) → Button's story hash **and** the
   keyed `preview.ts` entry move; `<storybookConfig>` does **not** (theme.ts is outside the config dir).
-  This is the fixture for the one regression class `parity.sh` could not otherwise see.
+  This is the fixture for the one regression class `parity.sh` could not otherwise see. Verified on vite
+  and webpack. On **rsbuild** only the `preview.ts` entry moves — 0 stories are detected at all there, and
+  `theme.ts` is attributed to `previewSubtree`, so not even the bucket moves.
 - `moment` → **Button only** on vite (`moment/dist/moment.js`) and webpack (`moment/moment.js`, and
   each `moment/locale/*.js`); the bucket does **not** move. On **rsbuild** 0 stories are detected at
   all, so `moment` is in the bucket and any edit recaptures everything.

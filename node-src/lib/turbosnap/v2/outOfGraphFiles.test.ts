@@ -4,23 +4,83 @@ import { hashOutOfGraphFiles, rollUpOutOfGraphFiles } from './outOfGraphFiles';
 
 // An in-memory tree of absolute directory -> entry names. A key that maps to entries is a directory;
 // anything else named by a parent is a file. Backing the sweep this way keeps these tests off disk.
-const { directoryTreeRef } = vi.hoisted(() => ({
-  directoryTreeRef: { current: {} as Record<string, string[]> },
-}));
+// `symlinkTargetsRef` names entries that are symlinks, mapping absolute path -> absolute target: like
+// a real `Dirent`, those report neither isDirectory nor isFile, so only stat/realpath resolve them.
+const { directoryTreeRef, symlinkTargetsRef, fakeFs } = vi.hoisted(() => {
+  const directoryTreeReference = { current: {} as Record<string, string[]> };
+  const symlinkTargetsReference = { current: {} as Record<string, string> };
+
+  // Resolves every symlinked segment of a path, as the real fs does, refusing to loop forever (ELOOP).
+  function resolve(entryPath: string) {
+    let resolved = '';
+    for (const segment of entryPath.split('/').filter(Boolean)) {
+      resolved = `${resolved}/${segment}`;
+      const seen = new Set<string>();
+      while (symlinkTargetsReference.current[resolved]) {
+        if (seen.has(resolved)) throw new Error(`ELOOP: ${entryPath}`);
+        seen.add(resolved);
+        resolved = symlinkTargetsReference.current[resolved];
+      }
+    }
+    return resolved;
+  }
+
+  function isDirectoryAt(resolved: string) {
+    return Boolean(directoryTreeReference.current[resolved]);
+  }
+
+  // A file exists only where its parent directory lists it, so a dangling symlink target is not one.
+  function isFileAt(resolved: string) {
+    const segments = resolved.split('/');
+    const name = segments.pop() as string;
+    return (
+      !isDirectoryAt(resolved) &&
+      Boolean(directoryTreeReference.current[segments.join('/')]?.includes(name))
+    );
+  }
+
+  function assertExists(entryPath: string, resolved: string) {
+    if (!isDirectoryAt(resolved) && !isFileAt(resolved)) throw new Error(`ENOENT: ${entryPath}`);
+  }
+
+  const fakeFs = {
+    readdir: async (directory: string) => {
+      const entries = directoryTreeReference.current[resolve(directory)];
+      if (!entries) throw new Error(`ENOENT: ${directory}`);
+      // A Dirent reports on the link itself, never its target, so a symlink is neither file nor
+      // directory — only stat and realpath resolve it.
+      return entries.map((name) => {
+        const entryPath = `${directory}/${name}`;
+        const isLink = Boolean(symlinkTargetsReference.current[entryPath]);
+        return {
+          name,
+          isDirectory: () => !isLink && isDirectoryAt(resolve(entryPath)),
+          isFile: () => !isLink && isFileAt(resolve(entryPath)),
+        };
+      });
+    },
+    realpath: async (entryPath: string) => {
+      const resolved = resolve(entryPath);
+      assertExists(entryPath, resolved);
+      return resolved;
+    },
+    stat: async (entryPath: string) => {
+      const resolved = resolve(entryPath);
+      assertExists(entryPath, resolved);
+      return { isDirectory: () => isDirectoryAt(resolved), isFile: () => isFileAt(resolved) };
+    },
+  };
+
+  return {
+    directoryTreeRef: directoryTreeReference,
+    symlinkTargetsRef: symlinkTargetsReference,
+    fakeFs,
+  };
+});
 
 vi.mock('fs/promises', async (importOriginal) => ({
   ...(await importOriginal<typeof import('fs/promises')>()),
-  readdir: (directory: string) => {
-    const entries = directoryTreeRef.current[directory];
-    if (!entries) return Promise.reject(new Error(`ENOENT: ${directory}`));
-    return Promise.resolve(
-      entries.map((name) => ({
-        name,
-        isDirectory: () => Boolean(directoryTreeRef.current[`${directory}/${name}`]),
-        isFile: () => !directoryTreeRef.current[`${directory}/${name}`],
-      }))
-    );
-  },
+  ...fakeFs,
 }));
 
 // Content hashes are keyed by the absolute path getFileHashes is called with.
@@ -40,6 +100,7 @@ const h64ToString = (value: string) => `h(${value})`;
 
 beforeEach(() => {
   directoryTreeRef.current = {};
+  symlinkTargetsRef.current = {};
   fileHashesRef.current = {};
 });
 
@@ -118,6 +179,70 @@ describe('hashOutOfGraphFiles', () => {
       'packages/ui/assets/font.woff2',
       'packages/ui/public/logo.svg',
     ]);
+  });
+
+  it('hashes a symlinked static file by its target bytes, since Storybook serves those bytes', async () => {
+    directoryTreeRef.current = {
+      '/repo/packages/ui/.storybook': ['main.ts', 'static'],
+      '/repo/packages/ui/.storybook/static': ['logo.svg'],
+      '/repo/packages/ui/vendor': ['real-logo.svg'],
+    };
+    symlinkTargetsRef.current = {
+      '/repo/packages/ui/.storybook/static/logo.svg': '/repo/packages/ui/vendor/real-logo.svg',
+    };
+
+    const { staticFiles } = await hashOutOfGraphFiles(input, roots);
+
+    // Keyed by the link's own path, not the target's: that is the URL Storybook serves it at.
+    expect([...staticFiles.keys()]).toEqual(['packages/ui/.storybook/static/logo.svg']);
+  });
+
+  it('descends into a symlinked static directory, so a vendored asset tree is not invisible', async () => {
+    directoryTreeRef.current = {
+      '/repo/packages/ui/.storybook': ['main.ts', 'static'],
+      '/repo/packages/ui/.storybook/static': ['vendor'],
+      '/repo/packages/ui/node_modules/pkg/dist': ['a.png', 'b.png'],
+    };
+    symlinkTargetsRef.current = {
+      '/repo/packages/ui/.storybook/static/vendor': '/repo/packages/ui/node_modules/pkg/dist',
+    };
+
+    const { staticFiles } = await hashOutOfGraphFiles(input, roots);
+
+    expect([...staticFiles.keys()]).toEqual([
+      'packages/ui/.storybook/static/vendor/a.png',
+      'packages/ui/.storybook/static/vendor/b.png',
+    ]);
+  });
+
+  it('treats a broken symlink as contributing nothing rather than throwing', async () => {
+    directoryTreeRef.current = {
+      '/repo/packages/ui/.storybook': ['main.ts', 'static'],
+      '/repo/packages/ui/.storybook/static': ['logo.svg'],
+    };
+    symlinkTargetsRef.current = {
+      '/repo/packages/ui/.storybook/static/logo.svg': '/repo/packages/ui/gone.svg',
+    };
+
+    const { storybookConfigFiles, staticFiles } = await hashOutOfGraphFiles(input, roots);
+
+    expect(staticFiles.size).toBe(0);
+    // The rest of the sweep still completes.
+    expect([...storybookConfigFiles.keys()]).toEqual(['packages/ui/.storybook/main.ts']);
+  });
+
+  it('visits a symlink cycle once instead of diverging, since unbounded hashing has no count cap', async () => {
+    directoryTreeRef.current = {
+      '/repo/packages/ui/.storybook': ['main.ts', 'static'],
+      '/repo/packages/ui/.storybook/static': ['logo.svg', 'loop'],
+    };
+    symlinkTargetsRef.current = {
+      '/repo/packages/ui/.storybook/static/loop': '/repo/packages/ui/.storybook/static',
+    };
+
+    const { staticFiles } = await hashOutOfGraphFiles(input, roots);
+
+    expect([...staticFiles.keys()]).toEqual(['packages/ui/.storybook/static/logo.svg']);
   });
 });
 

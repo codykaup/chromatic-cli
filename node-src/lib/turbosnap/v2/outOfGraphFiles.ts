@@ -1,4 +1,4 @@
-import { readdir } from 'fs/promises';
+import { readdir, realpath, stat } from 'fs/promises';
 import path from 'path';
 
 import { getFileHashes } from '../../getFileHashes';
@@ -9,6 +9,11 @@ import { StatsPathRoots } from './paths';
 // The synthetic `storybookFiles` keys covering Storybook inputs that are never bundler inputs, so no
 // module hash can see them change. Angle brackets can't appear in a canonical relative path, so
 // neither can collide with a real file.
+//
+// `package.json` and lockfiles deliberately do not belong here, even though they are also not modules.
+// v1 diffed them only to derive changed package *names*; v2 content-hashes the installed files that are
+// in the graph, which covers a dependency change more precisely. Hashing manifest bytes on top would
+// recapture everything on lockfile churn that v1 correctly captures nothing for.
 export const STORYBOOK_CONFIG_KEY = '<storybookConfig>';
 export const STATIC_FILES_KEY = '<staticFiles>';
 
@@ -146,15 +151,35 @@ async function hashByManifestPath(
 }
 
 /**
- * Lists every file under a directory, recursively. A directory that doesn't exist contributes nothing
- * rather than throwing: a configured-but-missing `staticDir` is not an error, and v1 never matches
- * such a path either.
+ * Lists every file under a directory, recursively, following symlinks. A directory that doesn't exist
+ * contributes nothing rather than throwing: a configured-but-missing `staticDir` is not an error, and
+ * v1 never matches such a path either. The same holds for a broken symlink, whose target can't be read.
+ *
+ * Symlinks are followed because Storybook copies and serves the bytes they resolve to, so a skipped one
+ * is a silent content gap — `.storybook/static/vendor -> ../../node_modules/pkg/dist` would make a
+ * whole served tree invisible. Files are named by the *link's* path, since that is the URL they are
+ * served at.
  *
  * @param directory The absolute directory to walk.
+ * @param visitedDirectories Resolved real paths already walked, so a symlink cycle terminates.
  *
  * @returns The absolute path of every file found.
  */
-async function listFilesRecursively(directory: string): Promise<string[]> {
+async function listFilesRecursively(
+  directory: string,
+  visitedDirectories = new Set<string>()
+): Promise<string[]> {
+  // Resolving before walking is what stops a symlink loop from diverging. Static files are hashed
+  // unbounded by design, so there is no count cap to fall back on.
+  let realDirectory;
+  try {
+    realDirectory = await realpath(directory);
+  } catch {
+    return [];
+  }
+  if (visitedDirectories.has(realDirectory)) return [];
+  visitedDirectories.add(realDirectory);
+
   let entries;
   try {
     entries = await readdir(directory, { withFileTypes: true });
@@ -163,11 +188,20 @@ async function listFilesRecursively(directory: string): Promise<string[]> {
   }
 
   const files = await Promise.all(
-    entries.map((entry) => {
+    entries.map(async (entry) => {
       const entryPath = path.join(directory, entry.name);
-      if (entry.isDirectory()) return listFilesRecursively(entryPath);
-      // Symlinks and other non-files are skipped: they have no bytes of their own to hash.
-      return entry.isFile() ? [entryPath] : [];
+      if (entry.isDirectory()) return listFilesRecursively(entryPath, visitedDirectories);
+      if (entry.isFile()) return [entryPath];
+
+      // A symlink is neither, so ask `stat`, which follows it. Anything else with no bytes of its own
+      // — a socket, a device, a broken link — contributes nothing.
+      try {
+        const stats = await stat(entryPath);
+        if (stats.isDirectory()) return listFilesRecursively(entryPath, visitedDirectories);
+        return stats.isFile() ? [entryPath] : [];
+      } catch {
+        return [];
+      }
     })
   );
 

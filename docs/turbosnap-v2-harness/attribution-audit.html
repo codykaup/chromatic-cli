@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TurboSnap v2 attribution audit — every manifest entry, over- and under-capture</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1d21; --muted: #5d666f; --line: #dfe3e8;
+    --panel: #f7f8fa; --code: #f1f3f5;
+    --ok: #1a7f4b; --ok-bg: #e6f4ec;
+    --miss: #a4262c; --miss-bg: #fbeaea;
+    --over: #8a5a00; --over-bg: #fdf3e2;
+    --unex: #4b5563; --unex-bg: #eef0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a; --fg: #e8eaed; --muted: #9aa3ad; --line: #2c3237;
+      --panel: #1b1f23; --code: #22272c;
+      --ok: #6cd39a; --ok-bg: #14301f;
+      --miss: #ff9b9b; --miss-bg: #3a1a1c;
+      --over: #f0c26b; --over-bg: #362a12;
+      --unex: #aab2bb; --unex-bg: #24292e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1.25rem 5rem;
+    background: var(--bg); color: var(--fg);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 68rem; margin: 0 auto; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .35rem; }
+  h2 { font-size: 1.25rem; margin: 2.75rem 0 .75rem; padding-bottom: .35rem; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 1rem; margin: 1.75rem 0 .5rem; }
+  p, li { max-width: 62rem; }
+  .sub { color: var(--muted); margin: 0 0 1.5rem; font-size: .9rem; }
+  code, kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .86em;
+    background: var(--code); padding: .1em .35em; border-radius: 3px; }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1rem 0; border: 1px solid var(--line); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; min-width: 60rem; font-size: .87rem; }
+  th, td { text-align: left; vertical-align: top; padding: .5rem .65rem; border-bottom: 1px solid var(--line); }
+  thead th { background: var(--panel); font-weight: 600; white-space: nowrap; position: sticky; top: 0; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .v { display: inline-block; padding: .1rem .45rem; border-radius: 4px; font-size: .78rem;
+    font-weight: 600; white-space: nowrap; }
+  .v-ok { color: var(--ok); background: var(--ok-bg); }
+  .v-miss { color: var(--miss); background: var(--miss-bg); }
+  .v-over { color: var(--over); background: var(--over-bg); }
+  .v-unex { color: var(--unex); background: var(--unex-bg); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--muted);
+    border-radius: 6px; padding: .85rem 1rem; margin: 1.25rem 0; }
+  .panel.warn { border-left-color: var(--miss); }
+  .panel.good { border-left-color: var(--ok); }
+  .panel h3 { margin-top: 0; }
+  .gap { border: 1px solid var(--line); border-radius: 6px; padding: .9rem 1.1rem; margin: .9rem 0; background: var(--panel); }
+  .gap header { display: flex; flex-wrap: wrap; gap: .6rem; align-items: baseline; margin-bottom: .4rem; }
+  .gap h3 { margin: 0; font-size: 1rem; }
+  .sev { font-size: .72rem; font-weight: 700; letter-spacing: .04em; padding: .15rem .45rem; border-radius: 4px; }
+  .sev-p1 { color: var(--miss); background: var(--miss-bg); }
+  .sev-p2 { color: var(--over); background: var(--over-bg); }
+  .sev-p3 { color: var(--unex); background: var(--unex-bg); }
+  .sev-acc { color: var(--ok); background: var(--ok-bg); }
+  .gap dl { margin: .5rem 0 0; display: grid; grid-template-columns: max-content 1fr; gap: .25rem .8rem; font-size: .88rem; }
+  .gap dt { color: var(--muted); font-weight: 600; }
+  .gap dd { margin: 0; }
+  ul.tight { margin: .4rem 0; padding-left: 1.25rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: .5rem 1rem; font-size: .82rem; margin: 1rem 0; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+  .nowrap { white-space: nowrap; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>TurboSnap v2 attribution audit</h1>
+<p class="sub">
+  Every manifest entry treated as a coverage claim, probed for over- and under-capture across all four
+  fixtures &middot; measured 2026-07-30 against <code>cody/turbosnap-v2</code> at <code>63410b78</code>
+  plus the uncommitted <code>outOfGraphFiles.ts</code> comment (docs-only, no behaviour change)
+  &middot; 86 matrix probes (84 executed, 2 N/A) + 6 targeted follow-ups.
+</p>
+
+<div class="panel good">
+  <h3>Headline</h3>
+  <p>
+    <strong>Every graph-derived and out-of-graph entry attributes correctly on vite and webpack.</strong>
+    All 13 coverage claims hold: story hashes are exact to the importing story, <code>&lt;storybookConfig&gt;</code>
+    and <code>&lt;staticFiles&gt;</code> catch bytes/add/delete on every fixture, the two sections stay
+    partitioned even though <code>.storybook/static</code> nests inside the config dir,
+    <code>preview.*</code>'s deliberate double coverage is load-bearing, <code>&lt;storybookVersion&gt;</code>
+    is narrow as designed, and the bucket holds <strong>zero first-party files on all three
+    non-rspack fixtures</strong>. Every entry that moved also moved <code>storybookHash</code>.
+  </p>
+  <p>
+    One <strong>new</strong> defect: <strong>symlinks under a <code>staticDir</code> were skipped entirely</strong>
+    &mdash; a symlinked asset was never hashed, and a symlinked directory contributed nothing at all, so a
+    whole vendored asset tree could be invisible. <strong>Since fixed</strong> (see G2 below): the walk now
+    follows symlinks, with a cycle guard. Everything else found was already known, already ticketed, or has
+    been consciously accepted.
+  </p>
+</div>
+
+<h2>How each verdict was reached</h2>
+<p>
+  Each probe mutates exactly one input, regenerates the manifest from a <strong>fixed stats snapshot</strong>
+  (so a concurrent Storybook rebuild cannot move the graph mid-run), diffs <code>storybookHash</code>,
+  every per-story hash and every <code>storybookFiles</code> entry against a baseline taken from that same
+  snapshot, then restores. Nothing walks the written manifest for reachability
+  (<em>Agreed design 6</em>) &mdash; <code>attribution</code> is read, never reconstructed. The fixture repo
+  was verified clean (<code>git status --porcelain</code> empty) after every run.
+</p>
+<div class="legend">
+  <span><span class="v v-ok">correct</span> claim holds</span>
+  <span><span class="v v-miss">under-captures</span> input changed, nothing (or too little) moved</span>
+  <span><span class="v v-over">over-captures</span> more recaptured than warranted</span>
+  <span><span class="v v-unex">unexercised</span> class not reachable in the fixtures</span>
+</div>
+<p>
+  Stats snapshot shas: <code>ui 47cf2108</code>, <code>ui-webpack 7a27fefe</code>,
+  <code>ui-rsbuild c1d00414</code>, <code>marketing-ui 71271efd</code>. Baseline buckets:
+  vite <strong>27/39</strong>, webpack <strong>49/284</strong>, rsbuild <strong>201/202</strong>,
+  marketing-ui <strong>29/36</strong>.
+</p>
+
+<div class="panel">
+  <h3>Which builder-vite each vite fixture measures</h3>
+  <p>
+    The two vite fixtures are <strong>not</strong> the same builder, and it matters for every
+    <code>react</code> row below. <code>ui</code>'s snapshot (Jul 30) is <strong>patched</strong> &mdash;
+    <code>react/jsx-runtime.js</code> carries reasons from all three components. <code>marketing-ui</code>'s
+    snapshot (Jul 28) predates the fork commit and has <strong>no <code>reasons</code> entry for
+    <code>jsx-runtime</code> at all</strong>, so it is a live <strong>unpatched-vite control</strong>, not a
+    stale fixture. Read its rows as unpatched behaviour.
+  </p>
+</div>
+
+<h2>Entry &times; builder verdicts</h2>
+
+<h3>A. Graph-derived story hashes</h3>
+<div class="scroll">
+<table>
+<thead><tr><th>Input edited</th><th>vite (<code>ui</code>, patched)</th><th>webpack</th><th>rspack</th><th>unpatched vite (<code>marketing-ui</code>)</th></tr></thead>
+<tbody>
+<tr>
+  <td>Leaf component (<code>Badge.tsx</code>)<br><span class="sub">expect: importing + re-importing story</span></td>
+  <td><span class="v v-ok">correct</span> Badge + UserCard</td>
+  <td><span class="v v-ok">correct</span> Badge + UserCard</td>
+  <td><span class="v v-over">over-captures</span> 0 stories, bucket moves</td>
+  <td><span class="v v-ok">correct</span> HeroBanner only</td>
+</tr>
+<tr>
+  <td>Single-importer component (<code>UserCard.tsx</code>, <code>Button.tsx</code>)</td>
+  <td><span class="v v-ok">correct</span> that story only</td>
+  <td><span class="v v-ok">correct</span> that story only</td>
+  <td><span class="v v-over">over-captures</span> bucket only</td>
+  <td colspan="1"><span class="v v-unex">unexercised</span> no equivalent</td>
+</tr>
+<tr>
+  <td>Story file itself</td>
+  <td><span class="v v-ok">correct</span> Badge only</td>
+  <td><span class="v v-ok">correct</span> Badge only</td>
+  <td><span class="v v-over">over-captures</span> bucket only</td>
+  <td><span class="v v-ok">correct</span> HeroBanner only</td>
+</tr>
+<tr>
+  <td>Cross-package barrel (<code>shared/src/index.ts</code>)<br><span class="sub">expect: every story importing anything from it</span></td>
+  <td><span class="v v-ok">correct</span> Button + UserCard</td>
+  <td><span class="v v-ok">correct</span> Button + UserCard</td>
+  <td><span class="v v-over">over-captures</span> bucket only</td>
+  <td><span class="v v-unex">unexercised</span> no dependency</td>
+</tr>
+<tr>
+  <td>Package barrel no story imports (<code>src/index.ts</code>)<br><span class="sub">expect: nothing &mdash; not a preview input</span></td>
+  <td><span class="v v-ok">correct</span> <code>storybookHash</code> SAME</td>
+  <td><span class="v v-ok">correct</span> SAME</td>
+  <td><span class="v v-ok">correct</span> SAME</td>
+  <td><span class="v v-ok">correct</span> SAME</td>
+</tr>
+<tr>
+  <td><strong>Dual importer</strong> (<code>src/theme.ts</code>, imported by both <code>preview.ts</code> and <code>Button.tsx</code>)</td>
+  <td><span class="v v-ok">correct</span> Button <em>and</em> <code>.storybook/preview.ts</code> entry</td>
+  <td><span class="v v-ok">correct</span> Button <em>and</em> <code>.storybook/preview.ts</code> entry</td>
+  <td><span class="v v-miss">preview entry only</span> no story moves &mdash; this manifest has 0 story hashes</td>
+  <td><span class="v v-unex">unexercised</span> fixture absent, see below</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>
+  The dual-importer row is the one that proves <code>preview.*</code>'s graph-rolled entry is load-bearing:
+  it moves <em>both</em> that entry and Button's story hash, which a flat content hash of the config dir
+  could not do. <strong>vite and webpack both show it</strong>, with identical
+  <code>storiesChanged: [Button.stories.tsx]</code> and
+  <code>sbFilesChanged: [.storybook/preview.ts]</code>.
+</p>
+<p>
+  rsbuild moves the preview entry but no story, which is <em>not</em> a defect specific to this class:
+  its manifest has <code>storyFiles: 0</code> outright, so every graph row above is vacuous there for the
+  same reason. <code>theme.ts</code> lands in <code>previewSubtree</code> and nothing else.
+</p>
+<p>
+  Unpatched vite is the one gap left, and it is structural rather than an oversight.
+  <code>marketing-ui</code> is an unpatched control <em>only because</em> its stats predate the fork commit
+  &mdash; nothing pins its builder, and <code>build-storybook:all</code> deliberately excludes it. Adding the
+  importer means rebuilding it against the patched builder, which would cost the
+  <code>react/jsx-runtime.js</code> and <code>react/index.js</code> unpatched rows below. Since patched vite
+  already covers the vite path and the two builders differ only in <code>jsx-runtime</code> reasons, the
+  control is worth more here than a fourth verdict on this row.
+</p>
+
+<h3>B. Installed dependencies</h3>
+<div class="scroll">
+<table>
+<thead><tr><th>Input edited</th><th>vite (patched)</th><th>webpack</th><th>rspack</th><th>unpatched vite</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>moment</code> (ESM-resolved, sole importer <code>Button.tsx</code>)</td>
+  <td><span class="v v-ok">correct</span> Button only</td>
+  <td><span class="v v-ok">correct</span> Button only</td>
+  <td><span class="v v-over">over-captures</span> bucket only</td>
+  <td><span class="v v-ok">correct</span> not a dependency, SAME</td>
+</tr>
+<tr>
+  <td><code>react/jsx-runtime.js</code></td>
+  <td><span class="v v-ok">correct</span> all 3 stories</td>
+  <td><span class="v v-ok">correct</span> all 3 stories</td>
+  <td><span class="v v-over">over-captures</span> bucket only</td>
+  <td><span class="v v-over">over-captures</span> bucket (edge absent pre-patch)</td>
+</tr>
+<tr>
+  <td><code>react/index.js</code></td>
+  <td><span class="v v-over">over-captures</span> bucket &mdash; esbuild elides the type-only import, so no edge exists to lose; <a href="https://app.notion.com/p/3ac6e816203481d4b6fee6255c3a6b31">already decided, safe</a></td>
+  <td><span class="v v-ok">correct</span> all 3 (babel preserves it)</td>
+  <td><span class="v v-over">over-captures</span> bucket only</td>
+  <td><span class="v v-over">over-captures</span> bucket only</td>
+</tr>
+<tr>
+  <td>Bucket member (<code>@storybook/react-dom-shim</code>)<br><span class="sub">expect: bucket only, 0 stories</span></td>
+  <td><span class="v v-ok">correct</span> <code>&lt;storybookGlobals&gt;</code> only</td>
+  <td><span class="v v-ok">correct</span> bucket only</td>
+  <td><span class="v v-ok">correct</span> SAME &mdash; rspack resolves a nested copy under <code>storybook-react-rsbuild/</code>, so this path isn't in its graph</td>
+  <td><span class="v v-ok">correct</span> bucket only</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3>C. <code>&lt;storybookConfig&gt;</code> &mdash; content roll-up of the whole config dir</h3>
+<div class="scroll">
+<table>
+<thead><tr><th>Input changed</th><th>vite</th><th>webpack</th><th>rspack</th><th>marketing-ui</th></tr></thead>
+<tbody>
+<tr><td><code>main.ts</code> bytes<br><span class="sub">expect: config entry only, 0 stories</span></td>
+  <td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td></tr>
+<tr><td><code>preview.ts</code> bytes<br><span class="sub">expect: config entry + preview graph entry</span></td>
+  <td><span class="v v-ok">correct</span> both</td><td><span class="v v-ok">correct</span> both</td><td><span class="v v-ok">correct</span> both</td>
+  <td><span class="v v-ok">correct</span> config entry alone &mdash; the 0-byte preview is elided by vite, so it has no graph entry. <strong>The empty-<code>preview.ts</code> gap is closed with no special case.</strong></td></tr>
+<tr><td><code>test.ts</code> (imported by <code>preview.ts</code>)</td>
+  <td><span class="v v-ok">correct</span> both entries</td><td><span class="v v-ok">correct</span> both</td>
+  <td><span class="v v-unex">unexercised</span> no <code>test.ts</code></td><td><span class="v v-unex">unexercised</span></td></tr>
+<tr><td>New file added to config dir</td>
+  <td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td></tr>
+<tr><td>New file in a <strong>nested subdir</strong> of the config dir</td>
+  <td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td></tr>
+<tr><td><code>main.ts</code> deleted</td>
+  <td><span class="v v-ok">correct</span> config moves; <code>&lt;staticFiles&gt;</code> key also drops (<code>staticDirs</code> unreadable), which only widens</td>
+  <td><span class="v v-ok">correct</span> same</td><td><span class="v v-ok">correct</span> same</td><td><span class="v v-ok">correct</span> config only (no static dir)</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>D. <code>&lt;staticFiles&gt;</code> &mdash; content roll-up of every static file</h3>
+<div class="scroll">
+<table>
+<thead><tr><th>Input changed</th><th>vite</th><th>webpack</th><th>rspack</th><th>marketing-ui</th></tr></thead>
+<tbody>
+<tr><td>Existing asset's bytes<br><span class="sub">expect: static entry only, and <em>not</em> <code>&lt;storybookConfig&gt;</code></span></td>
+  <td><span class="v v-ok">correct</span> partition holds</td><td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td>
+  <td><span class="v v-unex">unexercised</span> no <code>staticDirs</code>, key absent</td></tr>
+<tr><td>New asset added</td><td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td><td><span class="v v-unex">unexercised</span></td></tr>
+<tr><td>Only asset deleted</td>
+  <td><span class="v v-ok">correct</span> key disappears &rArr; hash moves</td><td><span class="v v-ok">correct</span></td><td><span class="v v-ok">correct</span></td><td><span class="v v-unex">unexercised</span></td></tr>
+<tr><td>Asset <strong>renamed</strong>, bytes kept</td>
+  <td><span class="v v-miss">under-captures</span> SAME</td><td><span class="v v-miss">under-captures</span> SAME</td><td><span class="v v-miss">under-captures</span> SAME</td><td><span class="v v-unex">unexercised</span></td></tr>
+<tr><td>Two assets <strong>swap</strong> contents (F2)</td>
+  <td><span class="v v-miss">under-captures</span> <code>41406bed805f3c65</code> both sides</td>
+  <td colspan="3"><span class="v v-unex">unexercised</span> same mechanism, measured once &mdash; see gap G1</td></tr>
+<tr><td><strong>Symlinked</strong> asset, target's bytes change (S1)</td>
+  <td><span class="v v-ok">captures</span> was <em>never hashed at all</em>; <strong>G2 fixed</strong></td>
+  <td colspan="3"><span class="v v-unex">unexercised</span> same mechanism &mdash; see gap <strong>G2</strong></td></tr>
+<tr><td><strong>Symlinked directory</strong> of assets added (S2)</td>
+  <td><span class="v v-ok">captures</span> was <em>2 assets &rarr; 0 hashes</em>; now <code>1 &rarr; 3</code>, <strong>G2 fixed</strong></td>
+  <td colspan="3"><span class="v v-unex">unexercised</span> same mechanism &mdash; see gap <strong>G2</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>
+  Note <code>&lt;staticFiles&gt;</code> is byte-identical (<code>91eac9c08be42ae6</code>) across all three
+  fixtures that have a static dir, because each holds one identically-contented
+  <code>mockServiceWorker.js</code>. That is the path-independence of G1 in plain sight: don't read the
+  value as package-specific.
+</p>
+
+<h3>E. <code>&lt;storybookVersion&gt;</code> and <code>&lt;storybookGlobals&gt;</code></h3>
+<div class="scroll">
+<table>
+<thead><tr><th>Input changed</th><th>Verdict (all four fixtures)</th></tr></thead>
+<tbody>
+<tr><td><code>storybook</code> core version bumped</td>
+  <td><span class="v v-ok">correct</span> <code>&lt;storybookVersion&gt;</code> moves and nothing else &mdash; the only entry that can see the out-of-graph <code>sb-preview/runtime.js</code></td></tr>
+<tr><td><code>@storybook/react</code> version bumped</td>
+  <td><span class="v v-ok">correct</span> nothing moves. Deliberately narrow: its files are <em>in</em> the graph and content-hashed, so a real upgrade moves bytes; a version-field-only edit changes no rendering</td></tr>
+<tr><td><code>@storybook/react-dom-shim</code> version bumped</td>
+  <td><span class="v v-ok">correct</span> nothing moves, same reasoning</td></tr>
+<tr><td>Bucket composition (read from <code>attribution</code>, not reconstructed)</td>
+  <td><span class="v v-ok">correct</span> <strong>zero first-party files</strong> on vite, webpack <em>and</em> marketing-ui. Composition is exclusively Storybook core runtime + the React renderer (<code>@storybook/react</code>, <code>react-dom-shim</code>, <code>react</code>, <code>react-dom</code>, <code>scheduler</code>, <code>storybook/dist</code>). This <strong>extends the earlier vite/webpack classification to marketing-ui</strong>, which had never been classified</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>F. <code>storybookHash</code> &mdash; the top-level "did anything change?" gate</h3>
+<p>
+  Composed at <code>manifest.ts:190</code> as sorted story-hash values + sorted
+  <code>storybookFiles</code> values. <strong>Every probe that moved any entry also moved
+  <code>storybookHash</code>; no probe moved an entry without moving it.</strong> The gate is complete
+  over the entries that exist.
+</p>
+<p>
+  It hashes <em>values</em> only, not keys, so a change that merely relabels an entry is invisible.
+  Measured (F3): renaming a story file with identical bytes leaves the three hash values identical and
+  <code>storybookHash</code> unmoved, while <code>storyFiles</code>' keys change. <strong>This is
+  correct, not a gap</strong> &mdash; identical bytes mean the same <code>title</code>, the same story IDs and an
+  identical render, so v2 recapturing 0 where v1 recaptures 1 is v2 being <em>more</em> precise. The same
+  holds for a config-file rename (F1, <code>storybookHash</code> SAME): where the filename <em>is</em>
+  load-bearing, as with <code>preview.ts</code> &rarr; <code>preview-old.ts</code>, a real rebuild drops the
+  module from the stats and the <code>.storybook/preview.ts</code> graph entry disappears, so it is caught.
+</p>
+
+<h2>Ranked gaps</h2>
+
+<div class="gap">
+  <header><h3>G2. Symlinks under a <code>staticDir</code> are skipped entirely</h3><span class="sev sev-acc">P1 &middot; FIXED</span></header>
+  <dl>
+    <dt>Measurement</dt>
+    <dd>
+      <strong>S1</strong> &mdash; a symlinked asset in <code>ui/.storybook/static/</code>: hashed static-file
+      count stays <code>1 &rarr; 1</code>, <code>&lt;staticFiles&gt;</code> stays
+      <code>91eac9c08be42ae6</code> and <code>storybookHash</code> stays <code>cf35e70d6fd9c00c</code>
+      when the target's bytes change. It is never hashed at all.<br>
+      <strong>S2</strong> &mdash; adding a symlinked <em>directory</em> holding two assets: count stays
+      <code>1 &rarr; 1</code>, <code>storybookHash</code> SAME. The whole tree contributes nothing.
+    </dd>
+    <dt>Cause</dt>
+    <dd>
+      <code>listFilesRecursively</code> (<code>outOfGraphFiles.ts</code>) gates on
+      <code>entry.isDirectory()</code> / <code>entry.isFile()</code>, both false for a symlink, and its
+      comment claims symlinks &ldquo;have no bytes of their own to hash&rdquo;. That is wrong for a symlink to a
+      file: it resolves to bytes Storybook copies and serves.
+    </dd>
+    <dt>Why it matters</dt>
+    <dd>
+      Distinct from G1 &mdash; this is a <strong>content</strong> miss, not a path one, so G1's acceptance does
+      not cover it. The common monorepo pattern <code>.storybook/static/vendor &rarr;
+      ../../node_modules/pkg/dist</code> makes an entire served asset tree invisible, and the assets need
+      no accompanying source edit to change.
+    </dd>
+    <dt>v1 comparison</dt>
+    <dd>
+      v1 is blind too &mdash; git stores the link, not the tree, so nothing appears under the
+      <code>staticDirs</code> prefix that <code>getDependentStoryFiles.ts:287</code> matches. Parity holds,
+      so per <em>Agreed design 2</em> this is judged by <strong>absolute correctness</strong>, where it fails.
+    </dd>
+    <dt>Fix</dt>
+    <dd>
+      One line: resolve each entry with <code>stat</code> (following links) instead of trusting
+      <code>Dirent</code>, or pass <code>recursive</code> with link-following, and correct the comment.
+      Needs a cycle guard, since a symlink loop would make the walk diverge.
+    </dd>
+    <dt>Resolution</dt>
+    <dd>
+      <strong>Shipped as described.</strong> An entry that is neither file nor directory is resolved with
+      <code>stat</code>, so a symlinked file is hashed by its target's bytes &mdash; keyed by the
+      <em>link's</em> path, since that is the URL it is served at &mdash; and a symlinked directory is
+      descended into. Each directory is resolved with <code>realpath</code> before it is walked, and the
+      resolved paths are tracked, so a symlink cycle terminates; static hashing is unbounded by design, so
+      there is no count cap to fall back on. A broken symlink contributes nothing, matching the existing
+      configured-but-missing <code>staticDir</code> behaviour. Re-measured on <code>ui</code>: S1's
+      <code>&lt;staticFiles&gt;</code> and <code>storybookHash</code> both move, and S2's hashed count goes
+      <code>1 &rarr; 3</code>. G1's two cases still report <code>UNDER-CAPTURES</code>, as intended.
+    </dd>
+  </dl>
+</div>
+
+<div class="gap">
+  <header><h3>G1. <code>&lt;staticFiles&gt;</code> is path-independent, but a static asset's identity is its URL</h3><span class="sev sev-acc">ACCEPTED &middot; documented, no ticket</span></header>
+  <dl>
+    <dt>Measurement</dt>
+    <dd>
+      Renaming an asset while keeping its bytes: <code>storybookHash</code> SAME on vite, webpack and
+      rspack. Swapping two assets' contents (F2): <code>41406bed805f3c65</code> on both sides, with no
+      source file touched at all.
+    </dd>
+    <dt>Cause</dt>
+    <dd>
+      <code>rollUpHash</code> combines content hashes in sorted-hash order (<code>graph.ts:29</code>), so
+      the roll-up depends only on the multiset of contents. Correct and deliberate for
+      <em>modules</em>, where identical bytes render identically; for static files the URL is the identity,
+      so folding paths out drops the thing that matters.
+    </dd>
+    <dt>Consequence</dt>
+    <dd>
+      <span class="v v-unex">unexercised</span> &mdash; <strong>no fixture story references a static asset by
+      URL.</strong> The three packages with a static dir hold only <code>mockServiceWorker.js</code> (registered
+      by MSW, never rendered), and <code>marketing-ui</code>, whose components <em>do</em> render images by URL
+      prop, has no <code>staticDirs</code>. Only the mechanism is measured, not a changed snapshot.
+    </dd>
+    <dt>Decision</dt>
+    <dd>
+      <strong>Knowingly accepted</strong>, alongside the &ldquo;<code>staticDirs</code> unresolvable&rdquo; gap: the
+      rename/swap case is exotic, a real asset change almost always arrives with a source edit that moves
+      a story hash, and path-independence is worth keeping uniform across every roll-up. Recorded here so
+      it is not rediscovered as new. (v1 does bail on it, so this is a knowing parity exception.)
+    </dd>
+  </dl>
+</div>
+
+<div class="gap">
+  <header><h3>G3. rspack indexes 0 stories, so every edit recaptures everything</h3><span class="sev sev-p2">P2 &middot; already ticketed</span></header>
+  <dl>
+    <dt>Measurement</dt>
+    <dd>
+      All six graph probes on <code>ui-rsbuild</code> move <code>&lt;storybookGlobals&gt;</code> and
+      <strong>0 stories</strong>: bucket <code>201/202</code>, <code>storyReachable: 0</code>. Editing
+      <code>Badge.tsx</code>, <code>Button.tsx</code>, a story file or the shared barrel are
+      indistinguishable.
+    </dd>
+    <dt>Status</dt>
+    <dd>
+      Known, informational only per <em>Agreed design 3</em>, and covered by
+      <a href="https://app.notion.com/p/3ab6e81620348187a4ccea322233a1b1">Verify/fix rspack story-detection
+      against bare entry names</a>. The zero-story guard falls back to v1 &mdash; but that guard, like the
+      builder-vite gate, is <strong>inert while <code>v2/index.ts:72</code> returns <code>fallback</code>
+      unconditionally</strong>.
+    </dd>
+  </dl>
+</div>
+
+<div class="gap">
+  <header><h3>G4. Dangling reasons still invent parentless roots</h3><span class="sev sev-p2">P2 &middot; sharp enough to ticket</span></header>
+  <dl>
+    <dt>Status</dt>
+    <dd>
+      This audit adds no new measurement; it remains the one unticketed robustness item in the map's
+      <em>Not yet specified</em>. Previously measured at webpack <strong>7</strong> dangling reasons
+      &mdash; including two <code>*.stories.tsx</code> files and <code>preview.ts</code> &mdash; against
+      patched vite 0 and rspack 0, so <code>manifest.ts:147</code> is inventing parentless roots for story
+      files on the ground-truth builder today. The open question is scope, not phrasing.
+    </dd>
+  </dl>
+</div>
+
+<div class="gap">
+  <header><h3>G5. Harness documentation is stale in two places</h3><span class="sev sev-p3">P3 &middot; fix in place</span></header>
+  <dl>
+    <dt>Detail</dt>
+    <dd>
+      <code>matrix.sh</code>'s <code>expected</code> strings still describe closed blind spots &mdash;
+      <code>preview.ts</code> and <code>main.ts</code> edits are annotated
+      &ldquo;KNOWN BLIND SPOT &rarr; expect 0&rdquo; and &ldquo;not in graph &rarr; expect 0&rdquo;, both of which the
+      config/static work fixed, and <code>react/index.js</code> is annotated
+      &ldquo;0 on vite (BLIND SPOT)&rdquo; where it is now a decided-safe bucket move. Anyone running the
+      matrix reads passing behaviour as failure. Separately, <code>marketing-ui</code>'s stats snapshot
+      predates the builder patch, which is useful as an unpatched control but is nowhere written down.
+    </dd>
+  </dl>
+</div>
+
+<h2>What this audit did not cover</h2>
+<ul class="tight">
+  <li><strong>Structural graph changes</strong> &mdash; a new import, a new story file, a moved module. Every
+    probe is content-only against a fixed snapshot by design; structural cases need a Storybook rebuild,
+    which mutates a shared fixture.</li>
+  <li><strong>The dual-importer class on more than one builder</strong> &mdash; <code>src/theme.ts</code> exists
+    on <code>ui</code> only, so <code>preview.*</code>'s double coverage is verified on patched vite alone.</li>
+  <li><strong>v2's bail vocabulary and production bail-rate</strong> &mdash; its own open ticket, and still
+    blocked by <code>v2/index.ts:72</code> returning <code>fallback</code> unconditionally.</li>
+  <li><strong>Index-side comparison logic</strong> &mdash; out of scope on the map.</li>
+</ul>
+
+<footer>
+  Reproduce with the probe drivers described in
+  <code>docs/turbosnap-v2-harness/README.md</code>; rebuild <code>dist/bin.cjs</code> with
+  <code>yarn build</code> first, and commit fixture edits in the monorepo before running
+  <code>parity.sh</code> or <code>matrix.sh</code>. Companion summary:
+  <code>attribution-audit-summary.md</code>. Predecessor: <code>bail-audit.html</code>.
+</footer>
+
+</main>
+</body>
+</html>

@@ -51,6 +51,12 @@ vi.mock('fs/promises', async (importOriginal) => ({
       }))
     );
   },
+  // The sweep resolves each directory before walking it, to terminate on a symlink cycle. This tree has
+  // no symlinks, so every path is already real — but a missing directory must still reject.
+  realpath: async (directory: string) => {
+    if (!directoryTreeRef.current[directory]) throw new Error(`ENOENT: ${directory}`);
+    return directory;
+  },
 }));
 
 // Manifest keys anchor at the git root, so a project in a subdirectory keys its files by their
