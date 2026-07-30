@@ -184,11 +184,15 @@ export async function buildManifest(
   }
 
   // The backend's top-level "did Storybook change at all?" gate: every story hash plus every
-  // `storybookFiles` value. If it moved, the backend drills into `storyFiles` and `storybookFiles` to
-  // decide what to recapture. Each group is sorted independently so the result doesn't depend on
-  // module iteration order, and so a value can't change meaning by moving between the two groups.
+  // `storybookFiles` entry. Story file paths deliberately stay out of the gate so a project move can
+  // preserve captures, but Storybook-wide entries include their keys so additions, removals and
+  // renames are visible before the backend drills into the maps.
   const storybookHash = h64ToString(
-    [...storyFileHashes.values()].sort().join('') + [...storybookFiles.values()].sort().join('')
+    [...storyFileHashes.values()].sort().join('') +
+      [...storybookFiles.entries()]
+        .map((entry) => hashEntryIdentity(entry))
+        .sort()
+        .join('')
   );
 
   // Done after hashing so the graph used above is complete.
@@ -254,6 +258,10 @@ export function writeManifest(manifest: TurboSnapManifest, outputDirectory: stri
     path.join(outputDirectory, 'turbosnap-manifest.json'),
     JSON.stringify(serializeManifest(manifest))
   );
+}
+
+function hashEntryIdentity([key, value]: [FilePath, FileHash | StorybookVersion]) {
+  return `${key.length}:${key}${value.length}:${value}`;
 }
 
 /**

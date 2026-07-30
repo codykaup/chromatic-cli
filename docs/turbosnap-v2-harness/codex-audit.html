@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TurboSnap v2 Codex Audit</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17202a;
+        --muted: #5d6b7a;
+        --line: #d7dde5;
+        --panel: #f7f9fb;
+        --ok: #0b6b4f;
+        --warn: #9a5b00;
+        --bad: #a62929;
+        --info: #245c95;
+      }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: #ffffff;
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 32px 24px 48px;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+        margin: 0;
+      }
+      h1 {
+        font-size: 32px;
+      }
+      h2 {
+        margin-top: 34px;
+        font-size: 22px;
+      }
+      h3 {
+        margin-top: 20px;
+        font-size: 16px;
+      }
+      p {
+        margin: 8px 0 0;
+      }
+      code {
+        background: #eef2f6;
+        border: 1px solid #dbe2ea;
+        border-radius: 4px;
+        padding: 1px 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+      .meta,
+      .note {
+        color: var(--muted);
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 14px;
+        background: var(--panel);
+      }
+      .card strong {
+        display: block;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+      }
+      .card span {
+        display: block;
+        margin-top: 6px;
+        font-size: 18px;
+        font-weight: 650;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+        table-layout: fixed;
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 9px 10px;
+        vertical-align: top;
+      }
+      th {
+        background: #edf2f7;
+        text-align: left;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      td {
+        word-break: break-word;
+      }
+      .status {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 12px;
+        font-weight: 650;
+        white-space: nowrap;
+      }
+      .ok {
+        color: var(--ok);
+        background: #e9f6ef;
+      }
+      .warn {
+        color: var(--warn);
+        background: #fff4df;
+      }
+      .bad {
+        color: var(--bad);
+        background: #fdecec;
+      }
+      .info {
+        color: var(--info);
+        background: #eaf2fb;
+      }
+      .gap {
+        border-left: 4px solid var(--bad);
+        padding: 10px 12px;
+        margin-top: 12px;
+        background: #fff8f8;
+      }
+      .gap.p2 {
+        border-left-color: var(--warn);
+        background: #fffaf1;
+      }
+      .gap.p3 {
+        border-left-color: var(--info);
+        background: #f5f9fd;
+      }
+      ul {
+        margin: 8px 0 0 22px;
+        padding: 0;
+      }
+      li {
+        margin: 4px 0;
+      }
+      .small {
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>TurboSnap v2 Codex Audit</h1>
+      <p class="meta">
+        Measured 2026-07-30 against <code>chromatic-cli@0cf966b5</code> and fixture repo
+        <code>turbosnap-monorepo@4c3afd6</code>. The fixture repo was clean after all probes.
+      </p>
+
+      <div class="cards">
+        <div class="card">
+          <strong>Fixtures</strong>
+          <span>ui, ui-webpack, ui-rsbuild, marketing-ui</span>
+        </div>
+        <div class="card">
+          <strong>Verdict</strong>
+          <span>Vite and webpack graph coverage hold; two identity gaps remain</span>
+        </div>
+        <div class="card">
+          <strong>Production state</strong>
+          <span>v2 still uploads then falls back to v1</span>
+        </div>
+      </div>
+
+      <h2>Ranked Gaps</h2>
+
+      <section class="gap">
+        <h3>P1 - Top-level <code>storybookHash</code> ignores manifest keys</h3>
+        <p>
+          <code>manifest.ts:190</code> computes the top-level gate from sorted
+          <code>storyFileHashes.values()</code> and <code>storybookFiles.values()</code> only. A
+          path-only structural change can therefore alter the maps the backend needs to compare while
+          leaving the top-level gate unchanged.
+        </p>
+        <p>
+          Measurement: renamed <code>packages/ui/src/lib/Badge/Badge.stories.tsx</code> to
+          <code>BadgeRenamed.stories.tsx</code>, changed no bytes, rebuilt Vite stats, regenerated the
+          manifest. <code>tsdiff</code> reported the old story key removed and the new key added, both
+          with hash <code>5d59dfbcb83fc59e</code>, but <code>storybookHash</code> stayed
+          <code>cf35e70d6fd9c00c</code>.
+        </p>
+        <p>
+          Risk: if the Index treats <code>storybookHash</code> as the documented first gate, it can skip
+          map comparison and miss story/config identity changes. This matters most for auto-title story
+          files, story adds/removes with duplicate bytes, and any future story identity keyed by path.
+        </p>
+        <p>
+          Suggested fix: include key identity in the top-level hash, or make the backend compare
+          <code>storyFileHashes</code> and <code>storybookFileHashes</code> keys even when the top-level
+          value is stable. Add a structural fixture probe for byte-identical story rename.
+        </p>
+      </section>
+
+      <section class="gap p2">
+        <h3>P2 - <code>&lt;staticFiles&gt;</code> is path-independent, but static URL identity is path-based</h3>
+        <p>
+          <code>outOfGraphFiles.ts:117</code> rolls static files through <code>rollUpHash</code>, whose
+          implementation in <code>graph.ts:29</code> sorts content hashes and drops file paths. That is
+          correct for many module moves, but wrong for static assets served by URL.
+        </p>
+        <p>
+          Measurement: <code>static-identity-probe.sh ui</code> found asset rename
+          <code>91eac9c08be42ae6 -&gt; 91eac9c08be42ae6</code> and a two-asset content swap
+          <code>1b81fa5a01662064 -&gt; 1b81fa5a01662064</code>; in both cases
+          <code>storybookHash</code> stayed unchanged. Static byte edits, add/delete, symlinked asset
+          target edits, and symlinked directory additions did move the hash.
+        </p>
+        <p>
+          Suggested fix: roll static files as path-plus-hash pairs, at least for
+          <code>&lt;staticFiles&gt;</code>. Consider whether <code>&lt;storybookConfig&gt;</code> should
+          also include keys for files whose path itself selects behavior.
+        </p>
+      </section>
+
+      <section class="gap p2">
+        <h3>P2 - v2 cannot yet produce a traced result in production</h3>
+        <p>
+          <code>v2/index.ts:69</code> uploads hashes and writes the manifest, then
+          <code>v2/index.ts:73</code> unconditionally returns <code>{ status: "fallback" }</code>. This
+          is a deliberate rollout state, not a silent miss, but it means current CLI bail behavior is
+          still v1 behavior plus v2 diagnostics.
+        </p>
+        <p>
+          Suggested fix: finish the Index contract so <code>determineChangedFiles</code> returns the
+          changed story file set and v2 can return <code>traced</code> when safe.
+        </p>
+      </section>
+
+      <section class="gap p3">
+        <h3>P3 - Vite compatibility gate is conservative for the patched fixture</h3>
+        <p>
+          <code>builderViteCompatibility.ts:12</code> gates on
+          <code>@storybook/builder-vite &gt;= 10.6.0-alpha.4</code>. The local patched
+          <code>ui</code> fixture reports <code>10.6.0-alpha.3</code>, so the production v2 path would
+          fallback unless <code>CHROMATIC_TURBOSNAP_TRUST_BUILDER_STATS</code> is set. The CJS probe
+          rebuilt patched stats and verified a CJS dependency edit recaptured only
+          <code>Button.stories.tsx</code>.
+        </p>
+        <p>
+          Suggested fix: keep the conservative production gate, but make the fixture/harness opt-in
+          explicit so future audits do not classify the fixture as invalid when its stats are patched.
+        </p>
+      </section>
+
+      <section class="gap p3">
+        <h3>P3 - Partial story-index loss remains unexercised</h3>
+        <p>
+          <code>v2/index.ts:61</code> correctly falls back when the manifest has zero story hashes; this
+          protects the current <code>ui-rsbuild</code> fixture. There is still no independent guard for
+          a builder that indexes some, but not all, stories. I did not find such a fixture state in the
+          four measured projects.
+        </p>
+        <p>
+          Suggested follow-up: add a fixture or synthetic stats test where exactly one story importer
+          edge is dropped and assert either a fallback or a conservative all-story recapture.
+        </p>
+      </section>
+
+      <h2>Fixture Matrix</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Fixture</th>
+            <th>Graph and dependency probes</th>
+            <th>Config/static/version probes</th>
+            <th>Bail behavior</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>ui</code> - Vite patched stats</td>
+            <td>
+              <span class="status ok">correct</span>
+              Badge edit recaptured Badge + UserCard; UserCard, Button, story-file and shared-barrel
+              edits recaptured the expected stories. Moment resolution and CJS edge probes recaptured
+              Button only. <code>react/index.js</code> moved <code>&lt;storybookGlobals&gt;</code> and
+              recaptured all, matching v1 parity.
+            </td>
+            <td>
+              <span class="status warn">identity gap</span>
+              Config bytes/add/delete and Storybook core version moved expected
+              <code>storybookFiles</code> entries. Static bytes/add/delete moved
+              <code>&lt;staticFiles&gt;</code>. Static rename and content swap did not move.
+            </td>
+            <td>
+              <span class="status warn">conservative</span>
+              Version gate would fallback on <code>10.6.0-alpha.3</code> without trust env; after upload,
+              v2 falls back unconditionally.
+            </td>
+          </tr>
+          <tr>
+            <td><code>ui-webpack</code> - webpack5</td>
+            <td>
+              <span class="status ok">correct</span>
+              Standard graph matrix and v1/v2 parity were clean: Badge + UserCard, single-story edits,
+              shared barrel, moment, and React all matched expectations.
+            </td>
+            <td>
+              <span class="status warn">identity gap</span>
+              Config/static/version byte probes moved expected entries. Static rename with identical
+              bytes did not move <code>&lt;staticFiles&gt;</code>.
+            </td>
+            <td>
+              <span class="status info">diagnostic only</span>
+              No builder compatibility fallback; v2 still returns fallback after upload.
+            </td>
+          </tr>
+          <tr>
+            <td><code>ui-rsbuild</code> - rspack/rsbuild</td>
+            <td>
+              <span class="status bad">storyless graph</span>
+              The attribution matrix put source and dependency edits in <code>&lt;storybookGlobals&gt;</code>
+              with zero story hash changes. Parity reported seven v2 misses if interpreted directly.
+            </td>
+            <td>
+              <span class="status info">partly valid</span>
+              Config, static and Storybook core version entries moved. The graph-derived story entries
+              are not meaningful because no stories were indexed.
+            </td>
+            <td>
+              <span class="status ok">fallback correct</span>
+              <code>v2/index.ts:61</code> catches zero story hashes and falls back, so this is not a
+              production under-capture unless that guard is removed.
+            </td>
+          </tr>
+          <tr>
+            <td><code>marketing-ui</code> - unpatched Vite control</td>
+            <td>
+              <span class="status info">mixed by design</span>
+              HeroBanner source and story-file edits recaptured HeroBanner. Moment edit did not move
+              because that package is not in this graph. React and JSX runtime edits moved
+              <code>&lt;storybookGlobals&gt;</code>, consistent with the unpatched Vite control role.
+            </td>
+            <td>
+              <span class="status info">static unexercised</span>
+              No configured static dir. Config byte/add/delete and Storybook core version moved.
+              <code>preview.ts</code> bytes moved <code>&lt;storybookConfig&gt;</code>; no separate
+              graph-rolled preview entry was present.
+            </td>
+            <td>
+              <span class="status warn">fallback expected</span>
+              Known-invalid Vite stats should keep v2 from production tracing here.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Bail Inventory</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Reason or gate</th>
+            <th>Current behavior</th>
+            <th>Assessment</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Known-invalid Vite builder stats</td>
+            <td>
+              <code>getBuilderViteFallbackReason</code> falls back for Vite stats with
+              <code>@storybook/builder-vite &lt; 10.6.0-alpha.4</code>, unless trust env is set.
+            </td>
+            <td>
+              <span class="status ok">safe</span>
+              Correct for unpatched Vite; conservative for the patched fixture.
+            </td>
+          </tr>
+          <tr>
+            <td>No story files in module graph</td>
+            <td>
+              Manifest is written for debugging, but v2 returns fallback before upload.
+            </td>
+            <td>
+              <span class="status ok">needed</span>
+              Protects <code>ui-rsbuild</code>, whose measured v2 story set is empty.
+            </td>
+          </tr>
+          <tr>
+            <td>Any <code>storybookFiles</code> entry changes</td>
+            <td>
+              Backend contract says recapture all stories when preview/config/static/version/globals
+              entries move.
+            </td>
+            <td>
+              <span class="status ok">safe over-capture</span>
+              Vite <code>react/index.js</code> and framework globals are intentionally broad.
+            </td>
+          </tr>
+          <tr>
+            <td>Unconditional v2 fallback after upload</td>
+            <td>
+              v2 never returns <code>traced</code> today.
+            </td>
+            <td>
+              <span class="status warn">rollout blocker</span>
+              Safe, but prevents validating production-only v2 bail rates.
+            </td>
+          </tr>
+          <tr>
+            <td>Partial story detection loss</td>
+            <td>No current explicit bail unless story count is zero.</td>
+            <td>
+              <span class="status info">unexercised</span>
+              Needs a fixture or synthetic stats test.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Commands Run</h2>
+      <ul>
+        <li><code>yarn build</code></li>
+        <li><code>bash docs/turbosnap-v2-harness/attribution-matrix.sh ui</code></li>
+        <li><code>bash docs/turbosnap-v2-harness/attribution-matrix.sh ui-webpack</code></li>
+        <li><code>bash docs/turbosnap-v2-harness/attribution-matrix.sh ui-rsbuild</code></li>
+        <li><code>bash docs/turbosnap-v2-harness/attribution-matrix.sh marketing-ui</code></li>
+        <li><code>bash docs/turbosnap-v2-harness/static-identity-probe.sh ui</code></li>
+        <li><code>bash docs/turbosnap-v2-harness/cjs-edge-probe.sh ui</code></li>
+        <li><code>bash docs/turbosnap-v2-harness/resolution-probe.sh ui</code></li>
+        <li><code>bash docs/turbosnap-v2-harness/parity.sh ui</code></li>
+        <li><code>bash docs/turbosnap-v2-harness/parity.sh ui-webpack</code></li>
+        <li><code>bash docs/turbosnap-v2-harness/parity.sh ui-rsbuild</code></li>
+        <li>Manual structural probe: byte-preserving <code>Badge.stories.tsx</code> rename with rebuilt Vite stats.</li>
+      </ul>
+
+      <p class="small note">
+        The report intentionally treats rspack findings as informational because the current code has a
+        zero-story fallback. The actionable correctness bar remains Vite patched stats and webpack5.
+      </p>
+    </main>
+  </body>
+</html>

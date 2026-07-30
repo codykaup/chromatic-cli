@@ -238,6 +238,63 @@ describe('buildManifest relocation stability', () => {
     expect(after.storybookHash).toBe(before.storybookHash);
   });
 
+  it('changes the storybook hash when a Storybook-wide file key moves with identical bytes', async () => {
+    const before = await (async () => {
+      fileHashesRef.current = {
+        '/repo/packages/ui/src/Button.stories.tsx': 'S',
+        '/repo/packages/ui/.storybook/preview.ts': 'P',
+      };
+      return buildManifest(
+        {
+          modules: [
+            {
+              id: 1,
+              name: '/repo/packages/ui/src/Button.stories.tsx',
+              reasons: [{ moduleName: './storybook-stories.js' }],
+            },
+            {
+              id: 2,
+              name: '/repo/packages/ui/.storybook/preview.ts',
+              reasons: [{ moduleName: './storybook-config-entry.js' }],
+            },
+          ],
+        },
+        { projectRoot: '/repo/packages/ui', gitRoot },
+        outOfGraph
+      );
+    })();
+
+    const after = await (async () => {
+      fileHashesRef.current = {
+        '/repo/apps/web/ui/src/Button.stories.tsx': 'S',
+        '/repo/apps/web/ui/.storybook/preview.ts': 'P',
+      };
+      return buildManifest(
+        {
+          modules: [
+            {
+              id: 1,
+              name: '/repo/apps/web/ui/src/Button.stories.tsx',
+              reasons: [{ moduleName: './storybook-stories.js' }],
+            },
+            {
+              id: 2,
+              name: '/repo/apps/web/ui/.storybook/preview.ts',
+              reasons: [{ moduleName: './storybook-config-entry.js' }],
+            },
+          ],
+        },
+        { projectRoot: '/repo/apps/web/ui', gitRoot },
+        outOfGraph
+      );
+    })();
+
+    expect(after.storybookFiles.get('apps/web/ui/.storybook/preview.ts')).toBe(
+      before.storybookFiles.get('packages/ui/.storybook/preview.ts')
+    );
+    expect(after.storybookHash).not.toBe(before.storybookHash);
+  });
+
   it('keeps a story hash stable when a dependency moves and reorders its siblings', async () => {
     const story = '/repo/packages/ui/src/Button.stories.tsx';
 
