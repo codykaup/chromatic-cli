@@ -63,8 +63,8 @@ describe('turbosnap-manifest command', () => {
     const manifest = JSON.parse(written);
 
     expect(typeof manifest.storybookHash).toBe('string');
-    expect(Object.keys(manifest.storyFiles)).toEqual(['src/Button.stories.tsx']);
-    expect(manifest.files['src/Button.stories.tsx'].dependencies).toEqual(['src/helper.ts']);
+    expect(Object.keys(manifest.storyFiles)).toEqual(['./src/Button.stories.tsx']);
+    expect(manifest.files['./src/Button.stories.tsx'].dependencies).toEqual(['./src/helper.ts']);
     // The version survives serialization as a readable string, so the emitted manifest itself says
     // which Storybook produced the build.
     expect(manifest.storybookFiles['<storybookVersion>']).toBe('9.1.20');

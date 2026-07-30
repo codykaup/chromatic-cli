@@ -11,7 +11,6 @@ interface TraceChangedFilesInput {
   statsPath: string;
   manifestOutputDirectory: string;
   projectRoot: string;
-  gitRoot: string;
   configDir: string;
   staticDirs: string[];
 }
@@ -31,9 +30,8 @@ export type TraceChangedFilesV2Result =
  * @param input The input to run TurboSnap 2.0.
  * @param input.statsPath The path to the stats file.
  * @param input.manifestOutputDirectory The directory to write the manifest file to.
- * @param input.projectRoot The absolute Storybook project root used to read source files off disk.
- * @param input.gitRoot The absolute git repository root used to anchor manifest keys; see
- * {@link StatsPathRoots} for why the two roots differ.
+ * @param input.projectRoot The absolute Storybook project root used to read source files off disk
+ * and to anchor manifest keys.
  * @param input.configDir The project-relative Storybook config directory, hashed off disk because it
  * is never a bundler input.
  * @param input.staticDirs The project-relative static directories, hashed off disk for the same reason.
@@ -50,11 +48,10 @@ export async function traceChangedFiles(
     return { status: 'fallback', reason: fallbackReason };
   }
 
-  const manifest = await buildManifest(
-    stats,
-    { projectRoot: input.projectRoot, gitRoot: input.gitRoot },
-    { configDir: input.configDir, staticDirs: input.staticDirs }
-  );
+  const manifest = await buildManifest(stats, input.projectRoot, {
+    configDir: input.configDir,
+    staticDirs: input.staticDirs,
+  });
 
   // A graph we found no stories in can only ever recapture everything through `<storybookGlobals>`,
   // which is wider than v1. Write the manifest anyway so the degenerate graph is still debuggable.

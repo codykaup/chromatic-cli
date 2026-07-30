@@ -29,14 +29,13 @@ const input = {
   statsPath: '/repo/packages/ui/storybook-static/preview-stats.json',
   manifestOutputDirectory: '/repo/packages/ui/.chromatic',
   projectRoot: '/repo/packages/ui',
-  gitRoot: '/repo',
   configDir: '.storybook',
   staticDirs: ['.storybook/static'],
 };
 
 const manifest = {
   storybookHash: 'hash',
-  storyFileHashes: new Map([['src/Button.stories.tsx', 'story-hash']]),
+  storyFileHashes: new Map([['./src/Button.stories.tsx', 'story-hash']]),
 };
 
 beforeEach(() => {
@@ -65,17 +64,10 @@ describe('traceChangedFiles', () => {
   it('uploads and writes a manifest when the stats pass compatibility checks', async () => {
     await traceChangedFiles(input);
 
-    expect(buildManifest).toHaveBeenCalledWith(
-      { modules: [] },
-      {
-        projectRoot: '/repo/packages/ui',
-        gitRoot: '/repo',
-      },
-      {
-        configDir: '.storybook',
-        staticDirs: ['.storybook/static'],
-      }
-    );
+    expect(buildManifest).toHaveBeenCalledWith({ modules: [] }, '/repo/packages/ui', {
+      configDir: '.storybook',
+      staticDirs: ['.storybook/static'],
+    });
     expect(determineChangedFiles).toHaveBeenCalledWith(input.graphqlClient, 'build-id', manifest);
     expect(writeManifest).toHaveBeenCalledWith(manifest, '/repo/packages/ui/.chromatic');
   });

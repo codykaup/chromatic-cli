@@ -70,7 +70,7 @@ compare() {
   require_json "$WORK/base.json" "v2 baseline manifest"
   require_json "$WORK/cur.json" "v2 post-edit manifest"
   require_json "$WORK/v1.json" "v1 trace"
-  node "$HERE/parity.mjs" "$WORK/base.json" "$WORK/cur.json" "$WORK/v1.json" | sed 's/^/  /'
+  node "$HERE/parity.mjs" "$WORK/base.json" "$WORK/cur.json" "$WORK/v1.json" "packages/$PKG" | sed 's/^/  /'
   local status="${PIPESTATUS[0]}"
   if [[ "$status" == "1" ]]; then
     FAILURES=$((FAILURES + 1))
@@ -106,7 +106,10 @@ run_dep() {
     echo "  SKIPPED — no files for \"$package\" in this builder's graph, so v2 cannot see the bump."
     return
   fi
-  local abs="$MONOREPO/$file"
+  # depfile.mjs prints a *manifest* key, which is project-relative (a hoisted dependency reads as
+  # `../../node_modules/...`), so it resolves against the package directory — unlike the repo-relative
+  # paths run_src is given.
+  local abs="$MONOREPO/packages/$PKG/$file"
   cp "$abs" "$WORK/nm-backup"
   printf '\n// tsparity dependency edit\n' >> "$abs"
   gen "$WORK/cur.json"

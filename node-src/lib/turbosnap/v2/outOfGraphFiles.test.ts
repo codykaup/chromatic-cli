@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { hashOutOfGraphFiles, OutOfGraphInput, rollUpOutOfGraphFiles } from './outOfGraphFiles';
-import { StatsPathRoots } from './paths';
 
 // An in-memory tree of absolute directory -> entry names. A key that maps to entries is a directory;
 // anything else named by a parent is a file. Backing the sweep this way keeps these tests off disk.
@@ -94,7 +93,7 @@ vi.mock('../../getFileHashes', () => ({
     Promise.resolve(Object.fromEntries(files.map((f) => [f, fileHashesRef.current[f] ?? 'x']))),
 }));
 
-const roots = { projectRoot: '/repo/packages/ui', gitRoot: '/repo' };
+const projectRoot = '/repo/packages/ui';
 const input = { configDir: '.storybook', staticDirs: ['.storybook/static'] };
 
 const h64ToString = (value: string) => `h(${value})`;
@@ -112,23 +111,23 @@ describe('hashOutOfGraphFiles', () => {
       '/repo/packages/ui/.storybook/nested': ['helper.ts'],
     };
 
-    const { storybookConfigFiles } = await hashOutOfGraphFiles(input, roots);
+    const { storybookConfigFiles } = await hashOutOfGraphFiles(input, projectRoot);
 
     expect([...storybookConfigFiles.keys()]).toEqual([
-      'packages/ui/.storybook/main.ts',
-      'packages/ui/.storybook/nested/helper.ts',
-      'packages/ui/.storybook/preview.ts',
+      './.storybook/main.ts',
+      './.storybook/nested/helper.ts',
+      './.storybook/preview.ts',
     ]);
   });
 
   it('hashes preview.* alongside the rest of the config dir, so its bytes are covered too', async () => {
     directoryTreeRef.current = { '/repo/packages/ui/.storybook': ['main.ts', 'preview.ts'] };
 
-    const { storybookConfigFiles } = await hashOutOfGraphFiles(input, roots);
+    const { storybookConfigFiles } = await hashOutOfGraphFiles(input, projectRoot);
 
     // The graph-rolled `.storybook/preview.ts` entry covers its *imports*; this covers its bytes,
     // which is what closes the empty-preview.ts case where the builder elides the module entirely.
-    expect(storybookConfigFiles.has('packages/ui/.storybook/preview.ts')).toBe(true);
+    expect(storybookConfigFiles.has('./.storybook/preview.ts')).toBe(true);
   });
 
   it('gives static files their own section, excluding them from the config sweep', async () => {
@@ -137,11 +136,11 @@ describe('hashOutOfGraphFiles', () => {
       '/repo/packages/ui/.storybook/static': ['mockServiceWorker.js'],
     };
 
-    const { storybookConfigFiles, staticFiles } = await hashOutOfGraphFiles(input, roots);
+    const { storybookConfigFiles, staticFiles } = await hashOutOfGraphFiles(input, projectRoot);
 
     // Static wins over the config dir, mirroring v1 testing isStaticFile before isStorybookFile.
-    expect([...storybookConfigFiles.keys()]).toEqual(['packages/ui/.storybook/main.ts']);
-    expect([...staticFiles.keys()]).toEqual(['packages/ui/.storybook/static/mockServiceWorker.js']);
+    expect([...storybookConfigFiles.keys()]).toEqual(['./.storybook/main.ts']);
+    expect([...staticFiles.keys()]).toEqual(['./.storybook/static/mockServiceWorker.js']);
   });
 
   it('returns an empty static section when staticDirs is unset', async () => {
@@ -149,7 +148,7 @@ describe('hashOutOfGraphFiles', () => {
 
     const { staticFiles } = await hashOutOfGraphFiles(
       { configDir: '.storybook', staticDirs: [] },
-      roots
+      projectRoot
     );
 
     expect(staticFiles.size).toBe(0);
@@ -158,7 +157,7 @@ describe('hashOutOfGraphFiles', () => {
   it('treats a configured but missing directory as contributing nothing rather than throwing', async () => {
     directoryTreeRef.current = {};
 
-    const { storybookConfigFiles, staticFiles } = await hashOutOfGraphFiles(input, roots);
+    const { storybookConfigFiles, staticFiles } = await hashOutOfGraphFiles(input, projectRoot);
 
     expect(storybookConfigFiles.size).toBe(0);
     expect(staticFiles.size).toBe(0);
@@ -173,13 +172,10 @@ describe('hashOutOfGraphFiles', () => {
 
     const { staticFiles } = await hashOutOfGraphFiles(
       { configDir: '.storybook', staticDirs: ['public', 'assets'] },
-      roots
+      projectRoot
     );
 
-    expect([...staticFiles.keys()]).toEqual([
-      'packages/ui/assets/font.woff2',
-      'packages/ui/public/logo.svg',
-    ]);
+    expect([...staticFiles.keys()]).toEqual(['./assets/font.woff2', './public/logo.svg']);
   });
 
   it('hashes a symlinked static file by its target bytes, since Storybook serves those bytes', async () => {
@@ -192,10 +188,10 @@ describe('hashOutOfGraphFiles', () => {
       '/repo/packages/ui/.storybook/static/logo.svg': '/repo/packages/ui/vendor/real-logo.svg',
     };
 
-    const { staticFiles } = await hashOutOfGraphFiles(input, roots);
+    const { staticFiles } = await hashOutOfGraphFiles(input, projectRoot);
 
     // Keyed by the link's own path, not the target's: that is the URL Storybook serves it at.
-    expect([...staticFiles.keys()]).toEqual(['packages/ui/.storybook/static/logo.svg']);
+    expect([...staticFiles.keys()]).toEqual(['./.storybook/static/logo.svg']);
   });
 
   it('descends into a symlinked static directory, so a vendored asset tree is not invisible', async () => {
@@ -208,11 +204,11 @@ describe('hashOutOfGraphFiles', () => {
       '/repo/packages/ui/.storybook/static/vendor': '/repo/packages/ui/node_modules/pkg/dist',
     };
 
-    const { staticFiles } = await hashOutOfGraphFiles(input, roots);
+    const { staticFiles } = await hashOutOfGraphFiles(input, projectRoot);
 
     expect([...staticFiles.keys()]).toEqual([
-      'packages/ui/.storybook/static/vendor/a.png',
-      'packages/ui/.storybook/static/vendor/b.png',
+      './.storybook/static/vendor/a.png',
+      './.storybook/static/vendor/b.png',
     ]);
   });
 
@@ -225,11 +221,11 @@ describe('hashOutOfGraphFiles', () => {
       '/repo/packages/ui/.storybook/static/logo.svg': '/repo/packages/ui/gone.svg',
     };
 
-    const { storybookConfigFiles, staticFiles } = await hashOutOfGraphFiles(input, roots);
+    const { storybookConfigFiles, staticFiles } = await hashOutOfGraphFiles(input, projectRoot);
 
     expect(staticFiles.size).toBe(0);
     // The rest of the sweep still completes.
-    expect([...storybookConfigFiles.keys()]).toEqual(['packages/ui/.storybook/main.ts']);
+    expect([...storybookConfigFiles.keys()]).toEqual(['./.storybook/main.ts']);
   });
 
   it('visits a symlink cycle once instead of diverging, since unbounded hashing has no count cap', async () => {
@@ -241,9 +237,9 @@ describe('hashOutOfGraphFiles', () => {
       '/repo/packages/ui/.storybook/static/loop': '/repo/packages/ui/.storybook/static',
     };
 
-    const { staticFiles } = await hashOutOfGraphFiles(input, roots);
+    const { staticFiles } = await hashOutOfGraphFiles(input, projectRoot);
 
-    expect([...staticFiles.keys()]).toEqual(['packages/ui/.storybook/static/logo.svg']);
+    expect([...staticFiles.keys()]).toEqual(['./.storybook/static/logo.svg']);
   });
 });
 
@@ -364,17 +360,13 @@ describe('rollUpOutOfGraphFiles', () => {
       '/repo/apps/web/.storybook/main.ts': 'M',
       '/repo/apps/web/.storybook/static/logo.svg': 'A',
     };
-    const after = await rollUp(input, { projectRoot: '/repo/apps/web', gitRoot: '/repo' });
+    const after = await rollUp(input, '/repo/apps/web');
 
     expect(after.get('<storybookConfig>')).toBe(before.get('<storybookConfig>'));
     expect(after.get('<staticFiles>')).toBe(before.get('<staticFiles>'));
   });
 });
 
-async function rollUp(theInput: OutOfGraphInput = input, theRoots: StatsPathRoots = roots) {
-  return rollUpOutOfGraphFiles(
-    await hashOutOfGraphFiles(theInput, theRoots),
-    theRoots,
-    h64ToString
-  );
+async function rollUp(theInput: OutOfGraphInput = input, theProjectRoot = projectRoot) {
+  return rollUpOutOfGraphFiles(await hashOutOfGraphFiles(theInput, theProjectRoot), h64ToString);
 }

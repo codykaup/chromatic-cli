@@ -2,9 +2,8 @@ import { readdir, realpath, stat } from 'fs/promises';
 import path from 'path';
 
 import { getFileHashes } from '../../getFileHashes';
-import { posix } from '../../posix';
 import { FileHash, FilePath, rollUpPathSensitiveHash } from './graph';
-import { StatsPathRoots } from './paths';
+import { normalizeStatsPath } from './paths';
 
 // The synthetic `storybookFiles` keys covering Storybook inputs that are never bundler inputs, so no
 // module hash can see them change. Angle brackets can't appear in a canonical relative path, so
@@ -55,21 +54,21 @@ export interface OutOfGraphFiles {
  * failure mode this mechanism exists to remove.
  *
  * @param input Where to look; see {@link OutOfGraphInput}.
- * @param roots The project and git roots used to locate files and name them; see {@link StatsPathRoots}.
+ * @param projectRoot The absolute Storybook project root used to locate files and name them.
  *
  * @returns The content hash of every config file and every static file, keyed by canonical manifest
  * path.
  */
 export async function hashOutOfGraphFiles(
   input: OutOfGraphInput,
-  roots: StatsPathRoots
+  projectRoot: string
 ): Promise<OutOfGraphFiles> {
   const staticDirectories = input.staticDirs.map((directory) =>
-    path.resolve(roots.projectRoot, directory)
+    path.resolve(projectRoot, directory)
   );
 
   const [configPaths, staticPaths] = await Promise.all([
-    listFilesRecursively(path.resolve(roots.projectRoot, input.configDir)),
+    listFilesRecursively(path.resolve(projectRoot, input.configDir)),
     // A file can only belong to one section, so collect the static directories first and let them win
     // below. All the fixtures nest `.storybook/static/`, and v1 tests `isStaticFile` before
     // `isStorybookFile` for exactly that reason (getDependentStoryFiles.ts:284-292).
@@ -82,9 +81,9 @@ export async function hashOutOfGraphFiles(
   return {
     storybookConfigFiles: await hashByManifestPath(
       configPaths.filter((filePath) => !staticFileSet.has(filePath)),
-      roots
+      projectRoot
     ),
-    staticFiles: await hashByManifestPath(staticFilePaths, roots),
+    staticFiles: await hashByManifestPath(staticFilePaths, projectRoot),
   };
 }
 
@@ -100,10 +99,12 @@ export async function hashOutOfGraphFiles(
  *
  * Both roll-ups are path-sensitive, unlike the graph-rolled entries: a static asset is served at its
  * path and a config file is loaded by name, so a byte-preserving rename changes what Storybook
- * renders even though the multiset of contents is untouched.
+ * renders even though the multiset of contents is untouched. The path identity hashed is the
+ * canonical manifest key, which is project-relative — so a project move leaves both roll-ups still,
+ * the assets being served at the same URLs and the config still loading from the same names, and only
+ * a rename *within* the project is a real change.
  *
  * @param outOfGraphFiles The per-file hashes to roll up.
- * @param roots The project and git roots, used to take path identity inside the project.
  * @param h64ToString The hash function.
  *
  * @returns The synthetic `storybookFiles` entries, keyed by {@link STORYBOOK_CONFIG_KEY} and
@@ -111,7 +112,6 @@ export async function hashOutOfGraphFiles(
  */
 export function rollUpOutOfGraphFiles(
   outOfGraphFiles: OutOfGraphFiles,
-  roots: StatsPathRoots,
   h64ToString: (input: string) => string
 ): Map<FilePath, FileHash> {
   const sections = [
@@ -122,32 +122,8 @@ export function rollUpOutOfGraphFiles(
   return new Map(
     sections
       .filter(([, files]) => files.size > 0)
-      .map(([key, files]) => [
-        key,
-        rollUpPathSensitiveHash(
-          [...files].map(([filePath, hash]): [FilePath, FileHash] => [
-            projectRelativePath(filePath, roots),
-            hash,
-          ]),
-          h64ToString
-        ),
-      ])
+      .map(([key, files]) => [key, rollUpPathSensitiveHash([...files], h64ToString)])
   );
-}
-
-/**
- * Re-keys a canonical (git-root-relative) manifest path to project-root-relative, which is the path
- * identity the roll-ups hash. Taking identity inside the project is what keeps a project move from
- * moving the roll-up: the assets are still served at the same URLs and the config still loads from
- * the same names, so only a rename *within* the project is a real change.
- *
- * @param filePath The canonical manifest path.
- * @param roots The project and git roots.
- *
- * @returns The path relative to the project root.
- */
-function projectRelativePath(filePath: FilePath, roots: StatsPathRoots): FilePath {
-  return posix(path.relative(roots.projectRoot, path.resolve(roots.gitRoot, filePath)));
 }
 
 /**
@@ -155,13 +131,13 @@ function projectRelativePath(filePath: FilePath, roots: StatsPathRoots): FilePat
  * keyed so a manifest reader can compare the two.
  *
  * @param absolutePaths The absolute paths to hash.
- * @param roots The project and git roots; canonical keys are relative to the git root.
+ * @param projectRoot The absolute Storybook project root canonical keys are relative to.
  *
  * @returns The content hash per canonical manifest path.
  */
 async function hashByManifestPath(
   absolutePaths: string[],
-  roots: StatsPathRoots
+  projectRoot: string
 ): Promise<Map<FilePath, FileHash>> {
   if (absolutePaths.length === 0) return new Map();
 
@@ -172,7 +148,7 @@ async function hashByManifestPath(
   return new Map(
     absolutePaths
       .map((absolutePath): [FilePath, FileHash] => [
-        posix(path.relative(roots.gitRoot, absolutePath)),
+        normalizeStatsPath(absolutePath, projectRoot),
         hashes[absolutePath],
       ])
       // Sorted so the debug detail section reads in path order rather than directory-walk order.

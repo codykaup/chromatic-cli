@@ -59,11 +59,9 @@ vi.mock('fs/promises', async (importOriginal) => ({
   },
 }));
 
-// Manifest keys anchor at the git root, so a project in a subdirectory keys its files by their
-// repo-relative path (e.g. `packages/ui/src/...`). See StatsPathRoots for why the two roots differ.
+// Manifest keys anchor at the project root, so a file inside the project keys as `./src/...` and one
+// outside it keeps its `../` prefix (e.g. a sibling package as `../shared/...`).
 const projectRoot = '/repo/packages/ui';
-const gitRoot = '/repo';
-const roots = { projectRoot, gitRoot };
 const outOfGraph = { configDir: '.storybook', staticDirs: ['.storybook/static'] };
 
 beforeEach(() => {
@@ -93,15 +91,13 @@ describe('serializeManifest', () => {
       ],
     };
 
-    const manifest = await buildManifest(stats, roots, outOfGraph);
+    const manifest = await buildManifest(stats, projectRoot, outOfGraph);
     const serialized = serializeManifest(manifest);
 
     // JSON-safe: storyFiles is a plain object, dependencies is an array.
     expect(serialized.storybookHash).toBe(manifest.storybookHash);
     expect(serialized.storyFiles).toEqual(Object.fromEntries(manifest.storyFileHashes));
-    expect(serialized.files['packages/ui/src/Button.stories.tsx'].dependencies).toEqual([
-      'packages/ui/src/helper.ts',
-    ]);
+    expect(serialized.files['./src/Button.stories.tsx'].dependencies).toEqual(['./src/helper.ts']);
     // structuredClone can hide fields that are not friendly to JSON.parse/JSON>stringify so we test the exact flow instead.
     // eslint-disable-next-line unicorn/prefer-structured-clone
     expect(JSON.parse(JSON.stringify(serialized))).toEqual(serialized);
@@ -118,11 +114,11 @@ describe('serializeManifest', () => {
       ],
     };
 
-    const manifest = await buildManifest(stats, roots, outOfGraph);
+    const manifest = await buildManifest(stats, projectRoot, outOfGraph);
     const serialized = serializeManifest(manifest);
 
-    expect(serialized.storybookFiles['packages/ui/.storybook/preview.ts']).toBe(
-      manifest.storybookFiles.get('packages/ui/.storybook/preview.ts')
+    expect(serialized.storybookFiles['./.storybook/preview.ts']).toBe(
+      manifest.storybookFiles.get('./.storybook/preview.ts')
     );
     // eslint-disable-next-line unicorn/prefer-structured-clone
     expect(JSON.parse(JSON.stringify(serialized))).toEqual(serialized);
@@ -130,7 +126,7 @@ describe('serializeManifest', () => {
 });
 
 describe('buildManifest', () => {
-  it('keys story files by their canonical git-root-relative path', async () => {
+  it('keys story files by their canonical project-root-relative path', async () => {
     const stats: Stats = {
       modules: [
         {
@@ -146,10 +142,10 @@ describe('buildManifest', () => {
       ],
     };
 
-    const manifest = await buildManifest(stats, roots, outOfGraph);
+    const manifest = await buildManifest(stats, projectRoot, outOfGraph);
 
-    expect([...manifest.storyFileHashes.keys()]).toEqual(['packages/ui/src/Button.stories.tsx']);
-    expect(manifest.files.has('packages/ui/src/Button.stories.tsx')).toBe(true);
+    expect([...manifest.storyFileHashes.keys()]).toEqual(['./src/Button.stories.tsx']);
+    expect(manifest.files.has('./src/Button.stories.tsx')).toBe(true);
   });
 });
 
@@ -167,19 +163,19 @@ describe('buildManifest leaf inclusion', () => {
 
   it('changes the story hash when a leaf dependency content changes', async () => {
     fileHashesRef.current = { [story]: 'S', [leaf]: 'T1' };
-    const before = await buildManifest(stats, roots, outOfGraph);
+    const before = await buildManifest(stats, projectRoot, outOfGraph);
 
     fileHashesRef.current = { [story]: 'S', [leaf]: 'T2' };
-    const after = await buildManifest(stats, roots, outOfGraph);
+    const after = await buildManifest(stats, projectRoot, outOfGraph);
 
-    expect(after.storyFileHashes.get('packages/ui/src/Button.stories.tsx')).not.toBe(
-      before.storyFileHashes.get('packages/ui/src/Button.stories.tsx')
+    expect(after.storyFileHashes.get('./src/Button.stories.tsx')).not.toBe(
+      before.storyFileHashes.get('./src/Button.stories.tsx')
     );
   });
 });
 
 describe('buildManifest relocation stability', () => {
-  it('keeps story hashes stable when the whole project moves, even as the keys track the new location', async () => {
+  it('changes nothing at all when the whole project moves', async () => {
     const before = await (async () => {
       fileHashesRef.current = {
         '/repo/packages/ui/src/Button.stories.tsx': 'S',
@@ -200,7 +196,7 @@ describe('buildManifest relocation stability', () => {
             },
           ],
         },
-        { projectRoot: '/repo/packages/ui', gitRoot },
+        '/repo/packages/ui',
         outOfGraph
       );
     })();
@@ -225,73 +221,30 @@ describe('buildManifest relocation stability', () => {
             },
           ],
         },
-        { projectRoot: '/repo/apps/web/ui', gitRoot },
+        '/repo/apps/web/ui',
         outOfGraph
       );
     })();
 
-    // The keys are git-root-relative, so moving the project changes where each story is keyed.
-    expect([...before.storyFileHashes.keys()]).toEqual(['packages/ui/src/Button.stories.tsx']);
-    expect([...after.storyFileHashes.keys()]).toEqual(['apps/web/ui/src/Button.stories.tsx']);
-    // The content-based hashes are unchanged by the move.
+    // The keys are project-relative, so moving the whole project moves nothing at all: same keys,
+    // same hashes, same gate. The stories still render identically, so nothing should recapture.
+    expect([...after.storyFileHashes.keys()]).toEqual(['./src/Button.stories.tsx']);
+    expect([...after.storyFileHashes.keys()]).toEqual([...before.storyFileHashes.keys()]);
     expect([...after.storyFileHashes.values()]).toEqual([...before.storyFileHashes.values()]);
     expect(after.storybookHash).toBe(before.storybookHash);
   });
 
-  it('changes the storybook hash when a Storybook-wide file key moves with identical bytes', async () => {
-    const before = await (async () => {
-      fileHashesRef.current = {
-        '/repo/packages/ui/src/Button.stories.tsx': 'S',
-        '/repo/packages/ui/.storybook/preview.ts': 'P',
-      };
-      return buildManifest(
-        {
-          modules: [
-            {
-              id: 1,
-              name: '/repo/packages/ui/src/Button.stories.tsx',
-              reasons: [{ moduleName: './storybook-stories.js' }],
-            },
-            {
-              id: 2,
-              name: '/repo/packages/ui/.storybook/preview.ts',
-              reasons: [{ moduleName: './storybook-config-entry.js' }],
-            },
-          ],
-        },
-        { projectRoot: '/repo/packages/ui', gitRoot },
-        outOfGraph
-      );
-    })();
+  it('changes the storybook hash when a Storybook-wide file is renamed within the project', async () => {
+    // A project move no longer touches any key, so the case that proves keys are in the gate is a
+    // rename *inside* the project: `preview.ts` -> `preview.tsx`, byte-for-byte identical.
+    const before = await manifestWithPreview('preview.ts');
+    const after = await manifestWithPreview('preview.tsx');
 
-    const after = await (async () => {
-      fileHashesRef.current = {
-        '/repo/apps/web/ui/src/Button.stories.tsx': 'S',
-        '/repo/apps/web/ui/.storybook/preview.ts': 'P',
-      };
-      return buildManifest(
-        {
-          modules: [
-            {
-              id: 1,
-              name: '/repo/apps/web/ui/src/Button.stories.tsx',
-              reasons: [{ moduleName: './storybook-stories.js' }],
-            },
-            {
-              id: 2,
-              name: '/repo/apps/web/ui/.storybook/preview.ts',
-              reasons: [{ moduleName: './storybook-config-entry.js' }],
-            },
-          ],
-        },
-        { projectRoot: '/repo/apps/web/ui', gitRoot },
-        outOfGraph
-      );
-    })();
-
-    expect(after.storybookFiles.get('apps/web/ui/.storybook/preview.ts')).toBe(
-      before.storybookFiles.get('packages/ui/.storybook/preview.ts')
+    // Same bytes, so the entry's own rolled-up hash is unchanged...
+    expect(after.storybookFiles.get('./.storybook/preview.tsx')).toBe(
+      before.storybookFiles.get('./.storybook/preview.ts')
     );
+    // ...but the key is part of the gate, so the rename is still visible.
     expect(after.storybookHash).not.toBe(before.storybookHash);
   });
 
@@ -312,7 +265,7 @@ describe('buildManifest relocation stability', () => {
           { id: 3, name: '/repo/packages/ui/src/b.ts', reasons: [{ moduleName: story }] },
         ],
       },
-      roots,
+      projectRoot,
       outOfGraph
     );
 
@@ -330,12 +283,12 @@ describe('buildManifest relocation stability', () => {
           { id: 3, name: '/repo/packages/ui/src/b.ts', reasons: [{ moduleName: story }] },
         ],
       },
-      roots,
+      projectRoot,
       outOfGraph
     );
 
-    expect(after.storyFileHashes.get('packages/ui/src/Button.stories.tsx')).toBe(
-      before.storyFileHashes.get('packages/ui/src/Button.stories.tsx')
+    expect(after.storyFileHashes.get('./src/Button.stories.tsx')).toBe(
+      before.storyFileHashes.get('./src/Button.stories.tsx')
     );
   });
 
@@ -343,7 +296,7 @@ describe('buildManifest relocation stability', () => {
     const story = '/repo/packages/ui/src/Button.stories.tsx';
 
     // Build 1: theme.ts lives in a sibling package. Anchored at the git root it keys as
-    // 'packages/shared/theme.ts'.
+    // '../shared/theme.ts'.
     fileHashesRef.current = {
       [story]: 'S',
       '/repo/packages/shared/theme.ts': 'HT',
@@ -355,7 +308,7 @@ describe('buildManifest relocation stability', () => {
           { id: 2, name: '/repo/packages/shared/theme.ts', reasons: [{ moduleName: story }] },
         ],
       },
-      roots,
+      projectRoot,
       outOfGraph
     );
 
@@ -372,12 +325,12 @@ describe('buildManifest relocation stability', () => {
           { id: 2, name: '/repo/shared/theme.ts', reasons: [{ moduleName: story }] },
         ],
       },
-      roots,
+      projectRoot,
       outOfGraph
     );
 
-    expect(after.storyFileHashes.get('packages/ui/src/Button.stories.tsx')).toBe(
-      before.storyFileHashes.get('packages/ui/src/Button.stories.tsx')
+    expect(after.storyFileHashes.get('./src/Button.stories.tsx')).toBe(
+      before.storyFileHashes.get('./src/Button.stories.tsx')
     );
   });
 
@@ -399,8 +352,8 @@ describe('buildManifest relocation stability', () => {
       '/repo/packages/ui/src/B.stories.tsx': 'HB',
     };
 
-    const first = await buildManifest(forwards, roots, outOfGraph);
-    const second = await buildManifest(backwards, roots, outOfGraph);
+    const first = await buildManifest(forwards, projectRoot, outOfGraph);
+    const second = await buildManifest(backwards, projectRoot, outOfGraph);
 
     expect(second.storybookHash).toBe(first.storybookHash);
   });
@@ -428,9 +381,9 @@ describe('buildManifest concatenated modules', () => {
       '/repo/packages/ui/src/Button.stories.tsx': 'S',
       '/repo/packages/ui/src/Button.tsx': 'B',
     };
-    const manifest = await buildManifest(concatenatedStory, roots, outOfGraph);
+    const manifest = await buildManifest(concatenatedStory, projectRoot, outOfGraph);
 
-    expect([...manifest.storyFileHashes.keys()]).toEqual(['packages/ui/src/Button.stories.tsx']);
+    expect([...manifest.storyFileHashes.keys()]).toEqual(['./src/Button.stories.tsx']);
   });
 
   it('records each concatenated sub-file as a dependency of the root file', async () => {
@@ -438,11 +391,11 @@ describe('buildManifest concatenated modules', () => {
       '/repo/packages/ui/src/Button.stories.tsx': 'S',
       '/repo/packages/ui/src/Button.tsx': 'B',
     };
-    const manifest = await buildManifest(concatenatedStory, roots, outOfGraph);
+    const manifest = await buildManifest(concatenatedStory, projectRoot, outOfGraph);
 
-    expect([
-      ...(manifest.files.get('packages/ui/src/Button.stories.tsx')?.dependencies ?? []),
-    ]).toContain('packages/ui/src/Button.tsx');
+    expect([...(manifest.files.get('./src/Button.stories.tsx')?.dependencies ?? [])]).toContain(
+      './src/Button.tsx'
+    );
   });
 
   it('changes the story hash when a concatenated sub-file content changes', async () => {
@@ -450,16 +403,16 @@ describe('buildManifest concatenated modules', () => {
       '/repo/packages/ui/src/Button.stories.tsx': 'S',
       '/repo/packages/ui/src/Button.tsx': 'B1',
     };
-    const before = await buildManifest(concatenatedStory, roots, outOfGraph);
+    const before = await buildManifest(concatenatedStory, projectRoot, outOfGraph);
 
     fileHashesRef.current = {
       '/repo/packages/ui/src/Button.stories.tsx': 'S',
       '/repo/packages/ui/src/Button.tsx': 'B2',
     };
-    const after = await buildManifest(concatenatedStory, roots, outOfGraph);
+    const after = await buildManifest(concatenatedStory, projectRoot, outOfGraph);
 
-    expect(after.storyFileHashes.get('packages/ui/src/Button.stories.tsx')).not.toBe(
-      before.storyFileHashes.get('packages/ui/src/Button.stories.tsx')
+    expect(after.storyFileHashes.get('./src/Button.stories.tsx')).not.toBe(
+      before.storyFileHashes.get('./src/Button.stories.tsx')
     );
   });
 });
@@ -496,12 +449,12 @@ describe('buildManifest concatenated modules with rspack-style child names', () 
       '/repo/packages/ui/src/Button.stories.tsx': 'S',
       '/repo/packages/ui/src/Button.tsx': 'B',
     };
-    const manifest = await buildManifest(rspackConcatenatedStory, roots, outOfGraph);
+    const manifest = await buildManifest(rspackConcatenatedStory, projectRoot, outOfGraph);
 
-    expect([...manifest.storyFileHashes.keys()]).toEqual(['packages/ui/src/Button.stories.tsx']);
-    expect([
-      ...(manifest.files.get('packages/ui/src/Button.stories.tsx')?.dependencies ?? []),
-    ]).toContain('packages/ui/src/Button.tsx');
+    expect([...manifest.storyFileHashes.keys()]).toEqual(['./src/Button.stories.tsx']);
+    expect([...(manifest.files.get('./src/Button.stories.tsx')?.dependencies ?? [])]).toContain(
+      './src/Button.tsx'
+    );
   });
 
   it('changes the story hash when the concatenated child content changes', async () => {
@@ -509,16 +462,16 @@ describe('buildManifest concatenated modules with rspack-style child names', () 
       '/repo/packages/ui/src/Button.stories.tsx': 'S',
       '/repo/packages/ui/src/Button.tsx': 'B1',
     };
-    const before = await buildManifest(rspackConcatenatedStory, roots, outOfGraph);
+    const before = await buildManifest(rspackConcatenatedStory, projectRoot, outOfGraph);
 
     fileHashesRef.current = {
       '/repo/packages/ui/src/Button.stories.tsx': 'S',
       '/repo/packages/ui/src/Button.tsx': 'B2',
     };
-    const after = await buildManifest(rspackConcatenatedStory, roots, outOfGraph);
+    const after = await buildManifest(rspackConcatenatedStory, projectRoot, outOfGraph);
 
-    expect(after.storyFileHashes.get('packages/ui/src/Button.stories.tsx')).not.toBe(
-      before.storyFileHashes.get('packages/ui/src/Button.stories.tsx')
+    expect(after.storyFileHashes.get('./src/Button.stories.tsx')).not.toBe(
+      before.storyFileHashes.get('./src/Button.stories.tsx')
     );
   });
 });
@@ -540,9 +493,9 @@ describe('buildManifest missing names', () => {
     };
     fileHashesRef.current = { '/repo/packages/ui/src/Button.stories.tsx': 'S' };
 
-    const manifest = await buildManifest(stats, roots, outOfGraph);
+    const manifest = await buildManifest(stats, projectRoot, outOfGraph);
 
-    expect([...manifest.storyFileHashes.keys()]).toEqual(['packages/ui/src/Button.stories.tsx']);
+    expect([...manifest.storyFileHashes.keys()]).toEqual(['./src/Button.stories.tsx']);
   });
 
   it('uses module.modules when module.name is absent', async () => {
@@ -564,12 +517,12 @@ describe('buildManifest missing names', () => {
       '/repo/packages/ui/src/Button.tsx': 'B',
     };
 
-    const manifest = await buildManifest(stats, roots, outOfGraph);
+    const manifest = await buildManifest(stats, projectRoot, outOfGraph);
 
-    expect([...manifest.storyFileHashes.keys()]).toEqual(['packages/ui/src/Button.stories.tsx']);
-    expect([
-      ...(manifest.files.get('packages/ui/src/Button.stories.tsx')?.dependencies ?? []),
-    ]).toContain('packages/ui/src/Button.tsx');
+    expect([...manifest.storyFileHashes.keys()]).toEqual(['./src/Button.stories.tsx']);
+    expect([...(manifest.files.get('./src/Button.stories.tsx')?.dependencies ?? [])]).toContain(
+      './src/Button.tsx'
+    );
   });
 });
 
@@ -608,26 +561,24 @@ describe('buildManifest story detection through a require-context', () => {
   it('detects stories imported via a lazy require-context imported by the entry', async () => {
     await withGlobAbsent(async () => {
       fileHashesRef.current = { [story]: 'S' };
-      const manifest = await buildManifest(stats, roots, outOfGraph);
-      expect([...manifest.storyFileHashes.keys()]).toEqual([
-        'packages/ui/src/lib/Button.stories.tsx',
-      ]);
+      const manifest = await buildManifest(stats, projectRoot, outOfGraph);
+      expect([...manifest.storyFileHashes.keys()]).toEqual(['./src/lib/Button.stories.tsx']);
     });
   });
 
   it('excludes the require-context glob (no file on disk) from the files map', async () => {
     await withGlobAbsent(async () => {
       fileHashesRef.current = { [story]: 'S' };
-      const manifest = await buildManifest(stats, roots, outOfGraph);
+      const manifest = await buildManifest(stats, projectRoot, outOfGraph);
       expect([...manifest.files.keys()].some((key) => key.includes('lazy'))).toBe(false);
-      expect(manifest.files.has('packages/ui/src/lib/Button.stories.tsx')).toBe(true);
+      expect(manifest.files.has('./src/lib/Button.stories.tsx')).toBe(true);
     });
   });
 
   it('does not treat the require-context glob itself as a story file', async () => {
     await withGlobAbsent(async () => {
       fileHashesRef.current = { [story]: 'S' };
-      const manifest = await buildManifest(stats, roots, outOfGraph);
+      const manifest = await buildManifest(stats, projectRoot, outOfGraph);
       const keys = [...manifest.storyFileHashes.keys()];
       expect(keys.some((key) => key.includes('lazy'))).toBe(false);
     });
@@ -664,17 +615,15 @@ describe('buildManifest story detection through a config-entry require-context',
   it('detects a concatenated story imported via a context imported by the config entry', async () => {
     await withGlobAbsent(async () => {
       fileHashesRef.current = { [story]: 'S', [impl]: 'B' };
-      const manifest = await buildManifest(stats, roots, outOfGraph);
-      expect([...manifest.storyFileHashes.keys()]).toEqual([
-        'packages/ui/src/lib/Button.stories.tsx',
-      ]);
+      const manifest = await buildManifest(stats, projectRoot, outOfGraph);
+      expect([...manifest.storyFileHashes.keys()]).toEqual(['./src/lib/Button.stories.tsx']);
     });
   });
 
   it('does not treat a real file imported directly by the config entry as a story', async () => {
     await withGlobAbsent(async () => {
       fileHashesRef.current = { [story]: 'S', [impl]: 'B' };
-      const manifest = await buildManifest(stats, roots, outOfGraph);
+      const manifest = await buildManifest(stats, projectRoot, outOfGraph);
       expect([...manifest.storyFileHashes.keys()]).not.toContain('.storybook/preview.ts');
     });
   });
@@ -710,18 +659,18 @@ describe('buildManifest attribution', () => {
     await withSyntheticAbsent(async () => {
       fileHashesRef.current = { ...hashes };
 
-      const { attribution } = await buildManifest(stats, roots, outOfGraph);
+      const { attribution } = await buildManifest(stats, projectRoot, outOfGraph);
 
       expect([...attribution.storyReachable].sort()).toEqual([
-        'packages/ui/node_modules/moment/moment.js',
-        'packages/ui/src/Button.stories.tsx',
+        './node_modules/moment/moment.js',
+        './src/Button.stories.tsx',
       ]);
       expect([...attribution.previewSubtree].sort()).toEqual([
-        'packages/ui/.storybook/preview.ts',
-        'packages/ui/.storybook/theme.ts',
+        './.storybook/preview.ts',
+        './.storybook/theme.ts',
       ]);
       expect([...attribution.storybookGlobals]).toEqual([
-        'packages/ui/node_modules/@storybook/react/dist/entry-preview.js',
+        './node_modules/@storybook/react/dist/entry-preview.js',
       ]);
     });
   });
@@ -742,13 +691,11 @@ describe('buildManifest attribution', () => {
             { id: 2, name: throughGlob, reasons: [{ moduleName: lazyGlob }] },
           ],
         },
-        roots,
+        projectRoot,
         outOfGraph
       );
 
-      expect([...manifest.attribution.storyReachable]).toEqual([
-        'packages/ui/src/lib/Widget.stories.tsx',
-      ]);
+      expect([...manifest.attribution.storyReachable]).toEqual(['./src/lib/Widget.stories.tsx']);
       expect([...manifest.attribution.storybookGlobals]).toEqual([]);
       // The synthetic node is gone from the written graph, so this attribution is unreconstructable.
       expect([...manifest.files.keys()].some((key) => key.includes('lazy'))).toBe(false);
@@ -759,7 +706,7 @@ describe('buildManifest attribution', () => {
     await withSyntheticAbsent(async () => {
       fileHashesRef.current = { ...hashes };
 
-      const { attribution } = await buildManifest(stats, roots, outOfGraph);
+      const { attribution } = await buildManifest(stats, projectRoot, outOfGraph);
 
       const all = [
         ...attribution.storyReachable,
@@ -775,11 +722,11 @@ describe('buildManifest attribution', () => {
     await withSyntheticAbsent(async () => {
       fileHashesRef.current = { ...hashes };
 
-      const serialized = serializeManifest(await buildManifest(stats, roots, outOfGraph));
+      const serialized = serializeManifest(await buildManifest(stats, projectRoot, outOfGraph));
 
       expect(serialized.attribution.previewSubtree).toEqual([
-        'packages/ui/.storybook/preview.ts',
-        'packages/ui/.storybook/theme.ts',
+        './.storybook/preview.ts',
+        './.storybook/theme.ts',
       ]);
       // eslint-disable-next-line unicorn/prefer-structured-clone
       expect(JSON.parse(JSON.stringify(serialized))).toEqual(serialized);
@@ -802,7 +749,7 @@ describe('buildManifest storybookFiles', () => {
   const entryPreview = '/repo/packages/ui/node_modules/@storybook/react/dist/entry-preview.js';
   const reactDom = '/repo/packages/ui/node_modules/react-dom/index.js';
 
-  const previewKey = 'packages/ui/.storybook/preview.ts';
+  const previewKey = './.storybook/preview.ts';
   const globalsKey = '<storybookGlobals>';
 
   function makeStats(): Stats {
@@ -832,7 +779,7 @@ describe('buildManifest storybookFiles', () => {
   it('keys an entry by the canonical preview config path', async () => {
     fileHashesRef.current = { ...baseHashes };
 
-    const manifest = await buildManifest(makeStats(), roots, outOfGraph);
+    const manifest = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     expect([...manifest.storybookFiles.keys()]).toContain(previewKey);
   });
@@ -840,28 +787,28 @@ describe('buildManifest storybookFiles', () => {
   it('rolls orphan globals into a single catch-all entry', async () => {
     fileHashesRef.current = { ...baseHashes };
 
-    const manifest = await buildManifest(makeStats(), roots, outOfGraph);
+    const manifest = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     expect([...manifest.storybookFiles.keys()]).toContain(globalsKey);
   });
 
   it('changes the catch-all entry when an orphan global content changes', async () => {
     fileHashesRef.current = { ...baseHashes };
-    const before = await buildManifest(makeStats(), roots, outOfGraph);
+    const before = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     // reactDom is reached only via the framework's preview annotations, so it lands in the bucket.
     fileHashesRef.current = { ...baseHashes, [reactDom]: 'RD2' };
-    const after = await buildManifest(makeStats(), roots, outOfGraph);
+    const after = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     expect(after.storybookFiles.get(globalsKey)).not.toBe(before.storybookFiles.get(globalsKey));
   });
 
   it('changes the storybook hash when the preview config changes, leaving story hashes pure', async () => {
     fileHashesRef.current = { ...baseHashes };
-    const before = await buildManifest(makeStats(), roots, outOfGraph);
+    const before = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     fileHashesRef.current = { ...baseHashes, [preview]: 'P2' };
-    const after = await buildManifest(makeStats(), roots, outOfGraph);
+    const after = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     expect(after.storybookHash).not.toBe(before.storybookHash);
     // Pure per-story hashes: a config change must not perturb any individual story's hash. The
@@ -871,10 +818,10 @@ describe('buildManifest storybookFiles', () => {
 
   it('changes the storybook hash when an orphan global changes', async () => {
     fileHashesRef.current = { ...baseHashes };
-    const before = await buildManifest(makeStats(), roots, outOfGraph);
+    const before = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     fileHashesRef.current = { ...baseHashes, [entryPreview]: 'EP2' };
-    const after = await buildManifest(makeStats(), roots, outOfGraph);
+    const after = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     expect(after.storybookHash).not.toBe(before.storybookHash);
     expect([...after.storyFileHashes]).toEqual([...before.storyFileHashes]);
@@ -882,29 +829,29 @@ describe('buildManifest storybookFiles', () => {
 
   it('keeps a story dependency out of the catch-all, scoping the change to that story', async () => {
     fileHashesRef.current = { ...baseHashes };
-    const before = await buildManifest(makeStats(), roots, outOfGraph);
+    const before = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     // moment lives only in Button's subtree, so it is story-reachable and must not be bucketed.
     fileHashesRef.current = { ...baseHashes, [moment]: 'M2' };
-    const after = await buildManifest(makeStats(), roots, outOfGraph);
+    const after = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
-    expect(after.storyFileHashes.get('packages/ui/src/Button.stories.tsx')).not.toBe(
-      before.storyFileHashes.get('packages/ui/src/Button.stories.tsx')
+    expect(after.storyFileHashes.get('./src/Button.stories.tsx')).not.toBe(
+      before.storyFileHashes.get('./src/Button.stories.tsx')
     );
-    expect(after.storyFileHashes.get('packages/ui/src/Header.stories.tsx')).toBe(
-      before.storyFileHashes.get('packages/ui/src/Header.stories.tsx')
+    expect(after.storyFileHashes.get('./src/Header.stories.tsx')).toBe(
+      before.storyFileHashes.get('./src/Header.stories.tsx')
     );
     expect(after.storybookFiles.get(globalsKey)).toBe(before.storybookFiles.get(globalsKey));
   });
 
   it('attributes a preview-subtree change to the preview entry, not the catch-all', async () => {
     fileHashesRef.current = { ...baseHashes };
-    const before = await buildManifest(makeStats(), roots, outOfGraph);
+    const before = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     // theme.ts is reached only through preview.ts, so it belongs to the keyed preview entry. Landing
     // in both would double-count it and destroy the backend's attribution.
     fileHashesRef.current = { ...baseHashes, [previewHelper]: 'PT2' };
-    const after = await buildManifest(makeStats(), roots, outOfGraph);
+    const after = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     expect(after.storybookFiles.get(previewKey)).not.toBe(before.storybookFiles.get(previewKey));
     expect(after.storybookFiles.get(globalsKey)).toBe(before.storybookFiles.get(globalsKey));
@@ -919,7 +866,7 @@ describe('buildManifest storybookFiles', () => {
           { id: 1, name: buttonStory, reasons: [{ moduleName: './storybook-stories.js' }] },
         ],
       },
-      roots,
+      projectRoot,
       outOfGraph
     );
 
@@ -941,7 +888,7 @@ describe('buildManifest storybookFiles', () => {
             { id: 1, name: buttonStory, reasons: [{ moduleName: './storybook-stories.js' }] },
           ],
         },
-        roots,
+        projectRoot,
         outOfGraph
       );
 
@@ -959,7 +906,7 @@ describe('buildManifest storybookFiles', () => {
     storybookVersionRef.current = '10.6.0-alpha.3';
     fileHashesRef.current = { ...baseHashes };
 
-    const manifest = await buildManifest(makeStats(), roots, outOfGraph);
+    const manifest = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     expect(manifest.storybookFiles.get('<storybookVersion>')).toBe('10.6.0-alpha.3');
   });
@@ -969,11 +916,11 @@ describe('buildManifest storybookFiles', () => {
     // whole point of the entry: on webpack and rspack no file hash can see it.
     fileHashesRef.current = { ...baseHashes };
     storybookVersionRef.current = '9.1.19';
-    const before = await buildManifest(makeStats(), roots, outOfGraph);
+    const before = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     fileHashesRef.current = { ...baseHashes };
     storybookVersionRef.current = '9.1.20';
-    const after = await buildManifest(makeStats(), roots, outOfGraph);
+    const after = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     expect(after.storybookHash).not.toBe(before.storybookHash);
     // Only the Storybook-wide gate moves; no individual story subtree changed.
@@ -982,9 +929,9 @@ describe('buildManifest storybookFiles', () => {
 
   it('produces identical storybookFiles and storybook hash when building the same stats twice', async () => {
     fileHashesRef.current = { ...baseHashes };
-    const first = await buildManifest(makeStats(), roots, outOfGraph);
+    const first = await buildManifest(makeStats(), projectRoot, outOfGraph);
     fileHashesRef.current = { ...baseHashes };
-    const second = await buildManifest(makeStats(), roots, outOfGraph);
+    const second = await buildManifest(makeStats(), projectRoot, outOfGraph);
 
     expect([...second.storybookFiles]).toEqual([...first.storybookFiles]);
     expect(second.storybookHash).toBe(first.storybookHash);
@@ -1011,15 +958,15 @@ describe('buildManifest hashFiles skip branches', () => {
       };
 
       fileHashesRef.current = { [story]: 'S', [missing]: 'WOULD-BE-A' };
-      const before = await buildManifest(stats, roots, outOfGraph);
+      const before = await buildManifest(stats, projectRoot, outOfGraph);
 
       // Change the content hash the missing file *would* have if it were hashed. If the skip
       // branch didn't treat it as contributing '', this toggle would change the story hash.
       fileHashesRef.current = { [story]: 'S', [missing]: 'WOULD-BE-B' };
-      const after = await buildManifest(stats, roots, outOfGraph);
+      const after = await buildManifest(stats, projectRoot, outOfGraph);
 
-      expect(after.storyFileHashes.get('packages/ui/src/Button.stories.tsx')).toBe(
-        before.storyFileHashes.get('packages/ui/src/Button.stories.tsx')
+      expect(after.storyFileHashes.get('./src/Button.stories.tsx')).toBe(
+        before.storyFileHashes.get('./src/Button.stories.tsx')
       );
     } finally {
       existsSyncSpy.mockRestore();
@@ -1045,17 +992,17 @@ describe('buildManifest out-of-graph inputs', () => {
   });
 
   it('emits a synthetic entry per out-of-graph section', async () => {
-    const manifest = await buildManifest(stats, roots, outOfGraph);
+    const manifest = await buildManifest(stats, projectRoot, outOfGraph);
 
     expect([...manifest.storybookFiles.keys()]).toContain('<storybookConfig>');
     expect([...manifest.storybookFiles.keys()]).toContain('<staticFiles>');
   });
 
   it('moves the storybook hash when main.ts changes, leaving story hashes untouched', async () => {
-    const before = await buildManifest(stats, roots, outOfGraph);
+    const before = await buildManifest(stats, projectRoot, outOfGraph);
 
     fileHashesRef.current = { ...fileHashesRef.current, [mainConfig]: 'M2' };
-    const after = await buildManifest(stats, roots, outOfGraph);
+    const after = await buildManifest(stats, projectRoot, outOfGraph);
 
     // This is the v1-parity regression the mechanism exists to close: v1 bails on any configDir
     // edit, while v2 previously produced a byte-identical manifest.
@@ -1064,16 +1011,16 @@ describe('buildManifest out-of-graph inputs', () => {
   });
 
   it('moves the storybook hash when a static asset changes', async () => {
-    const before = await buildManifest(stats, roots, outOfGraph);
+    const before = await buildManifest(stats, projectRoot, outOfGraph);
 
     fileHashesRef.current = { ...fileHashesRef.current, [staticAsset]: 'A2' };
-    const after = await buildManifest(stats, roots, outOfGraph);
+    const after = await buildManifest(stats, projectRoot, outOfGraph);
 
     expect(after.storybookHash).not.toBe(before.storybookHash);
   });
 
   it('moves the storybook hash when a static asset is renamed without changing its bytes', async () => {
-    const before = await buildManifest(stats, roots, outOfGraph);
+    const before = await buildManifest(stats, projectRoot, outOfGraph);
 
     // Static assets are served by URL, so the same bytes at a new path render differently. A
     // content-only roll-up left both `<staticFiles>` and the storybook hash byte-identical here.
@@ -1083,7 +1030,7 @@ describe('buildManifest out-of-graph inputs', () => {
     };
     const renamed = '/repo/packages/ui/.storybook/static/sw.js';
     fileHashesRef.current = { [story]: 'S', [mainConfig]: 'M', [renamed]: 'A' };
-    const after = await buildManifest(stats, roots, outOfGraph);
+    const after = await buildManifest(stats, projectRoot, outOfGraph);
 
     expect(after.storybookHash).not.toBe(before.storybookHash);
   });
@@ -1098,35 +1045,33 @@ describe('buildManifest out-of-graph inputs', () => {
       '/repo/packages/ui/.storybook/static/b.png',
     ];
     fileHashesRef.current = { [story]: 'S', [mainConfig]: 'M', [a]: 'A', [b]: 'B' };
-    const before = await buildManifest(stats, roots, outOfGraph);
+    const before = await buildManifest(stats, projectRoot, outOfGraph);
 
     // The multiset of contents is unchanged, so only path-sensitive hashing sees this.
     fileHashesRef.current = { [story]: 'S', [mainConfig]: 'M', [a]: 'B', [b]: 'A' };
-    const after = await buildManifest(stats, roots, outOfGraph);
+    const after = await buildManifest(stats, projectRoot, outOfGraph);
 
     expect(after.storybookHash).not.toBe(before.storybookHash);
   });
 
   it('keeps out-of-graph files out of files and attribution, so they miss the globals catch-all', async () => {
-    const manifest = await buildManifest(stats, roots, outOfGraph);
+    const manifest = await buildManifest(stats, projectRoot, outOfGraph);
 
     // The catch-all is defined by absence from storyReachable/previewSubtree, which these satisfy by
     // construction — entering `files` would double-hash them into `<storybookGlobals>`.
-    expect(manifest.files.has('packages/ui/.storybook/main.ts')).toBe(false);
-    expect(manifest.attribution.storybookGlobals.has('packages/ui/.storybook/main.ts')).toBe(false);
+    expect(manifest.files.has('./.storybook/main.ts')).toBe(false);
+    expect(manifest.attribution.storybookGlobals.has('./.storybook/main.ts')).toBe(false);
     expect(
-      manifest.attribution.storybookGlobals.has(
-        'packages/ui/.storybook/static/mockServiceWorker.js'
-      )
+      manifest.attribution.storybookGlobals.has('./.storybook/static/mockServiceWorker.js')
     ).toBe(false);
   });
 
   it('serializes the per-file detail sections for the debug view', async () => {
-    const serialized = serializeManifest(await buildManifest(stats, roots, outOfGraph));
+    const serialized = serializeManifest(await buildManifest(stats, projectRoot, outOfGraph));
 
-    expect(serialized.storybookConfigFiles).toEqual({ 'packages/ui/.storybook/main.ts': 'M' });
+    expect(serialized.storybookConfigFiles).toEqual({ './.storybook/main.ts': 'M' });
     expect(serialized.staticFiles).toEqual({
-      'packages/ui/.storybook/static/mockServiceWorker.js': 'A',
+      './.storybook/static/mockServiceWorker.js': 'A',
     });
     // eslint-disable-next-line unicorn/prefer-structured-clone
     expect(JSON.parse(JSON.stringify(serialized))).toEqual(serialized);
@@ -1138,12 +1083,45 @@ describe('buildManifest out-of-graph inputs', () => {
     directoryTreeRef.current = { '/repo/packages/ui/.storybook': ['main.ts', 'preview.ts'] };
     const preview = '/repo/packages/ui/.storybook/preview.ts';
     fileHashesRef.current = { [story]: 'S', [mainConfig]: 'M', [preview]: 'P1' };
-    const before = await buildManifest(stats, roots, outOfGraph);
-    expect(before.storybookFiles.has('packages/ui/.storybook/preview.ts')).toBe(false);
+    const before = await buildManifest(stats, projectRoot, outOfGraph);
+    expect(before.storybookFiles.has('./.storybook/preview.ts')).toBe(false);
 
     fileHashesRef.current = { ...fileHashesRef.current, [preview]: 'P2' };
-    const after = await buildManifest(stats, roots, outOfGraph);
+    const after = await buildManifest(stats, projectRoot, outOfGraph);
 
     expect(after.storybookHash).not.toBe(before.storybookHash);
   });
 });
+
+/**
+ * Builds a manifest whose only Storybook-wide graph entry is the named preview file, with fixed
+ * bytes, so two spellings differ by key alone.
+ *
+ * @param previewFile The preview file's name within the config directory.
+ *
+ * @returns The manifest.
+ */
+function manifestWithPreview(previewFile: string) {
+  fileHashesRef.current = {
+    '/repo/packages/ui/src/Button.stories.tsx': 'S',
+    [`/repo/packages/ui/.storybook/${previewFile}`]: 'P',
+  };
+  return buildManifest(
+    {
+      modules: [
+        {
+          id: 1,
+          name: '/repo/packages/ui/src/Button.stories.tsx',
+          reasons: [{ moduleName: './storybook-stories.js' }],
+        },
+        {
+          id: 2,
+          name: `/repo/packages/ui/.storybook/${previewFile}`,
+          reasons: [{ moduleName: './storybook-config-entry.js' }],
+        },
+      ],
+    },
+    projectRoot,
+    outOfGraph
+  );
+}

@@ -36,17 +36,12 @@ export async function traceChangedFiles(ctx: Context): Promise<TraceChangedFiles
     const projectRoot = ctx.git.rootPath
       ? path.resolve(ctx.git.rootPath, ctx.storybook?.baseDir ?? '.')
       : process.cwd();
-    // See StatsPathRoots for why manifest keys anchor at the git root. When the repo root is
-    // unknown, fall back to the project root, keeping keys project-relative.
-    const gitRoot = ctx.git.rootPath ?? projectRoot;
-
     const result = await traceChangedFilesV2({
       graphqlClient: ctx.client,
       buildId: ctx.build.id,
       statsPath: ctx.fileInfo.statsPath,
       manifestOutputDirectory: path.join(ctx.sourceDir, '.chromatic'),
       projectRoot,
-      gitRoot,
       // The config and static directories are project-relative, matching how v1 reads them. An
       // explicit --storybook-config-dir wins over the discovered one, as it does in v1.
       configDir: ctx.options?.storybookConfigDir ?? ctx.storybook?.configDir ?? '.storybook',
