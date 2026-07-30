@@ -1,65 +1,83 @@
 import GraphQLClient from '../../../io/graphqlClient';
 import { TurboSnapManifest } from './manifest';
 
-const UploadBuildHashesMutation = `
-  mutation UploadBuildHashes(
-    $buildId: ObjID!
-    $storybookHash: String!
-    $storyFileHashes: JSONObject!
-    $storybookFileHashes: JSONObject!
-  ) {
-    uploadBuildHashes(
-      buildId: $buildId,
-      storybookHash: $storybookHash,
-      storyFileHashes: $storyFileHashes,
-      storybookFileHashes: $storybookFileHashes
-    )
-}
+const BuildUploadHashesMutation = `
+  mutation BuildUploadHashes($input: BuildUploadHashesInput!) {
+    buildUploadHashes(input: $input) {
+      ... on BuildUploadHashesSuccess {
+        build {
+          turboSnapStatus
+          turboSnapMechanism
+        }
+      }
+      ... on BuildUploadHashesFailure {
+        errors {
+          ... on MutationError {
+            message
+          }
+        }
+      }
+    }
+  }
 `;
 
-// TODO: fill this out when we have a mutation defined
-// interface DetermineChangedFilesMutationResult {
-//   determineChangedFiles: {
-//     changedFiles: string[];
-//   };
-// }
+/** How the Index decided `onlyStoryFiles`. Absent means it did not decide by hash. */
+type TurboSnapMechanism = 'GIT_BASED' | 'HASH_BASED';
+
+interface BuildUploadHashesResult {
+  buildUploadHashes: {
+    /** Present on success. The Index sets these itself; the CLI does not send them. */
+    build?: {
+      turboSnapStatus?: string;
+      turboSnapMechanism?: TurboSnapMechanism;
+    };
+    /** Present on failure. */
+    errors?: { message: string }[];
+  };
+}
 
 /**
- * Sends the story file, Storybook config file and whole-Storybook hashes to the Index and gets back
- * the list of changed story files.
+ * Sends the whole-Storybook hash and the per-story hashes to the Index, which compares them against
+ * the build's ancestors and writes `onlyStoryFiles` onto the build itself. The changed files are
+ * therefore never returned to the CLI — only whether the Index took the decision, via
+ * `turboSnapMechanism: HASH_BASED`.
  *
  * `storybookHash` is the Index's top-level gate: if it is unchanged nothing in Storybook changed and
- * no story needs recapturing. When it moves, the Index drills into the two hash maps —
- * `storyFileHashes` attributes the change to individual stories, while any change to a
- * `storybookFileHashes` entry (a `.storybook/preview.*` file, the `<storybookGlobals>` catch-all, or
- * the `<storybookVersion>` string) means Storybook-wide config changed and everything must be
- * recaptured. Note that `<storybookVersion>` is a version string rather than a hash — it exists
- * because the preview core runtime sits outside the module graph on webpack and rspack — so the Index
- * must compare entry values for equality and never assume they are hashes.
+ * no story needs recapturing. When it moves, the Index drills into `storyFileHashes` to attribute the
+ * change to individual stories.
+ *
+ * `storybookFiles` is deliberately **not** sent: `BuildUploadHashesInput` has no field for it. Until
+ * the Index adds one, a change confined to a `storybookFiles` entry — a static asset, `main.ts`, a
+ * `preview.*` edit, a Storybook upgrade — moves `storybookHash` while matching no story, so the Index
+ * captures nothing where v1 bails. That gap is tracked as a P0 on the TurboSnap 2.0 Index Fixes page;
+ * it is recorded there rather than worked around here, because the CLI cannot express it.
+ *
+ * The manifest's `outOfGraphFiles` sections stay out of the request too, but for a different reason:
+ * they exist to name *which* file moved for the S3 debug view, and the Index only ever needs the one
+ * roll-up value per section.
  *
  * @param graphqlClient The GraphQL client to use.
  * @param buildId The build ID associated with the manifest.
- * @param manifest The manifest whose story file, Storybook config file and Storybook hashes are sent
- * to the Index.
+ * @param manifest The manifest whose Storybook and story file hashes are sent to the Index.
  *
- * @returns The changed files.
+ * @returns The mutation result: the updated build on success, or the errors that prevented the upload.
  */
-// TODO: Implement this!
 export async function determineChangedFiles(
   graphqlClient: GraphQLClient,
   buildId: string,
   manifest: TurboSnapManifest
 ) {
-  const result = await graphqlClient.runQuery<boolean>(
-    UploadBuildHashesMutation,
+  const result = await graphqlClient.runQuery<BuildUploadHashesResult>(
+    BuildUploadHashesMutation,
     {
-      buildId,
-      storybookHash: manifest.storybookHash,
-      storyFileHashes: Object.fromEntries(manifest.storyFileHashes),
-      storybookFileHashes: Object.fromEntries(manifest.storybookFiles),
+      input: {
+        buildId,
+        storybookHash: manifest.storybookHash,
+        storyFileHashes: Object.fromEntries(manifest.storyFileHashes),
+      },
     },
     { retries: 3 }
   );
 
-  return result;
+  return result.buildUploadHashes;
 }
