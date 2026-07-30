@@ -188,9 +188,11 @@ CLI ships today. That is the right question to audit now, because removing the f
   <td><span class="v v-miss">should-bail-but-doesn't</span></td>
   <td>v1: needs a lockfile diff that <code>findChangedDependencies</code> fails on;
       <code>bin-src/trace.ts:130</code> explicitly refuses package-manifest inputs, so it is unreachable
-      from the harness. v2: <strong>no equivalent exists</strong>. Measured — every manifest contains
+      from the harness. <s>v2: <strong>no equivalent exists</strong>.</s> Measured — every manifest contains
       <code>package.json</code>: 0 entries, lockfiles: 0 entries (<code>ui</code> 39 files,
-      <code>ui-webpack</code> 284 files).</td>
+      <code>ui-webpack</code> 284 files). <strong>Corrected 2026-07-30:</strong> v2 needs no equivalent —
+      this path is v1's handler for <em>its own</em> lockfile parse failing, and v2 never parses a lockfile.
+      See the withdrawn gap below.</td>
 </tr>
 
 <tr>
@@ -490,16 +492,51 @@ there is no local artifact to diagnose from either.</p>
 </div>
 
 <div class="gap">
-<header><span class="sev sev-p1">P1</span><h3><code>changedPackageFiles</code> has no v2 counterpart at all</h3></header>
-<p>Both v1 paths key off <code>package.json</code> / lockfile diffs. v2 never hashes either file, so a
+<header><span class="sev sev-acc">WITHDRAWN</span><h3><code>changedPackageFiles</code> has no v2 counterpart at all</h3></header>
+<p><strong>Withdrawn 2026-07-30 — the premise was a v1 implementation artifact, not a coverage gap.</strong>
+Nothing replaces <code>changedPackageFiles</code>, and nothing should.</p>
+<p><s>Both v1 paths key off <code>package.json</code> / lockfile diffs. v2 never hashes either file, so a
 lockfile change that does not alter <code>node_modules</code> content on disk — or a bump of a package
-absent from the graph — is completely invisible. Four of the nine taxonomy reasons
-(<code>changedPackageFiles</code> ×2, <code>changedStorybookFiles</code>, <code>changedStaticFiles</code>)
-lose their producer the moment v2 stops falling back, and the bail vocabulary that
-<code>ui/messages/warnings/bailFile.ts</code> and <code>tasks/verify/publishBuild.ts:44-61</code> depend on
-will need re-mapping.</p>
-<dl><dt>Measured</dt><dd>0 <code>package.json</code> entries and 0 lockfile entries in all four manifests
-  (39 / 284 / 202 / 36 files).</dd></dl>
+absent from the graph — is completely invisible.</s> Corrected, path by path:</p>
+<ul class="tight">
+  <li><strong>Path A is a failure handler for a step v2 deleted.</strong> v1 diffs
+    <code>package.json</code> dependency fields (<code>v1/index.ts:64</code>) only because
+    <code>findChangedDependencies</code> <em>rejected</em> — it needs the lockfile to derive changed
+    package <em>names</em>. v2 works from the file, not the name, and never reads a lockfile, so there is
+    no parse to fail and nothing to fall back from.</li>
+  <li><strong>Path B is already settled.</strong> A bump of a package absent from the graph reaches
+    <code>traced</code> with 0 story files in <em>both</em> algorithms — the accepted-gap entry above, "no
+    guard, match v1".</li>
+  <li><strong>The remaining class is subsumed, and more precisely than v1 managed.</strong> v2
+    content-hashes every installed file present in <code>stats.modules</code>
+    (<code>v2/manifest.ts:373</code>), so a dependency change that alters bundled bytes moves the importing
+    story's rolled-up hash directly.</li>
+</ul>
+<p>A <code>&lt;packageMetadata&gt;</code> roll-up over <code>package.json</code>/lockfile bytes was
+considered and <strong>rejected</strong>: it would fail <em>Agreed design 2</em> in the <em>wider</em>
+direction, recapturing everything on lockfile churn (integrity fields, a <code>devDependencies</code>-only
+bump) that v1 correctly captures nothing for, while duplicating evidence v2 already holds per file.</p>
+<dl>
+  <dt>Measured</dt><dd>0 <code>package.json</code> entries and 0 lockfile entries in all four manifests
+    (39 / 284 / 202 / 36 files). The figure stands; only its interpretation changed.</dd>
+  <dt>Measured 2026-07-30</dt><dd>The one class that is neither bytes nor names — a
+    <em>resolution</em>-affecting manifest change — is covered, and scoped. Removing
+    <code>jsnext:main</code> from the installed <code>moment/package.json</code> makes vite resolve
+    <code>moment/moment.js</code> instead of <code>moment/dist/moment.js</code>; the edge from
+    <code>Button.tsx</code> and the <code>storyReachable</code> attribution both survive the swap,
+    <code>storybookHash</code> moves, and exactly <strong>1 of 3</strong> stories moves — the sole importer
+    — with <code>storybookFiles changed: 0</code>. v1 Path A bails the entire Storybook for the same
+    change. Re-runnable: <code>resolution-probe.sh</code>.</dd>
+  <dt>Note</dt><dd><code>rollUpHash</code> is deliberately path-independent (<code>v2/graph.ts:29</code>),
+    so a resolution change to a <em>byte-identical</em> file at a different path is invisible by design —
+    correctly, since identical bytes render identically.</dd>
+  <dt>Still real</dt><dd>The vocabulary half of the original finding. Four of the nine taxonomy reasons
+    (<code>changedPackageFiles</code> ×2, <code>changedStorybookFiles</code>,
+    <code>changedStaticFiles</code>) lose their producer the moment v2 stops falling back, and the bail
+    vocabulary <code>ui/messages/warnings/bailFile.ts</code> and
+    <code>tasks/verify/publishBuild.ts:44-61</code> depend on needs re-mapping. Tracked by the bail
+    vocabulary ticket, not here.</dd>
+</dl>
 </div>
 
 <div class="gap">
@@ -602,7 +639,10 @@ non-module inputs, and dependencies with no file in v2's graph.</p>
     <code>changedExternalFiles</code>, <code>unavailable</code> — need a real published build with git
     history and/or a backend response. No build was published.</li>
   <li><code>changedPackageFiles</code> Path A — needs a lockfile diff that
-    <code>findChangedDependencies</code> fails to parse; <code>trace</code> refuses manifest inputs.</li>
+    <code>findChangedDependencies</code> fails to parse; <code>trace</code> refuses manifest inputs.
+    <strong>v1 only</strong> — <strong>corrected 2026-07-30:</strong> v2 has no such path to exercise, so
+    this is an unexercised v1 reason rather than a v2 measurement gap. The v2 side of the question
+    <em>was</em> measured; see the withdrawn gap.</li>
   <li>The unpatched-vite invisible-CJS case — the installed builder is patched, and reverting it would
     have disturbed a shared fixture mid-audit. <s>The established fact is taken as given, and the same
     <em>guard-absence</em> mechanism was measured independently via <code>-d core-js</code>.</s>

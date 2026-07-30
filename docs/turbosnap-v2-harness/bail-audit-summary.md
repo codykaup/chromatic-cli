@@ -18,7 +18,7 @@ manifest *would* carry once the fallback is removed. That is the question worth 
 | `noAncestorBuild` / `rebuild` / `invalidChangedFiles` / `changedExternalFiles` / `unavailable` | unexercised | unexercised | unexercised |
 | `missingStatsFile` (path unset) | correct (both) | correct (both) | correct (both) |
 | `missingStatsFile` (path set, unreadable) | **unnamed throw** | **unnamed throw** | **unnamed throw** |
-| `changedPackageFiles` Path A | v1 unexercised · **v2 absent** | v1 unexercised · **v2 absent** | v1 unexercised · **v2 absent** |
+| `changedPackageFiles` Path A | v1 unexercised · v2 **retired, not absent** (2026-07-30) | v1 unexercised · v2 **retired, not absent** | v1 unexercised · v2 **retired, not absent** |
 | `changedPackageFiles` Path B | **unexercised**; per-package absence deliberately unguarded (gap 2) | unexercised · v2 correct | unexercised · v2 over-captures |
 | `changedStorybookFiles` — `preview.ts` / `test.ts` | correct (both) — except **`marketing-ui`: v2 misses** | correct (both) | correct (both) |
 | `changedStorybookFiles` — **`main.ts`** | v1 correct · **v2 should-bail-but-doesn't** | v1 correct · **v2 should-bail-but-doesn't** | v1 correct · **v2 should-bail-but-doesn't** |
@@ -53,8 +53,14 @@ cannot see.
 3. **P1 — the builder-vite gate is a version-string proxy and fires on stats that are fine.** Measured:
    the *patched* 10.6.0-alpha.3 builder is rejected on both vite fixtures. Fallback is `log.info` only,
    with no bail reason and no manifest or hash upload. rspack's much worse graph is ungated.
-4. **P1 — `changedPackageFiles` has no v2 counterpart.** 0 `package.json` and 0 lockfile entries in every
-   manifest. Four of nine taxonomy reasons lose their producer when v2 stops falling back.
+4. ~~**P1 — `changedPackageFiles` has no v2 counterpart.**~~ **Withdrawn 2026-07-30 — not a coverage gap.**
+   The 0-entry measurement stands, but Path A is v1's *handler for its own lockfile parse failing*, and v2
+   never parses a lockfile, so there is nothing to fall back from. The installed tree is content-hashed at
+   the file level, which covers dependency changes more precisely than tracing package names: measured, a
+   resolution-only `package.json` change (`moment`'s `jsnext:main` removed, so vite resolves `moment.js`
+   instead of `dist/moment.js`) moves `storybookHash` and exactly **1 of 3** stories — the sole importer —
+   where v1 Path A bails the whole Storybook. Re-runnable via `resolution-probe.sh`. The bail-vocabulary
+   re-mapping is real and tracked separately.
 5. **P2 — v2's `previewSubtree` key exists only if the builder emits the preview module.**
    `marketing-ui/.storybook/preview.ts` is 0 lines, vite elides it, v2 has no key, v1 bails.
 6. **P2 — a set-but-unreadable stats file has no named reason** (raw `ENOENT`, swallowed by v2's generic
@@ -95,7 +101,7 @@ cannot see.
 ## Not measured
 
 Pre-algorithm reasons (need a published build), `changedPackageFiles` Path A (needs an unparseable lockfile
-diff), the unpatched-vite invisible-CJS case (installed builder is patched; shared fixture — and
+diff — v1 only; **v2 has no such path to exercise**, see gap 4), the unpatched-vite invisible-CJS case (installed builder is patched; shared fixture — and
 **knowingly left unmeasured**, since `-d core-js` measured the legitimate case rather than this one and the
 "no guard, match v1" decision is invariant to the result), whether the
 `<storybookGlobals>` bucket over-captures in a way that matters (all three fixture stories depend on
