@@ -7,6 +7,7 @@ import { captureBailException } from '../v1/captureBailException';
 import { isNetworkError } from '../v1/errors';
 import { determineChangedFiles } from './api';
 import { getUntrustedBuilderStatsReason } from './builderViteCompatibility';
+import { classifyUploadHashesFailure } from './classifyUploadHashesFailure';
 import { buildManifest, writeManifest } from './manifest';
 
 interface TraceChangedFilesInput {
@@ -146,9 +147,12 @@ export async function traceChangedFiles(
     };
   }
 
+  let response;
   try {
-    await determineChangedFiles(input.graphqlClient, input.buildId, manifest);
+    response = await determineChangedFiles(input.graphqlClient, input.buildId, manifest);
   } catch (error) {
+    // A thrown error is a transport failure, already retried. It is expected volume rather than a
+    // bug, so it gets a named reason and no Sentry event.
     writeDiagnosticManifest(manifest, input.manifestOutputDirectory);
     return {
       status: 'bailed',
@@ -156,6 +160,26 @@ export async function traceChangedFiles(
         bailReason: {
           indexUnavailable: true,
           ...(isNetworkError(error) && { bailSubreason: 'networkError' as const }),
+        },
+      },
+    };
+  }
+
+  // The mutation resolves with its failure member rather than throwing, so a rejection is only
+  // visible by inspecting the response. Each of these is our own bug and is worth a Sentry event.
+  const uploadFailure = classifyUploadHashesFailure(response);
+  if (uploadFailure) {
+    writeDiagnosticManifest(manifest, input.manifestOutputDirectory);
+    return {
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          indexContractViolation: true,
+          bailSubreason: uploadFailure.bailSubreason,
+          sentryEventId: captureBailException(uploadFailure.error, {
+            bailSubreason: uploadFailure.bailSubreason,
+            bailPath: 'determineChangedFiles',
+          }),
         },
       },
     };

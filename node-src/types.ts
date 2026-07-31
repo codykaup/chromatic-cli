@@ -581,15 +581,18 @@ export type TurboSnapInvalidChangedFilesSubreason =
   | 'networkError'
   | 'gitCommandFailed';
 
+export type TurboSnapIndexContractViolationSubreason =
+  | 'invalidStoryFileHashes'
+  | 'invalidBuildStatus'
+  | 'invalidResponse';
+
 export type TurboSnapBailSubreason =
   | TurboSnapChangedPackageFilesSubreason
   | TurboSnapInvalidChangedFilesSubreason
+  | TurboSnapIndexContractViolationSubreason
   | 'packageNotFound'
   | 'invalidVersion'
   | 'unsupportedVersion'
-  | 'invalidStoryFileHashes'
-  | 'invalidBuildStatus'
-  | 'invalidResponse'
   | 'builderCompatibilityCheckFailed'
   | 'manifestBuildFailed';
 

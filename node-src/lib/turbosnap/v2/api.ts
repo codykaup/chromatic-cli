@@ -12,6 +12,7 @@ const BuildUploadHashesMutation = `
       }
       ... on BuildUploadHashesFailure {
         errors {
+          __typename
           ... on MutationError {
             message
           }
@@ -24,16 +25,28 @@ const BuildUploadHashesMutation = `
 /** How the Index decided `onlyStoryFiles`. Absent means it did not decide by hash. */
 type TurboSnapMechanism = 'GIT_BASED' | 'HASH_BASED';
 
-interface BuildUploadHashesResult {
-  buildUploadHashes: {
-    /** Present on success. The Index sets these itself; the CLI does not send them. */
-    build?: {
-      turboSnapStatus?: string;
-      turboSnapMechanism?: TurboSnapMechanism;
-    };
-    /** Present on failure. */
-    errors?: { message: string }[];
+/** One entry of the failure member. `__typename` is what tells the rejections apart. */
+export interface BuildUploadHashesError {
+  __typename?: string;
+  message?: string;
+}
+
+/**
+ * The mutation payload. Both members are optional because a response matching neither is a real
+ * case the CLI has to name rather than assume away.
+ */
+export interface BuildUploadHashesResponse {
+  /** Present on success. The Index sets these itself; the CLI does not send them. */
+  build?: {
+    turboSnapStatus?: string;
+    turboSnapMechanism?: TurboSnapMechanism;
   };
+  /** Present on failure. */
+  errors?: BuildUploadHashesError[];
+}
+
+interface BuildUploadHashesResult {
+  buildUploadHashes: BuildUploadHashesResponse;
 }
 
 /**
@@ -66,7 +79,7 @@ export async function determineChangedFiles(
   graphqlClient: GraphQLClient,
   buildId: string,
   manifest: TurboSnapManifest
-) {
+): Promise<BuildUploadHashesResponse> {
   const result = await graphqlClient.runQuery<BuildUploadHashesResult>(
     BuildUploadHashesMutation,
     {

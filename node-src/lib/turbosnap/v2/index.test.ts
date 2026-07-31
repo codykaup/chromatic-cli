@@ -56,6 +56,9 @@ beforeEach(() => {
   vi.mocked(readStatsFile).mockResolvedValue({ modules: [] });
   vi.mocked(getUntrustedBuilderStatsReason).mockReturnValue(undefined);
   vi.mocked(buildManifest).mockResolvedValue(manifest as any);
+  vi.mocked(determineChangedFiles).mockResolvedValue({
+    build: { turboSnapStatus: 'APPLIED', turboSnapMechanism: 'HASH_BASED' },
+  });
 });
 
 describe('traceChangedFiles', () => {
@@ -152,6 +155,77 @@ describe('traceChangedFiles', () => {
     await expect(traceChangedFiles(input)).resolves.toEqual({
       status: 'bailed',
       turboSnap: { bailReason: { indexUnavailable: true } },
+    });
+    expect(captureBailException).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('bails with a fingerprinted Sentry event when the Index rejects our story file hashes', async () => {
+    vi.mocked(determineChangedFiles).mockResolvedValue({
+      errors: [
+        { __typename: 'InvalidStoryFileHashesError', message: 'Invalid story file hashes.' },
+      ],
+    });
+
+    await expect(traceChangedFiles(input)).resolves.toEqual({
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          indexContractViolation: true,
+          bailSubreason: 'invalidStoryFileHashes',
+          sentryEventId: 'sentry-event-id',
+        },
+      },
+    });
+    expect(captureBailException).toHaveBeenCalledWith(expect.any(Error), {
+      bailSubreason: 'invalidStoryFileHashes',
+      bailPath: 'determineChangedFiles',
+    });
+    expect(writeManifest).toHaveBeenCalledWith(manifest, '/repo/packages/ui/.chromatic');
+  });
+
+  it('bails with a fingerprinted Sentry event when we upload at the wrong build status', async () => {
+    vi.mocked(determineChangedFiles).mockResolvedValue({
+      errors: [
+        {
+          __typename: 'InvalidUploadHashesBuildStatusError',
+          message: 'Uploading hashes is only allowed for announced builds.',
+        },
+      ],
+    });
+
+    await expect(traceChangedFiles(input)).resolves.toEqual({
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          indexContractViolation: true,
+          bailSubreason: 'invalidBuildStatus',
+          sentryEventId: 'sentry-event-id',
+        },
+      },
+    });
+    expect(captureBailException).toHaveBeenCalledWith(expect.any(Error), {
+      bailSubreason: 'invalidBuildStatus',
+      bailPath: 'determineChangedFiles',
+    });
+  });
+
+  it('bails with a fingerprinted Sentry event when the response matches neither union member', async () => {
+    vi.mocked(determineChangedFiles).mockResolvedValue({});
+
+    await expect(traceChangedFiles(input)).resolves.toEqual({
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          indexContractViolation: true,
+          bailSubreason: 'invalidResponse',
+          sentryEventId: 'sentry-event-id',
+        },
+      },
+    });
+    expect(captureBailException).toHaveBeenCalledWith(expect.any(Error), {
+      bailSubreason: 'invalidResponse',
+      bailPath: 'determineChangedFiles',
     });
   });
 
