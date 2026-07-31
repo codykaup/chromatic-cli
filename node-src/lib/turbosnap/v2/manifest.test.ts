@@ -891,6 +891,95 @@ describe('buildManifest attribution', () => {
   });
 });
 
+describe('buildManifest attribution closure', () => {
+  const story = '/repo/packages/ui/src/lib/Badge/Badge.stories.tsx';
+  const storyDep = '/repo/packages/ui/src/lib/Badge/Badge.tsx';
+  const preview = '/repo/packages/ui/.storybook/preview.ts';
+  const previewHelper = '/repo/packages/ui/.storybook/test.ts';
+  const orphanRoot = '/repo/packages/ui/src/probe/orphanRoot.tsx';
+  const hiddenInner = '/repo/packages/ui/src/probe/hiddenInner.tsx';
+  const globalsKey = '<storybookGlobals>';
+  const configEntry = './storybook-config-entry.js';
+
+  // A concatenated module whose root is itself an orphan global. The inner file is hashed, but it is
+  // only recorded as a dependency of the root and never gets an entry of its own, so attribution
+  // closed over `files` could not see it.
+  const stats: Stats = {
+    modules: [
+      { id: 1, name: story, reasons: [{ moduleName: './storybook-stories.js' }] },
+      { id: 2, name: storyDep, reasons: [{ moduleName: story }] },
+      { id: 3, name: preview, reasons: [{ moduleName: configEntry }] },
+      { id: 4, name: previewHelper, reasons: [{ moduleName: preview }] },
+      {
+        id: 5,
+        name: `${orphanRoot} + 1 modules`,
+        modules: [{ name: orphanRoot }, { name: hiddenInner }],
+        reasons: [{ moduleName: configEntry }],
+      },
+    ],
+  };
+
+  function hashes(innerHash: string) {
+    return {
+      [story]: 'S',
+      [storyDep]: 'B',
+      [preview]: 'P',
+      [previewHelper]: 'PT',
+      [orphanRoot]: 'O',
+      [hiddenInner]: innerHash,
+    };
+  }
+
+  it('attributes a file that is hashed only inside a concatenated module', async () => {
+    await withSyntheticAbsent(async () => {
+      fileHashesRef.current = hashes('H1');
+      const before = await buildManifest(stats, projectRoot, outOfGraph);
+
+      expect([...before.attribution.storybookGlobals].sort()).toEqual([
+        './src/probe/hiddenInner.tsx',
+        './src/probe/orphanRoot.tsx',
+      ]);
+
+      fileHashesRef.current = hashes('H2');
+      const after = await buildManifest(stats, projectRoot, outOfGraph);
+
+      // Editing the inner file used to leave the manifest byte-identical.
+      expect(after.storybookFiles.get(globalsKey)).not.toBe(before.storybookFiles.get(globalsKey));
+      expect(after.storybookHash).not.toBe(before.storybookHash);
+    });
+  });
+
+  it('lands every hashed file in exactly one attribution home', async () => {
+    await withSyntheticAbsent(async () => {
+      fileHashesRef.current = hashes('H1');
+      const { attribution } = await buildManifest(stats, projectRoot, outOfGraph);
+
+      // The story and preview subtrees are disjoint in this graph, so each file has one home only.
+      const homes = Object.entries(attribution);
+      for (const hashedFile of Object.keys(fileHashesRef.current)) {
+        const filePath = hashedFile.replace(projectRoot, '.');
+        expect(homes.filter(([, files]) => files.has(filePath)).map(([home]) => home)).toHaveLength(
+          1
+        );
+      }
+    });
+  });
+
+  it('leaves no dependency reference outside the serialized graph', async () => {
+    await withSyntheticAbsent(async () => {
+      fileHashesRef.current = hashes('H1');
+      const serialized = serializeManifest(await buildManifest(stats, projectRoot, outOfGraph));
+
+      for (const file of Object.values(serialized.files)) {
+        expect(file.dependencies.every((dependency) => dependency in serialized.files)).toBe(true);
+      }
+      expect(serialized.files['./src/probe/orphanRoot.tsx'].dependencies).toEqual([
+        './src/probe/hiddenInner.tsx',
+      ]);
+    });
+  });
+});
+
 describe('buildManifest storybookFiles', () => {
   // Two stories imported straight from the stories entry (Vite style). Button also imports moment,
   // a per-story dependency. The config entry imports `.storybook/preview.ts`, which imports a

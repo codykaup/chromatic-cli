@@ -19,6 +19,10 @@ export const STORYBOOK_GLOBALS_KEY = '<storybookGlobals>';
  * Which of the three hashing homes each real file landed in, recorded by the same pass that builds
  * the hashes. The graph in `files` is pruned of synthetic nodes after hashing, so a reachability walk
  * over the written manifest cannot reconstruct these sets — it reports attributed files as orphans.
+ *
+ * The sets are closed over `hashes`: every hashed file lands in a home, and `storybookGlobals` holds
+ * exactly the ones in neither of the others. A file can be both story-reachable and in a preview
+ * subtree, so the two named homes are not mutually exclusive.
  */
 export interface FileAttribution {
   /** Files in some story's transitive subtree, hashed into that story's `storyFiles` entry. */
@@ -74,9 +78,10 @@ export function collectStorybookFiles(
   // unreliable — vite has no config-to-preview edge and rspack drops importer edges. Framework
   // preview annotations and the React runtime land here, and they affect rendering, so leaving them
   // unhashed would be a real blind spot.
-  const orphanGlobals = [...files.keys()].filter(
-    (filePath) =>
-      hashes.has(filePath) && !storyReachable.has(filePath) && !previewSubtree.has(filePath)
+  // Derived from `hashes`, not from `files`: a file inside a concatenated module is hashed but only
+  // recorded as a dependency of the concatenation root, so filtering `files` would hash it nowhere.
+  const orphanGlobals = [...hashes.keys()].filter(
+    (filePath) => !storyReachable.has(filePath) && !previewSubtree.has(filePath)
   );
   if (orphanGlobals.length > 0) {
     storybookFiles.set(STORYBOOK_GLOBALS_KEY, rollUpFileHashes(hashes, orphanGlobals, h64ToString));

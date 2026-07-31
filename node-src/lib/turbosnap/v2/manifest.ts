@@ -141,12 +141,7 @@ export async function buildManifest(
       storyFileNames.add(sourceFilePath);
     }
 
-    // The other files in a concatenated module are dependencies of the root file. Webpack hides
-    // these internal edges inside a single module, so reconstruct them here.
-    const rootFile = ensureFile(files, sourceFilePath, hashes);
-    for (const dependency of concatenated) {
-      rootFile.dependencies.add(dependency);
-    }
+    linkConcatenatedFiles(files, sourceFilePath, concatenated, hashes);
 
     for (const rawImporter of rawImporters) {
       const importer = normalizeStatsPath(rawImporter, projectRoot);
@@ -303,6 +298,29 @@ function collectStoryImporters(
     if (importedByEntry) storyImporters.add(stripConcatenatedModuleSuffix(module.name));
   }
   return storyImporters;
+}
+
+/**
+ * Records the internal edges of a concatenated module: webpack/rspack bundle several real files into
+ * one module, so the other files become dependencies of the concatenation root. Each of them also gets
+ * an entry of its own, so no dependency reference names a file the serialized graph omits.
+ *
+ * @param files The map of files to their hashes and dependencies, mutated in place.
+ * @param rootPath The canonical path of the concatenation root.
+ * @param concatenated The canonical paths of the other files bundled into the same module.
+ * @param hashes The content hashes keyed by canonical file path.
+ */
+function linkConcatenatedFiles(
+  files: Map<FilePath, TurboSnapFile>,
+  rootPath: FilePath,
+  concatenated: FilePath[],
+  hashes: Map<FilePath, FileHash>
+) {
+  const rootFile = ensureFile(files, rootPath, hashes);
+  for (const dependency of concatenated) {
+    rootFile.dependencies.add(dependency);
+    ensureFile(files, dependency, hashes);
+  }
 }
 
 /**
