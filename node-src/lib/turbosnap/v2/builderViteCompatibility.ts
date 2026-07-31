@@ -68,7 +68,16 @@ export function getUntrustedBuilderStatsReason(
   return undefined;
 }
 
-function isBuilderViteStats(stats: Stats) {
+/**
+ * Whether these stats were produced by builder-vite, told by the builder's own modules appearing in
+ * the graph. Also used to check the stats against the builder the project declares; see
+ * {@link getAnchorMismatchReason}.
+ *
+ * @param stats The preview stats file.
+ *
+ * @returns Whether the stats are builder-vite's.
+ */
+export function isBuilderViteStats(stats: Stats) {
   return stats.modules.some((module) =>
     [
       module.name,

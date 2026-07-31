@@ -7,6 +7,7 @@ import { determineChangedFiles } from './api';
 import { getUntrustedBuilderStatsReason } from './builderViteCompatibility';
 import { traceChangedFiles } from './index';
 import { buildManifest, writeManifest } from './manifest';
+import { getAnchorMismatchReason } from './statsAnchor';
 
 vi.mock('../../../tasks/readStatsFile', () => ({
   readStatsFile: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('../../../tasks/readStatsFile', () => ({
 
 vi.mock('@sentry/node', () => ({
   captureException: vi.fn(),
+  setContext: vi.fn(),
 }));
 
 vi.mock('../v1/captureBailException', () => ({
@@ -31,6 +33,10 @@ vi.mock('./manifest', () => ({
 
 vi.mock('./api', () => ({
   determineChangedFiles: vi.fn(),
+}));
+
+vi.mock('./statsAnchor', () => ({
+  getAnchorMismatchReason: vi.fn(),
 }));
 
 const input = {
@@ -56,6 +62,7 @@ const manifest = {
 beforeEach(() => {
   vi.mocked(readStatsFile).mockResolvedValue({ modules: [] });
   vi.mocked(getUntrustedBuilderStatsReason).mockReturnValue(undefined);
+  vi.mocked(getAnchorMismatchReason).mockReturnValue(undefined);
   vi.mocked(buildManifest).mockResolvedValue(manifest as any);
   vi.mocked(determineChangedFiles).mockResolvedValue({
     build: { turboSnapStatus: 'APPLIED', turboSnapMechanism: 'HASH_BASED' },
@@ -70,6 +77,46 @@ describe('traceChangedFiles', () => {
     await expect(traceChangedFiles(input)).rejects.toBe(error);
     expect(getUntrustedBuilderStatsReason).not.toHaveBeenCalled();
     expect(captureBailException).not.toHaveBeenCalled();
+  });
+
+  it('refuses to build a manifest when the stats and the anchor disagree', async () => {
+    vi.mocked(getAnchorMismatchReason).mockReturnValue({
+      subreason: 'statsFileOutsideProject',
+      detail: 'the stats file lives in the Storybook project /repo/packages/other',
+    });
+
+    await expect(traceChangedFiles(input)).resolves.toEqual({
+      status: 'bailed',
+      turboSnap: {
+        bailReason: { anchorMismatch: true, bailSubreason: 'statsFileOutsideProject' },
+      },
+    });
+    // Nothing may be read off a disproven anchor, including the builder version.
+    expect(getUntrustedBuilderStatsReason).not.toHaveBeenCalled();
+    expect(buildManifest).not.toHaveBeenCalled();
+    expect(writeManifest).not.toHaveBeenCalled();
+  });
+
+  it('bails with a Sentry ID when the anchor check fails unexpectedly', async () => {
+    const error = new Error('anchor check exploded');
+    vi.mocked(getAnchorMismatchReason).mockImplementation(() => {
+      throw error;
+    });
+
+    await expect(traceChangedFiles(input)).resolves.toEqual({
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          internalError: true,
+          bailSubreason: 'anchorCheckFailed',
+          sentryEventId: 'sentry-event-id',
+        },
+      },
+    });
+    expect(captureBailException).toHaveBeenCalledWith(error, {
+      bailSubreason: 'anchorCheckFailed',
+      bailPath: 'getAnchorMismatchReason',
+    });
   });
 
   it('bails before manifest upload when builder-vite stats are known invalid', async () => {

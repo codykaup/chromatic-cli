@@ -63,6 +63,9 @@ export async function compareChangedFiles(
     configDir: ctx.options?.storybookConfigDir ?? ctx.storybook?.configDir ?? '.storybook',
     staticDirs: ctx.storybook?.staticDir ?? [],
     staticDirsDeclared: ctx.storybook?.staticDirsDeclared ?? false,
+    // Read from the project's own Storybook config rather than from `projectRoot`, which is what
+    // makes it independent evidence about which package the stats should describe.
+    builderName: ctx.storybook?.builder?.name,
   });
 
   if (result.status === 'bailed') {

@@ -18,6 +18,7 @@ export type TurboSnapV2Reason =
   | 'changedStorybookFiles'
   | 'changedStaticFiles'
   | 'untrustedBuilderStats'
+  | 'anchorMismatch'
   | 'noStoryFiles'
   | 'noStorybookConfigFiles'
   | 'noStaticFiles'
@@ -52,7 +53,12 @@ export type TurboSnapV2Subreason =
   | 'invalidBuildStatus'
   | 'invalidResponse'
   | 'builderCompatibilityCheckFailed'
-  | 'manifestBuildFailed';
+  | 'manifestBuildFailed'
+  | 'anchorCheckFailed'
+  | 'builderMismatch'
+  | 'statsFileOutsideProject'
+  | 'statsEntryOutsideProject'
+  | 'unresolvedSourceModules';
 
 export interface TurboSnapComparisonEventInput {
   schemaVersion: 1;
@@ -104,6 +110,7 @@ type BailReasonKey =
   | 'internalError'
   | 'indexUnavailable'
   | 'untrustedBuilderStats'
+  | 'anchorMismatch'
   | 'noStoryFiles'
   | 'noStorybookConfigFiles'
   | 'noStaticFiles'
@@ -134,6 +141,9 @@ const V2_REASON_PRECEDENCE = [
   ['indexContractViolation', 'indexContractViolation'],
   ['internalError', 'internalError'],
   ['indexUnavailable', 'indexUnavailable'],
+  // Ahead of the other pre-manifest reasons: a wrong anchor makes their evidence unreliable too,
+  // since both read packages resolved from it.
+  ['anchorMismatch', 'anchorMismatch'],
   ['untrustedBuilderStats', 'untrustedBuilderStats'],
   ['unresolvedStaticDirectories', 'unresolvedStaticDirectories'],
   ['noStorybookConfigFiles', 'noStorybookConfigFiles'],
@@ -187,6 +197,7 @@ function getV1Properties(result: TraceChangedFilesResult) {
 const V2_SUBREASON_REASONS = new Set<TurboSnapV2Reason>([
   'invalidChangedFiles',
   'untrustedBuilderStats',
+  'anchorMismatch',
   'indexUnavailable',
   'indexContractViolation',
   'internalError',

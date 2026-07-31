@@ -556,6 +556,7 @@ interface TurboSnapBailReasonBase {
   changedStorybookGlobals?: true;
   changedStorybookVersion?: true;
   untrustedBuilderStats?: true;
+  anchorMismatch?: true;
   noStoryFiles?: true;
   noStorybookConfigFiles?: true;
   noStaticFiles?: true;
@@ -597,7 +598,12 @@ export type TurboSnapBailSubreason =
   | 'invalidVersion'
   | 'unsupportedVersion'
   | 'builderCompatibilityCheckFailed'
-  | 'manifestBuildFailed';
+  | 'manifestBuildFailed'
+  | 'anchorCheckFailed'
+  | 'builderMismatch'
+  | 'statsFileOutsideProject'
+  | 'statsEntryOutsideProject'
+  | 'unresolvedSourceModules';
 
 // All additional fields allowed for the `changedPackageFiles` bail reason
 export type ChangedPackageFilesBailReason = TurboSnapBailReasonBase & {

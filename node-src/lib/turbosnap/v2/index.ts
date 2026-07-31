@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/node';
 
 import GraphQLClient from '../../../io/graphqlClient';
 import { readStatsFile } from '../../../tasks/readStatsFile';
-import type { TurboSnapBailReason } from '../../../types';
+import type { Stats, TurboSnapBailReason } from '../../../types';
 import { TraceChangedFilesResult } from '../types';
 import { captureBailException } from '../v1/captureBailException';
 import { isNetworkError } from '../v1/errors';
@@ -10,6 +10,7 @@ import { determineChangedFiles } from './api';
 import { getUntrustedBuilderStatsReason } from './builderViteCompatibility';
 import { classifyUploadHashesFailure } from './classifyUploadHashesFailure';
 import { buildManifest, writeManifest } from './manifest';
+import { getAnchorMismatchReason } from './statsAnchor';
 
 interface TraceChangedFilesInput {
   graphqlClient: GraphQLClient;
@@ -20,6 +21,7 @@ interface TraceChangedFilesInput {
   configDir: string;
   staticDirs: string[];
   staticDirsDeclared: boolean;
+  builderName?: string;
 }
 
 /**
@@ -63,6 +65,83 @@ function getEmptyOutOfGraphBail(
   if (!bailReason) return undefined;
   writeDiagnosticManifest(manifest, outputDirectory);
   return { status: 'bailed', turboSnap: { bailReason } };
+}
+
+// Everything we can refuse before a manifest exists, in the order their evidence stays trustworthy:
+// a wrong anchor makes the builder version unreliable, since that package is resolved from it.
+function getStatsBail(
+  stats: Stats,
+  input: TraceChangedFilesInput
+): TraceChangedFilesV2Result | undefined {
+  const anchorBail = getAnchorBail(stats, input);
+  if (anchorBail) return anchorBail;
+
+  let builderStatsReason;
+  try {
+    builderStatsReason = getUntrustedBuilderStatsReason(stats, input.projectRoot);
+  } catch (error) {
+    const bailSubreason = 'builderCompatibilityCheckFailed';
+    return {
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          internalError: true,
+          bailSubreason,
+          sentryEventId: captureBailException(error, {
+            bailSubreason,
+            bailPath: 'getUntrustedBuilderStatsReason',
+          }),
+        },
+      },
+    };
+  }
+
+  return getPreManifestBail(builderStatsReason, input);
+}
+
+// Refuses a manifest whose stats file cannot be shown to describe the project at `projectRoot`.
+// Unlike the emptiness guards this one has to fire before anything is built: a wrong-but-similar
+// anchor produces a complete manifest with hashes read off another package's files, so there is
+// nothing suspicious left to detect afterwards. See getAnchorMismatchReason.
+function getAnchorBail(
+  stats: Stats,
+  input: TraceChangedFilesInput
+): TraceChangedFilesV2Result | undefined {
+  let mismatch;
+  try {
+    mismatch = getAnchorMismatchReason(stats, input);
+  } catch (error) {
+    const bailSubreason = 'anchorCheckFailed';
+    return {
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          internalError: true,
+          bailSubreason,
+          sentryEventId: captureBailException(error, {
+            bailSubreason,
+            bailPath: 'getAnchorMismatchReason',
+          }),
+        },
+      },
+    };
+  }
+
+  if (!mismatch) return undefined;
+
+  // The evidence only matters to whoever investigates the bail, so it rides on the Sentry scope; the
+  // analytics event carries the subreason.
+  Sentry.setContext('turboSnapAnchorMismatch', {
+    subreason: mismatch.subreason,
+    detail: mismatch.detail,
+    projectRoot: input.projectRoot,
+    statsPath: input.statsPath,
+  });
+
+  return {
+    status: 'bailed',
+    turboSnap: { bailReason: { anchorMismatch: true, bailSubreason: mismatch.subreason } },
+  };
 }
 
 function getPreManifestBail(
@@ -116,6 +195,8 @@ function getPreManifestBail(
  * @param input.staticDirs The project-relative static directories, hashed off disk for the same reason.
  * @param input.staticDirsDeclared Whether the prebuilt Storybook reports that its source config
  * declared static directories.
+ * @param input.builderName The builder named by the project's own Storybook config, used to check the
+ * stats against the anchor; see {@link getAnchorMismatchReason}.
  *
  * @returns The TurboSnap result.
  */
@@ -123,27 +204,9 @@ export async function traceChangedFiles(
   input: TraceChangedFilesInput
 ): Promise<TraceChangedFilesV2Result> {
   const stats = await readStatsFile(input.statsPath);
-  let builderStatsReason;
-  try {
-    builderStatsReason = getUntrustedBuilderStatsReason(stats, input.projectRoot);
-  } catch (error) {
-    const bailSubreason = 'builderCompatibilityCheckFailed';
-    return {
-      status: 'bailed',
-      turboSnap: {
-        bailReason: {
-          internalError: true,
-          bailSubreason,
-          sentryEventId: captureBailException(error, {
-            bailSubreason,
-            bailPath: 'getUntrustedBuilderStatsReason',
-          }),
-        },
-      },
-    };
-  }
-  const preManifestBail = getPreManifestBail(builderStatsReason, input);
-  if (preManifestBail) return preManifestBail;
+
+  const statsBail = getStatsBail(stats, input);
+  if (statsBail) return statsBail;
 
   let manifest;
   try {
