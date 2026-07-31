@@ -123,6 +123,45 @@ describe('serializeManifest', () => {
     // eslint-disable-next-line unicorn/prefer-structured-clone
     expect(JSON.parse(JSON.stringify(serialized))).toEqual(serialized);
   });
+
+  it('prunes dependency references to synthetic nodes after deriving hashes and attribution', async () => {
+    const story = '/repo/packages/ui/src/Button.stories.tsx';
+    const synthetic = 'virtual:bridge';
+    const helper = '/repo/packages/ui/src/helper.ts';
+    const stats: Stats = {
+      modules: [
+        { id: 1, name: story, reasons: [{ moduleName: './storybook-stories.js' }] },
+        { id: 2, name: synthetic, reasons: [{ moduleName: story }] },
+        { id: 3, name: helper, reasons: [{ moduleName: synthetic }] },
+      ],
+    };
+
+    await withSyntheticAbsent(async () => {
+      fileHashesRef.current = { [story]: 'S', [helper]: 'H1' };
+      const before = serializeManifest(await buildManifest(stats, projectRoot, outOfGraph));
+
+      fileHashesRef.current = { [story]: 'S', [helper]: 'H2' };
+      const after = serializeManifest(await buildManifest(stats, projectRoot, outOfGraph));
+
+      for (const file of Object.values(before.files)) {
+        expect(file.dependencies.every((dependency) => dependency in before.files)).toBe(true);
+      }
+
+      // The helper remains part of the complete pre-prune graph used for derived values even though
+      // its synthetic bridge is absent from the serialized graph.
+      expect(after.storyFiles['./src/Button.stories.tsx']).not.toBe(
+        before.storyFiles['./src/Button.stories.tsx']
+      );
+      expect(after.storybookFiles).toEqual(before.storybookFiles);
+      expect(after.storybookHash).not.toBe(before.storybookHash);
+      expect(before.attribution).toEqual({
+        storyReachable: ['./src/Button.stories.tsx', './src/helper.ts'],
+        previewSubtree: [],
+        storybookGlobals: [],
+      });
+      expect(after.attribution).toEqual(before.attribution);
+    });
+  });
 });
 
 describe('buildManifest', () => {
