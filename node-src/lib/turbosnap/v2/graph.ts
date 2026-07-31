@@ -50,11 +50,23 @@ export function rollUpEntryHashes(
   entries: Iterable<[FilePath, FileHash]>,
   h64ToString: (input: string) => string
 ): FileHash {
-  const combined = [...entries]
+  return h64ToString(hashEntryIdentities(entries));
+}
+
+/**
+ * Encodes a set of key/value pairs as one string, sorted so the result doesn't depend on iteration
+ * order. Both the roll-ups and the top-level `storybookHash` gate build on this, so a key change is
+ * as visible as a value change everywhere.
+ *
+ * @param entries The key/value pairs to encode.
+ *
+ * @returns The encoded entries, concatenated.
+ */
+export function hashEntryIdentities(entries: Iterable<[string, string]>): string {
+  return [...entries]
     .map((entry) => hashEntryIdentity(entry))
     .sort()
     .join('');
-  return h64ToString(combined);
 }
 
 /**

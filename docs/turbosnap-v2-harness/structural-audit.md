@@ -169,7 +169,10 @@ and it is preserved by the keying rather than by the roll-up recipe. `manifest.t
   regression is closed at the case that defined it.
 - Case 9 (**autotitle**) is closed as a side effect, as predicted: `storybookHash` mixes story hash
   *values*, and those now move when a story file's path moves, so a rename that changes story IDs no
-  longer reports "Storybook unchanged". This was the whole of the sibling ticket's defect.
+  longer reports "Storybook unchanged". This was the whole of the sibling ticket's defect. That ticket
+  then took the coverage off the roll-up recipe: the gate now mixes each story file's **key** as well
+  as its hash, matching what it already did for `storybookFiles` entries. Redundant while the roll-up
+  stays path-sensitive, and re-measured `CHANGED` on both builders after the change.
 - Case 4 went from recapturing 0 to recapturing everything (via the `./.storybook/preview.ts` entry).
   v1 bails there, so this is over-capture into a case v1 was already blunt about — permitted, not a
   new cost.

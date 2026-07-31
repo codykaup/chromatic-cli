@@ -8,7 +8,7 @@ import {
   collectTransitiveDependencies,
   FileHash,
   FilePath,
-  hashEntryIdentity,
+  hashEntryIdentities,
   rollUpFileHashes,
   TurboSnapFile,
 } from './graph';
@@ -179,17 +179,13 @@ export async function buildManifest(
     storybookFiles.set(key, hash);
   }
 
-  // The backend's top-level "did Storybook change at all?" gate: every story hash plus every
-  // `storybookFiles` entry. Story file paths reach the gate through their roll-ups, which cover each
-  // file's path, so a rename that preserves bytes still moves it; Storybook-wide entries include
-  // their keys as well, so additions and removals are visible before the backend drills into the
-  // maps.
+  // The backend's top-level "did Storybook change at all?" gate: the key and hash of every story
+  // file plus every `storybookFiles` entry, so additions, removals and renames are all visible
+  // before the backend drills into the maps. A story file's path already reaches its roll-up, which
+  // makes including the key redundant; it is here so the gate does not inherit that property from
+  // the roll-up recipe. Keys are project-root-relative, so moving the project still moves nothing.
   const storybookHash = h64ToString(
-    [...storyFileHashes.values()].sort().join('') +
-      [...storybookFiles.entries()]
-        .map((entry) => hashEntryIdentity(entry))
-        .sort()
-        .join('')
+    hashEntryIdentities(storyFileHashes) + hashEntryIdentities(storybookFiles)
   );
 
   // Done after hashing so the graph used above is complete.

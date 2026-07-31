@@ -249,6 +249,42 @@ describe('buildManifest relocation stability', () => {
     expect(after.storybookHash).not.toBe(before.storybookHash);
   });
 
+  it('re-keys a story file and moves the gate when the file is renamed within the project', async () => {
+    // An autotitled story derives its title, and so its story IDs, from its path: moving
+    // `lib/Badge/AutoTitle.stories.tsx` to `lib/Renamed/` renames every story it holds without
+    // changing a byte. The snapshots are keyed by those IDs, so the gate has to move.
+    const helper = '/repo/packages/ui/src/helper.ts';
+    async function manifestWithStoryAt(story: string) {
+      fileHashesRef.current = { [story]: 'S', [helper]: 'H' };
+      return buildManifest(
+        {
+          modules: [
+            { id: 1, name: story, reasons: [{ moduleName: './storybook-stories.js' }] },
+            { id: 2, name: helper, reasons: [{ moduleName: story }] },
+          ],
+        },
+        projectRoot,
+        outOfGraph
+      );
+    }
+
+    const before = await manifestWithStoryAt(
+      '/repo/packages/ui/src/lib/Badge/AutoTitle.stories.tsx'
+    );
+    const after = await manifestWithStoryAt(
+      '/repo/packages/ui/src/lib/Renamed/AutoTitle.stories.tsx'
+    );
+
+    expect([...before.storyFileHashes.keys()]).toEqual(['./src/lib/Badge/AutoTitle.stories.tsx']);
+    expect([...after.storyFileHashes.keys()]).toEqual(['./src/lib/Renamed/AutoTitle.stories.tsx']);
+    // The roll-up covers the story file's own path, so the hash moves under its new key...
+    expect(after.storyFileHashes.get('./src/lib/Renamed/AutoTitle.stories.tsx')).not.toBe(
+      before.storyFileHashes.get('./src/lib/Badge/AutoTitle.stories.tsx')
+    );
+    // ...and the key is part of the gate too, so the rename is doubly visible.
+    expect(after.storybookHash).not.toBe(before.storybookHash);
+  });
+
   it('moves a story hash when a dependency moves within the project', async () => {
     const story = '/repo/packages/ui/src/Button.stories.tsx';
 
