@@ -26,7 +26,9 @@ export default async function getStorybookInfo(
           This await is needed in order to for the catch block
           to get the result in the case that this function fails.
         */
-        return await getStorybookMetadataFromProjectJson(projectJsonPath);
+        const sourceMetadata = await getStorybookMetadata(deps);
+        const prebuiltMetadata = await getStorybookMetadataFromProjectJson(projectJsonPath);
+        return { ...sourceMetadata, ...prebuiltMetadata };
       }
     }
     // Same for this await.
