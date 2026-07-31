@@ -4,7 +4,7 @@ import path from 'path';
 
 import { Context } from '..';
 import wroteReport from '../ui/messages/info/wroteReport';
-import { redact } from './utilities';
+import { redactObject } from './utilities';
 
 const { writeFile } = jsonfile;
 
@@ -56,8 +56,8 @@ export function removeChromaticDiagnostics(ctx: Context) {
  */
 export function getDiagnostics(ctx: Context) {
   // Drop some fields that are not useful to have and redact sensitive fields
-  const { argv, client, env, help, http, log, pkg, title, ...rest } = ctx;
-  const data = redact(rest, 'projectToken', 'reportToken', 'userToken');
+  const { analytics, argv, client, env, help, http, log, pkg, title, ...rest } = ctx;
+  const data = redactObject(rest, 'projectToken', 'reportToken', 'userToken');
 
   // Sort top-level fields alphabetically
   return Object.fromEntries(

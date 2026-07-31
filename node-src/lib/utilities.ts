@@ -80,12 +80,32 @@ export const isPackageLockFile = (filePath: string) =>
 export const isPackageMetadataFile = (filePath: string) =>
   isPackageManifestFile(filePath) || isPackageLockFile(filePath);
 
-export const redact = <T>(value: T, ...fields: string[]): T => {
+export const redact = (value: unknown, ...fields: string[]): unknown => {
   if (value === null || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map((item) => redact(item, ...fields)) as T;
-  const object = { ...value };
+  if (Array.isArray(value)) return value.map((item) => redact(item, ...fields));
+  if (value instanceof Set) return [...value].map((item) => redact(item, ...fields));
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Error) {
+    return redact({ name: value.name, message: value.message, stack: value.stack }, ...fields);
+  }
+  const object: Record<string, unknown> = { ...value };
   for (const key of Object.keys(object)) {
     object[key] = fields.includes(key) ? undefined : redact(object[key], ...fields);
   }
   return object;
 };
+
+/**
+ * Redacts a plain object, keeping it indexable by the caller.
+ *
+ * `redact` returns `unknown` because it also turns Sets and Errors into other shapes. A plain object
+ * always comes back as a plain object, so that narrower contract is asserted here once rather than
+ * at each call site.
+ *
+ * @param value The plain object to redact.
+ * @param fields The field names to redact.
+ *
+ * @returns The redacted object.
+ */
+export const redactObject = (value: object, ...fields: string[]): Record<string, unknown> =>
+  redact(value, ...fields) as Record<string, unknown>;
