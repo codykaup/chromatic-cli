@@ -6,7 +6,7 @@ import { captureBailException } from '../v1/captureBailException';
 import { determineChangedFiles } from './api';
 import { getUntrustedBuilderStatsReason } from './builderViteCompatibility';
 import { traceChangedFiles } from './index';
-import { buildManifest, writeManifest } from './manifest';
+import { buildManifest, countNodeModulesFiles, writeManifest } from './manifest';
 import { getAnchorMismatchReason } from './statsAnchor';
 
 vi.mock('../../../tasks/readStatsFile', () => ({
@@ -28,6 +28,7 @@ vi.mock('./builderViteCompatibility', () => ({
 
 vi.mock('./manifest', () => ({
   buildManifest: vi.fn(),
+  countNodeModulesFiles: vi.fn(),
   writeManifest: vi.fn(),
 }));
 
@@ -64,6 +65,8 @@ beforeEach(() => {
   vi.mocked(getUntrustedBuilderStatsReason).mockReturnValue(undefined);
   vi.mocked(getAnchorMismatchReason).mockReturnValue(undefined);
   vi.mocked(buildManifest).mockResolvedValue(manifest as any);
+  // A healthy graph, matching the `ui` fixture's count. Zero is the only interesting other value.
+  vi.mocked(countNodeModulesFiles).mockReturnValue(30);
   vi.mocked(determineChangedFiles).mockResolvedValue({
     build: { turboSnapStatus: 'APPLIED', turboSnapMechanism: 'HASH_BASED' },
   });
@@ -382,6 +385,47 @@ describe('traceChangedFiles', () => {
       status: 'fallback',
     });
     expect(determineChangedFiles).toHaveBeenCalledWith(input.graphqlClient, 'build-id', staticless);
+  });
+
+  it('bails without uploading when the graph contains no node_modules files', async () => {
+    vi.mocked(countNodeModulesFiles).mockReturnValue(0);
+
+    const result = await traceChangedFiles(input);
+
+    expect(result).toEqual({
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          noNodeModulesFiles: true,
+        },
+      },
+    });
+    expect(determineChangedFiles).not.toHaveBeenCalled();
+    expect(writeManifest).toHaveBeenCalledWith(manifest, '/repo/packages/ui/.chromatic');
+  });
+
+  it('reports the empty config directory rather than the missing dependencies when both hold', async () => {
+    const configless = {
+      ...manifest,
+      outOfGraphFiles: { storybookConfigFiles: new Map(), staticFiles: new Map() },
+    };
+    vi.mocked(buildManifest).mockResolvedValue(configless as any);
+    vi.mocked(countNodeModulesFiles).mockReturnValue(0);
+
+    await expect(traceChangedFiles(input)).resolves.toEqual({
+      status: 'bailed',
+      turboSnap: { bailReason: { noStorybookConfigFiles: true } },
+    });
+  });
+
+  it('reports the missing dependencies rather than the empty graph when both hold', async () => {
+    vi.mocked(buildManifest).mockResolvedValue({ ...manifest, storyFileHashes: new Map() } as any);
+    vi.mocked(countNodeModulesFiles).mockReturnValue(0);
+
+    await expect(traceChangedFiles(input)).resolves.toEqual({
+      status: 'bailed',
+      turboSnap: { bailReason: { noNodeModulesFiles: true } },
+    });
   });
 
   it('bails without uploading when the graph contains no story files', async () => {

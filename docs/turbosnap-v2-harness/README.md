@@ -358,6 +358,38 @@ story count and the `storybookFiles` line together — "0 stories changed" is no
   ⇒ recapture everything). **This asymmetry is not edge loss** — see below.
 - `react/jsx-runtime.js` → **`storyReachable` on both**; an edit recaptures all 3 stories.
 
+### `node_modules` files per fixture (the `noNodeModulesFiles` floor)
+
+Measured 2026-07-31 with `countNodeModulesFiles` itself, over each fixture's committed
+`preview-stats.json`. Content-hashing the `node_modules` files that are in the graph is v2's entire
+dependency coverage, so a graph with **zero** of them covers no dependency change at all — that is
+what the `noNodeModulesFiles` bail detects. This table is the guard's floor: the lowest healthy count
+is **17**, so zero needs no threshold to tune.
+
+| Fixture | Files | Fixture | Files |
+| --- | --- | --- | --- |
+| `ui` | 30 | `ui-sb8` | 17 |
+| `ui-webpack` | 353 | `ui-sb9` | 28 |
+| `ui-rsbuild` | 217 | `ui-sb8-webpack` | 22 |
+| `marketing-ui` | 24 | `ui-sb9-webpack` | 28 |
+| | | `ui-sb8-rsbuild` | 25 |
+| | | `ui-sb9-rsbuild` | 39 |
+
+Two things worth knowing before trusting this table:
+
+- **Vite pre-bundling does not erase them.** The worry that dependency modules disappear into
+  `.vite/deps` under vite is not borne out — all four vite fixtures (`ui`, `marketing-ui`, `ui-sb8`,
+  `ui-sb9`) carry real `node_modules` paths, so the guard cannot fire on a healthy vite project.
+- **3 of `ui-sb8-rsbuild`'s files are the builder's own cache entry** (`node_modules/.cache/
+  storybook-rsbuild-builder/storybook-config-entry.js`) rather than an installed dependency. It still
+  has 19 without them, so the floor holds either way; the guard deliberately does not filter
+  `.cache`, since every filter is a place it could silently stop firing.
+
+Neither of v1's two dependency fail-safes is reachable from this harness — v1's own bail audit
+records both as untestable here — so the guard is **code-decisive rather than measured**. This table
+establishes only that it cannot fire on a healthy fixture; the bail itself is covered by unit tests
+with a synthetic first-party-only stats file.
+
 ### Why `react/index.js` is bucketed on vite but not on webpack
 
 The two builders transpile the same source differently, so their stats truthfully describe two
@@ -384,7 +416,7 @@ harness is wrong.
 > The fixture repo may be edited by concurrent sessions. If a baseline you took earlier disagrees
 > with a fresh one, regenerate the baseline immediately before the probe rather than reusing it.
 
-## Five traps that have already produced wrong conclusions
+## Seven traps that have already produced wrong conclusions
 
 1. **The fixture is shared and gets rebuilt mid-run.** A concurrent `build-storybook` swaps the module
    graph underneath a running probe and silently changes results — `preview-stats.json` changed three
@@ -437,3 +469,18 @@ harness is wrong.
      value — but record it before concluding anything about *which branch* production takes.
    - **Trap 2 on the map still applies:** `require(esm)` behaviour is Node-version dependent, so
      record the Node version in any measurement of config discovery.
+6. **Reading a webpack result about *module names* as though it transferred to vite.** `moduleFileNames`
+   prefers `nameForCondition`, which is the undecorated absolute path, and that is the only reason a
+   loader-decorated name like
+   `../../node_modules/css-loader/dist/cjs.js??ruleSet[1].rules[4].use[1]!./src/lib/PathDerived/styles.module.css`
+   costs nothing on webpack. `nameForCondition` is present on **349/375 `ui-webpack` modules and on zero
+   modules in all four vite packages** — on vite, `name` is a module's only spelling. So "decorated names
+   are harmless" is a webpack fact, not a v2 fact, and the same applies to any conclusion drawn from
+   concatenated-module shapes. Check the builder before generalising.
+7. **Treating the emptiness guards as coverage.** `noStoryFiles`, `noStorybookConfigFiles`,
+   `noStaticFiles` and `unresolvedStaticDirectories` all detect a *specific absence*. They cannot detect a
+   manifest that is complete and **wrong**: anchoring one package's stats at a structurally similar sibling
+   yields 5 stories, 3 config files, every section populated, no bail, and story hashes read off the wrong
+   package. Relatedly, the fixture packages are near-identical siblings, so a wrong-anchor probe shows
+   nothing unless you deliberately diverge their content first. See
+   [`unseen-inputs-audit.html`](./unseen-inputs-audit.html).

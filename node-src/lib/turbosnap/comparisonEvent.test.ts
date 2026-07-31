@@ -152,6 +152,35 @@ describe('createTurboSnapComparisonEvent', () => {
     });
   });
 
+  it('reports a graph with no dependency files in preference to the empty graph', () => {
+    expect(
+      createTurboSnapComparisonEvent({
+        schemaVersion: 1,
+        buildId: 'build-id',
+        mode: 'monitoring',
+        onlyStoryFilesSource: 'V1',
+        v1: { status: 'skipped' },
+        v2: {
+          status: 'bailed',
+          turboSnap: {
+            bailReason: {
+              noNodeModulesFiles: true,
+              noStoryFiles: true,
+            },
+          },
+        },
+      })
+    ).toEqual({
+      schema_version: 1,
+      build_id: 'build-id',
+      mode: 'monitoring',
+      only_story_files_source: 'V1',
+      v1_outcome: 'UNUSED',
+      v2_outcome: 'BAILED',
+      v2_reason: 'noNodeModulesFiles',
+    });
+  });
+
   it('rejects a bailed result that has no analytics reason', () => {
     expect(() =>
       createTurboSnapComparisonEvent({
