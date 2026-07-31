@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Stats } from '../../../types';
-import { buildManifest, serializeManifest } from './manifest';
+import { buildManifest, countNodeModulesFiles, serializeManifest } from './manifest';
 
 vi.mock('fs', async (importOriginal) => ({
   ...(await importOriginal<typeof import('fs')>()),
@@ -1336,6 +1336,51 @@ describe('buildManifest out-of-graph inputs', () => {
     const after = await buildManifest(stats, projectRoot, outOfGraph);
 
     expect(after.storybookHash).not.toBe(before.storybookHash);
+  });
+});
+
+describe('countNodeModulesFiles', () => {
+  it('counts zero for a first-party-only graph', () => {
+    const stats: Stats = {
+      modules: [
+        { id: 1, name: './src/Button.stories.tsx' },
+        { id: 2, name: './src/Button.tsx' },
+        { id: 3, name: './.storybook/preview.ts' },
+      ],
+    };
+
+    expect(countNodeModulesFiles(stats)).toBe(0);
+  });
+
+  it('counts installed dependency files however the builder spells them', () => {
+    const stats: Stats = {
+      // One relative (Vite), one absolute (webpack), one via `nameForCondition` (rspack).
+      modules: [
+        { id: 1, name: './src/Button.tsx' },
+        { id: 2, name: './../../node_modules/@storybook/react/dist/entry-preview.js' },
+        { id: 3, name: '/repo/node_modules/storybook/dist/csf/index.js' },
+        { id: 4, name: 'dependency group', nameForCondition: '/repo/node_modules/react/index.js' },
+      ],
+    };
+
+    expect(countNodeModulesFiles(stats)).toBe(3);
+  });
+
+  it('counts the concatenated children of a dependency group', () => {
+    const stats: Stats = {
+      modules: [
+        {
+          id: 1,
+          name: './../../node_modules/storybook/dist/csf/index.js + 1 modules',
+          modules: [
+            { name: './../../node_modules/storybook/dist/csf/index.js' },
+            { name: './../../node_modules/storybook/dist/csf/toId.js' },
+          ],
+        },
+      ],
+    };
+
+    expect(countNodeModulesFiles(stats)).toBe(2);
   });
 });
 

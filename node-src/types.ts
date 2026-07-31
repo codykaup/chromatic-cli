@@ -559,6 +559,7 @@ interface TurboSnapBailReasonBase {
   noStoryFiles?: true;
   noStorybookConfigFiles?: true;
   noStaticFiles?: true;
+  noNodeModulesFiles?: true;
   unresolvedStaticDirectories?: true;
   indexUnavailable?: true;
   indexContractViolation?: true;

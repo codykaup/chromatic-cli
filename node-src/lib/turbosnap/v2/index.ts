@@ -2,14 +2,14 @@ import * as Sentry from '@sentry/node';
 
 import GraphQLClient from '../../../io/graphqlClient';
 import { readStatsFile } from '../../../tasks/readStatsFile';
-import type { TurboSnapBailReason } from '../../../types';
+import type { Stats, TurboSnapBailReason } from '../../../types';
 import { TraceChangedFilesResult } from '../types';
 import { captureBailException } from '../v1/captureBailException';
 import { isNetworkError } from '../v1/errors';
 import { determineChangedFiles } from './api';
 import { getUntrustedBuilderStatsReason } from './builderViteCompatibility';
 import { classifyUploadHashesFailure } from './classifyUploadHashesFailure';
-import { buildManifest, writeManifest } from './manifest';
+import { buildManifest, countNodeModulesFiles, writeManifest } from './manifest';
 
 interface TraceChangedFilesInput {
   graphqlClient: GraphQLClient;
@@ -41,7 +41,12 @@ function writeDiagnosticManifest(
   }
 }
 
-function getEmptyOutOfGraphBail(
+/**
+ * Bails when a section that should never be empty is empty, which is evidence that the input we
+ * derived is wrong rather than that the project genuinely lacks that input.
+ */
+function getEmptySectionBail(
+  stats: Stats,
   manifest: Parameters<typeof writeManifest>[0],
   staticDirectories: string[],
   outputDirectory: string
@@ -58,6 +63,16 @@ function getEmptyOutOfGraphBail(
     // A configured-but-empty directory deliberately bails in the safe direction rather than sharing
     // the same silent evidence as a missing or unreadable directory.
     bailReason = { noStaticFiles: true };
+  } else if (countNodeModulesFiles(stats) === 0) {
+    // Content-hashing the `node_modules` files that are in the graph is v2's entire dependency
+    // coverage, so a graph containing none of them covers no dependency change at all: an upgrade
+    // would leave the manifest byte-identical and capture nothing. This is the precise condition
+    // under which v1 declares the stats incomplete and bails (`nodeModulesMissingInStats`), except
+    // that reading it needs no changed-file list — it is a self-contained property of the stats.
+    //
+    // Zero is the whole test, with no threshold to tune: the lowest count across the ten harness
+    // fixtures is 17 (`ui-sb8`), and Vite's pre-bundling does not erase them (`ui` has 30).
+    bailReason = { noNodeModulesFiles: true };
   }
 
   if (!bailReason) return undefined;
@@ -168,12 +183,13 @@ export async function traceChangedFiles(
     };
   }
 
-  const emptyOutOfGraphBail = getEmptyOutOfGraphBail(
+  const emptySectionBail = getEmptySectionBail(
+    stats,
     manifest,
     input.staticDirs,
     input.manifestOutputDirectory
   );
-  if (emptyOutOfGraphBail) return emptyOutOfGraphBail;
+  if (emptySectionBail) return emptySectionBail;
 
   // A graph we found no stories in can only ever recapture everything through `<storybookGlobals>`,
   // which is wider than v1. Write the manifest anyway so the degenerate graph is still debuggable.

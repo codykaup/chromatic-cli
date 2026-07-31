@@ -358,6 +358,38 @@ story count and the `storybookFiles` line together — "0 stories changed" is no
   ⇒ recapture everything). **This asymmetry is not edge loss** — see below.
 - `react/jsx-runtime.js` → **`storyReachable` on both**; an edit recaptures all 3 stories.
 
+### `node_modules` files per fixture (the `noNodeModulesFiles` floor)
+
+Measured 2026-07-31 with `countNodeModulesFiles` itself, over each fixture's committed
+`preview-stats.json`. Content-hashing the `node_modules` files that are in the graph is v2's entire
+dependency coverage, so a graph with **zero** of them covers no dependency change at all — that is
+what the `noNodeModulesFiles` bail detects. This table is the guard's floor: the lowest healthy count
+is **17**, so zero needs no threshold to tune.
+
+| Fixture | Files | Fixture | Files |
+| --- | --- | --- | --- |
+| `ui` | 30 | `ui-sb8` | 17 |
+| `ui-webpack` | 353 | `ui-sb9` | 28 |
+| `ui-rsbuild` | 217 | `ui-sb8-webpack` | 22 |
+| `marketing-ui` | 24 | `ui-sb9-webpack` | 28 |
+| | | `ui-sb8-rsbuild` | 25 |
+| | | `ui-sb9-rsbuild` | 39 |
+
+Two things worth knowing before trusting this table:
+
+- **Vite pre-bundling does not erase them.** The worry that dependency modules disappear into
+  `.vite/deps` under vite is not borne out — all four vite fixtures (`ui`, `marketing-ui`, `ui-sb8`,
+  `ui-sb9`) carry real `node_modules` paths, so the guard cannot fire on a healthy vite project.
+- **3 of `ui-sb8-rsbuild`'s files are the builder's own cache entry** (`node_modules/.cache/
+  storybook-rsbuild-builder/storybook-config-entry.js`) rather than an installed dependency. It still
+  has 19 without them, so the floor holds either way; the guard deliberately does not filter
+  `.cache`, since every filter is a place it could silently stop firing.
+
+Neither of v1's two dependency fail-safes is reachable from this harness — v1's own bail audit
+records both as untestable here — so the guard is **code-decisive rather than measured**. This table
+establishes only that it cannot fire on a healthy fixture; the bail itself is covered by unit tests
+with a synthetic first-party-only stats file.
+
 ### Why `react/index.js` is bucketed on vite but not on webpack
 
 The two builders transpile the same source differently, so their stats truthfully describe two
