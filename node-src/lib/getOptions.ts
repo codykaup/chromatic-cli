@@ -315,7 +315,6 @@ export const getPartialOptions = (ctx: InitialContext): Partial<Options> => {
  * @returns An object containing parsed options
  */
 // TODO: refactor this function
-// eslint-disable-next-line complexity
 export default function getOptions(
   ctx: InitialContext,
   partialOptions = getPartialOptions(ctx)
@@ -354,17 +353,7 @@ export default function getOptions(
     process.exit(252);
   }
 
-  const { scripts } = packageJson;
-  if (typeof buildScriptName !== 'string') {
-    buildScriptName = 'build-storybook';
-    if (!scripts[buildScriptName]) {
-      const [key] =
-        Object.entries(scripts as Record<string, string>).find(([, script]) =>
-          script.startsWith('build-storybook')
-        ) || [];
-      if (key) buildScriptName = key;
-    }
-  }
+  buildScriptName = findBuildScriptName(packageJson.scripts as Scripts, buildScriptName);
 
   // The missingBuildScriptName throw that previously lived here has moved to
   // storybookInfo.ts, where it is gated on !isReactNativeApp. It could not remain
@@ -373,4 +362,27 @@ export default function getOptions(
   // getStorybookMetadata reads options.buildScriptName during the storybookInfo task
   // and needs the value resolved before that task runs.
   return { ...options, buildScriptName };
+}
+
+export type Scripts = Record<string, string>;
+
+/**
+ * Resolves the package.json script that builds Storybook.
+ *
+ * Exported so `chromatic turbosnap-manifest` picks the same script a real build would, and therefore
+ * reads the same `-c`/`-s` flags out of it.
+ *
+ * @param scripts The project's package.json scripts.
+ * @param buildScriptName The script name the user asked for, if any.
+ *
+ * @returns The user's script name, or the one that looks like a Storybook build.
+ */
+export function findBuildScriptName(scripts: Scripts = {}, buildScriptName?: string) {
+  if (typeof buildScriptName === 'string') return buildScriptName;
+
+  if (scripts['build-storybook']) return 'build-storybook';
+
+  const [key] =
+    Object.entries(scripts).find(([, script]) => script.startsWith('build-storybook')) || [];
+  return key ?? 'build-storybook';
 }
