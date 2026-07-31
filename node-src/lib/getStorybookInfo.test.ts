@@ -134,6 +134,7 @@ describe('getStorybookInfo', () => {
       expect(await getStorybookInfo(ctx)).toEqual({
         builder: { name: '@storybook/builder-webpack5', packageVersion: expect.any(String) },
         staticDir: ['static'],
+        staticDirsDeclared: true,
         version: expect.any(String),
       });
     });
@@ -146,6 +147,7 @@ describe('getStorybookInfo', () => {
       });
       expect(await getStorybookInfo(ctx)).toEqual({
         builder: { name: '@storybook/builder-webpack5', packageVersion: expect.any(String) },
+        staticDirsDeclared: true,
         version: expect.any(String),
       });
     });
@@ -166,6 +168,7 @@ describe('getStorybookInfo', () => {
       expect(await getStorybookInfo(ctx)).toEqual({
         builder: { name: 'webpack4', packageVersion: '6.5.16' },
         staticDir: ['static'],
+        staticDirsDeclared: true,
         version: '6.5.16',
       });
     });
