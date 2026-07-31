@@ -382,7 +382,7 @@ harness is wrong.
 > The fixture repo may be edited by concurrent sessions. If a baseline you took earlier disagrees
 > with a fresh one, regenerate the baseline immediately before the probe rather than reusing it.
 
-## Four traps that have already produced wrong conclusions
+## Five traps that have already produced wrong conclusions
 
 1. **The fixture is shared and gets rebuilt mid-run.** A concurrent `build-storybook` swaps the module
    graph underneath a running probe and silently changes results — `preview-stats.json` changed three
@@ -408,3 +408,13 @@ harness is wrong.
    defect that does not exist — the real count on webpack is **0**. Normalize both sides with the
    CLI's own `paths.ts` (load it through `cost-lib.mjs`, as `dangling.mjs` does) rather than
    reimplementing it, and `existsSync` before believing a stats path names a real file.
+5. **This harness does not derive v2's inputs the way production does, so it cannot see an
+   input-derivation bug.** `gen.sh` goes through `chromatic turbosnap-manifest`, which finds the
+   Storybook config with `/^main\.[cm]?[jt]sx?$/` and always assumes v7; production uses
+   `/^main\.[jt]sx?$/` and only sets `v7` when `require()` of the config *fails*
+   (`getStorybookMetadata.ts:243-256`). The harness is therefore **more capable than production at
+   exactly the step that fails**: production resolves `staticDirs` for `main.ts` and for nothing else,
+   so `<staticFiles>` is silently absent on `main.js`/`main.mjs`/`main.cjs` projects — and every
+   fixture here uses `main.ts`. The subcommand also never reads the build script's `-c`/`-s`. Any claim
+   about *input derivation* must be measured against `getStorybookMetadata` directly, never through
+   `gen.sh`. See [`input-boundary-audit.html`](./input-boundary-audit.html).

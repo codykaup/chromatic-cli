@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TurboSnap v2 input-boundary audit — where the manifest's inputs go silently wrong</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1d21; --muted: #5d666f; --line: #dfe3e8;
+    --panel: #f7f8fa; --code: #f1f3f5;
+    --ok: #1a7f4b; --ok-bg: #e6f4ec;
+    --miss: #a4262c; --miss-bg: #fbeaea;
+    --over: #8a5a00; --over-bg: #fdf3e2;
+    --unex: #4b5563; --unex-bg: #eef0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a; --fg: #e8eaed; --muted: #9aa3ad; --line: #2c3237;
+      --panel: #1b1f23; --code: #22272c;
+      --ok: #6cd39a; --ok-bg: #14301f;
+      --miss: #ff9b9b; --miss-bg: #3a1a1c;
+      --over: #f0c26b; --over-bg: #362a12;
+      --unex: #aab2bb; --unex-bg: #24292e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1.25rem 5rem;
+    background: var(--bg); color: var(--fg);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 68rem; margin: 0 auto; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .35rem; }
+  h2 { font-size: 1.25rem; margin: 2.75rem 0 .75rem; padding-bottom: .35rem; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 1rem; margin: 1.75rem 0 .5rem; }
+  p, li { max-width: 62rem; }
+  .sub { color: var(--muted); margin: 0 0 1.5rem; font-size: .9rem; }
+  code, kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .86em;
+    background: var(--code); padding: .1em .35em; border-radius: 3px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: .75rem .9rem;
+    overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1rem 0; border: 1px solid var(--line); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; min-width: 52rem; font-size: .87rem; }
+  th, td { text-align: left; vertical-align: top; padding: .5rem .65rem; border-bottom: 1px solid var(--line); }
+  thead th { background: var(--panel); font-weight: 600; white-space: nowrap; position: sticky; top: 0; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .v { display: inline-block; padding: .1rem .45rem; border-radius: 4px; font-size: .78rem;
+    font-weight: 600; white-space: nowrap; }
+  .v-ok { color: var(--ok); background: var(--ok-bg); }
+  .v-miss { color: var(--miss); background: var(--miss-bg); }
+  .v-over { color: var(--over); background: var(--over-bg); }
+  .v-unex { color: var(--unex); background: var(--unex-bg); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--muted);
+    border-radius: 6px; padding: .85rem 1rem; margin: 1.25rem 0; }
+  .panel.warn { border-left-color: var(--miss); }
+  .panel.good { border-left-color: var(--ok); }
+  .panel h3 { margin-top: 0; }
+  .gap { border: 1px solid var(--line); border-radius: 6px; padding: .9rem 1.1rem; margin: 1.1rem 0; background: var(--panel); }
+  .gap header { display: flex; flex-wrap: wrap; gap: .6rem; align-items: baseline; margin-bottom: .4rem; }
+  .gap h3 { margin: 0; font-size: 1rem; }
+  .sev { font-size: .72rem; font-weight: 700; letter-spacing: .04em; padding: .15rem .45rem; border-radius: 4px; }
+  .sev-p1 { color: var(--miss); background: var(--miss-bg); }
+  .sev-p2 { color: var(--over); background: var(--over-bg); }
+  .sev-p3 { color: var(--unex); background: var(--unex-bg); }
+  .tag { font-size: .72rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: .12rem .4rem; }
+  dl.kv { margin: .5rem 0 0; }
+  dl.kv dt { font-weight: 600; font-size: .82rem; color: var(--muted); margin-top: .55rem; text-transform: uppercase; letter-spacing: .03em; }
+  dl.kv dd { margin: .15rem 0 0; }
+  ul.tight { margin: .4rem 0; padding-left: 1.3rem; }
+  ul.tight li { margin: .2rem 0; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 2.5rem 0; }
+  .footnote { font-size: .85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>TurboSnap v2 input-boundary audit</h1>
+<p class="sub">
+  Independent pass, 2026-07-31 · <code>chromatic-cli@cody/turbosnap-v2</code> (<code>499487d0</code>) · fixtures
+  <code>~/Projects/turbosnap-monorepo@main</code>, clean tree · CLI rebuilt with <code>yarn build</code> before every
+  measurement (trap 1).
+</p>
+
+<div class="panel">
+  <h3>Read this first</h3>
+  <p>
+    The two prior audits and the structural probe cover the algorithm: <em>given</em> a stats file, a project root, a
+    config dir and a list of static dirs, does the manifest attribute correctly? They answer yes, comprehensively.
+    This audit deliberately does not re-tread that. It asks the question one layer out:
+    <strong>are those four inputs what v2 thinks they are, and what happens when they are not?</strong>
+  </p>
+  <p>
+    That is where the remaining holes are. Every finding below is a case where v2 produces a
+    <em>well-formed, plausible, wrong</em> manifest — or fails the build — without emitting any signal at all. The
+    algorithm is not at fault in any of them; the input derivation and the absence of "I expected to find something
+    and found nothing" guards are.
+  </p>
+  <p>
+    <strong>Method.</strong> Behavioural throughout, per <em>Agreed design 6</em>. Nothing is read off a written
+    manifest to establish reachability. Every claim below is either (a) a measured manifest diff, (b) a measured
+    property of a real fixture stats file, or (c) a code path with the citation given and the reachability stated
+    honestly — including where I could not establish it.
+  </p>
+</div>
+
+<h2>Findings at a glance</h2>
+
+<div class="scroll">
+<table>
+<thead>
+<tr><th>#</th><th>Finding</th><th>Class</th><th>Status</th><th>Sev</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td>F1</td>
+  <td><code>&lt;staticFiles&gt;</code> is silently absent for every <code>main.*</code> filename except <code>main.ts</code></td>
+  <td>under-capture, silent</td>
+  <td><span class="v v-miss">measured, two ways</span></td>
+  <td><span class="sev sev-p1">P1</span></td>
+</tr>
+<tr>
+  <td>F2</td>
+  <td>An out-of-graph section that resolves to zero files is omitted with no bail and no warning</td>
+  <td>missing guard</td>
+  <td><span class="v v-miss">code-decisive</span></td>
+  <td><span class="sev sev-p1">P1</span></td>
+</tr>
+<tr>
+  <td>F3</td>
+  <td>A <code>BuildUploadHashesFailure</code> response is discarded — no bail, no reason, no Sentry event</td>
+  <td>contract violation</td>
+  <td><span class="v v-miss">code-decisive</span></td>
+  <td><span class="sev sev-p1">P1</span></td>
+</tr>
+<tr>
+  <td>F4</td>
+  <td>v2 aims a <em>write</em> mutation at the <strong>baseline</strong> build, not the announced one</td>
+  <td>sequencing hazard</td>
+  <td><span class="v v-miss">code-decisive</span></td>
+  <td><span class="sev sev-p1">P1</span></td>
+</tr>
+<tr>
+  <td>F5</td>
+  <td>The harness derives v2's inputs differently from production — which is what hid F1</td>
+  <td>measurement validity</td>
+  <td><span class="v v-miss">code-decisive</span></td>
+  <td><span class="sev sev-p1">P1</span></td>
+</tr>
+<tr>
+  <td>F6</td>
+  <td>An inner concatenated-module file can be hashed but attributed nowhere; editing it changes nothing</td>
+  <td>under-capture, latent</td>
+  <td><span class="v v-miss">measured, synthetic</span></td>
+  <td><span class="sev sev-p2">P2</span></td>
+</tr>
+<tr>
+  <td>F7</td>
+  <td><code>ctx.build.id</code> is dereferenced before any <code>try</code> and can fail a build v1 would survive</td>
+  <td>robustness</td>
+  <td><span class="v v-over">code path, reachability unproven</span></td>
+  <td><span class="sev sev-p2">P2</span></td>
+</tr>
+<tr>
+  <td>F8</td>
+  <td>Prebuilt Storybooks (<code>--storybook-build-dir</code>) lose both out-of-graph sections</td>
+  <td>under-capture, silent</td>
+  <td><span class="v v-miss">code-decisive</span></td>
+  <td><span class="sev sev-p2">P2</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p>
+  Five previously-unmeasured risks were also <strong>closed as safe</strong>, and three claims on the record are
+  <strong>corrected</strong>. Both sets are in <a href="#closed">Closed as safe</a> and
+  <a href="#corrections">Corrections to the record</a>.
+</p>
+
+<hr>
+
+<h2>The findings</h2>
+
+<div class="gap" id="f1">
+<header>
+  <h3>F1 — <code>&lt;staticFiles&gt;</code> is silently absent for every <code>main.*</code> filename except <code>main.ts</code></h3>
+  <span class="sev sev-p1">P1</span>
+  <span class="tag">under-capture</span>
+  <span class="tag">measured</span>
+</header>
+
+<p>
+  <code>staticDirs</code> reaches v2 as <code>ctx.storybook?.staticDir ?? []</code>
+  (<code>node-src/lib/turbosnap/index.ts:63</code>). That value is only ever populated by
+  <code>findStaticDirectories</code>, which returns <code>{}</code> unless <code>v7</code> is true
+  (<code>node-src/lib/getStorybookMetadata.ts:195</code>). And <code>v7</code> is set true in exactly one place: the
+  AST branch of <code>getStorybookMetadata</code>, which is reached <em>only when <code>require()</code> of the
+  config fails</em>, and which then locates the file with
+  <code>/^main\.[jt]sx?$/</code> (<code>getStorybookMetadata.ts:243-256</code>).
+</p>
+<p>Two independent consequences fall out of that single <code>v7</code> flag:</p>
+<ul class="tight">
+  <li>a config that <strong>requires successfully</strong> leaves <code>v7 = false</code> — so it is parsed, and then its <code>staticDirs</code> are thrown away;</li>
+  <li>a config whose filename the regex <strong>does not match</strong> (<code>.mjs</code>, <code>.cjs</code>) is never found at all.</li>
+</ul>
+
+<dl class="kv">
+<dt>Measured — real <code>getStorybookMetadata</code>, one temp project per filename</dt>
+<dd>
+<pre><code>RESULT main.ts        staticDir=["public","assets"]  builder=undefined
+RESULT main.js        staticDir=undefined            builder=undefined
+RESULT main.mjs       staticDir=undefined            builder={"name":"unknown","packageVersion":"0"}
+RESULT main.cjs       staticDir=undefined            builder={"name":"unknown","packageVersion":"0"}
+RESULT main.js (cjs)  staticDir=undefined            builder=undefined</code></pre>
+</dd>
+<dt>Confirmed again in plain Node — branch selection per filename, no test runner in the way</dt>
+<dd>
+<pre><code>main.ts   esm  require=FAIL(MODULE_NOT_FOUND)  astRegexMatch=true   =&gt; v7=true   staticDirsRead=true
+main.js   esm  require=OK                      astRegexMatch=true   =&gt; v7=false  staticDirsRead=false
+main.js   cjs  require=OK                      astRegexMatch=true   =&gt; v7=false  staticDirsRead=false
+main.mjs  esm  require=FAIL(MODULE_NOT_FOUND)  astRegexMatch=false  =&gt; v7=false  staticDirsRead=false
+main.cjs  cjs  require=FAIL(MODULE_NOT_FOUND)  astRegexMatch=false  =&gt; v7=false  staticDirsRead=false</code></pre>
+</dd>
+</dl>
+
+<p>
+  <code>main.ts</code> is the only one of the five that works. Note the middle row: an <strong>ESM</strong>
+  <code>main.js</code> used to fail <code>require()</code> and therefore took the working AST branch. On Node ≥ 22,
+  <code>require(esm)</code> succeeds, so it now takes the <code>v7 = false</code> branch instead. That coverage was
+  lost to a Node runtime upgrade, with no code change and no signal.
+</p>
+<p>
+  Downstream, <code>staticDirs: []</code> means <code>hashOutOfGraphFiles</code> walks nothing,
+  <code>staticFiles</code> is an empty map, and <code>rollUpOutOfGraphFiles</code> omits the section entirely
+  (<code>outOfGraphFiles.ts:124</code>). The manifest carries <strong>no <code>&lt;staticFiles&gt;</code> key at
+  all</strong> — indistinguishable from a project that has no static dirs. Every static asset add, edit, delete and
+  rename is invisible.
+</p>
+
+<div class="panel warn">
+  <h3>Why this matters more than the accepted gap it resembles</h3>
+  <p>
+    The map already accepts <em>"<code>staticDirs</code> unresolvable is indistinguishable from no
+    <code>staticDirs</code>, and v1 is equally blind."</em> The parity half of that is <strong>correct and I
+    confirmed it</strong>: with <code>staticDirectories</code> empty, v1's <code>isStaticFile</code> matches nothing
+    (<code>v1/getDependentStoryFiles.ts:214-215</code>), and <code>traceName</code> then returns silently because a
+    static asset is not a module and <code>namesById.get(undefined)</code> is undefined
+    (<code>:305-308</code>). So this is <strong>not</strong> an <em>Agreed design 2</em> violation.
+  </p>
+  <p>
+    What is new is the <strong>trigger</strong>. The gap was accepted on the understanding that it fires when
+    <code>staticDirs</code> is <em>unresolvable</em> — an exotic state. It actually fires on an ordinary config
+    filename choice, including the two most common non-TypeScript ones. And it is
+    <strong><code>&lt;staticFiles&gt;</code>' whole reason for existing</strong> that is off: that section was built
+    specifically so v2 beats v1 here rather than tying with it.
+  </p>
+  <p>
+    <strong>All ten fixtures use <code>main.ts</code></strong> (verified: <code>packages/*/.storybook/main.*</code>).
+    So 100% of the static-coverage evidence on the record — the four <code>attribution-matrix.sh</code> D-rows, all
+    five <code>static-identity-probe.sh</code> cases, the <code>staticDirs</code> served-URL decision — was gathered
+    under the one filename that resolves static dirs at all.
+  </p>
+</div>
+</div>
+
+<div class="gap" id="f2">
+<header>
+  <h3>F2 — an out-of-graph section that resolves to zero files is omitted with no bail and no warning</h3>
+  <span class="sev sev-p1">P1</span>
+  <span class="tag">missing guard</span>
+  <span class="tag">highest leverage</span>
+</header>
+<p>
+  <code>listFilesRecursively</code> swallows every failure and returns <code>[]</code> — a missing directory, an
+  unreadable one, a broken symlink (<code>outOfGraphFiles.ts:180-194</code>). That is the right call in isolation and
+  is documented as deliberate. <code>rollUpOutOfGraphFiles</code> then drops any section with no files
+  (<code>:124</code>). Composed, the two mean <strong>"I looked and there was nothing there" and "there was nothing
+  to look for" produce byte-identical manifests</strong>.
+</p>
+<p>For <code>&lt;staticFiles&gt;</code> that ambiguity is accepted. For <code>&lt;storybookConfig&gt;</code> it should not be:</p>
+<ul class="tight">
+  <li>a real Storybook <em>always</em> has a non-empty config directory, so zero files is near-proof of a mis-derived <code>configDir</code>;</li>
+  <li><code>configDir</code> is <code>ctx.options?.storybookConfigDir ?? ctx.storybook?.configDir ?? '.storybook'</code> (<code>turbosnap/index.ts:62</code>), and the middle term comes <em>only</em> from parsing <code>-c</code> out of the package.json build script (<code>getStorybookMetadata.ts:124-135</code>) — never from <code>main.*</code>;</li>
+  <li>the entire metadata read is best-effort: <code>getStorybookInfo</code> catches everything and returns <code>{}</code> (<code>getStorybookInfo.ts:34-37</code>);</li>
+  <li>so a project with a custom config dir whose metadata parse failed silently hashes a non-existent <code>.storybook</code>, emits no <code>&lt;storybookConfig&gt;</code> entry, and loses <code>main.*</code> and <code>preview.*</code> byte coverage.</li>
+</ul>
+<p>
+  There is also a derivation mismatch that produces the same outcome without any parse failure:
+  <code>findStaticDirectories</code> resolves static dirs relative to
+  <code>deps.options.storybookConfigDir ?? '.storybook'</code> (<code>getStorybookMetadata.ts:229,264</code>), while
+  v2 prefers <code>ctx.storybook.configDir</code> from the build script. A build script with <code>-c ./config</code>
+  and no <code>--storybook-config-dir</code> therefore hashes <code>&lt;root&gt;/config</code> for the config section
+  while the static dirs were resolved under <code>.storybook/</code> — pointing at paths that do not exist, which
+  <code>listFilesRecursively</code> swallows.
+</p>
+<p>
+  This is the highest-leverage fix on the list. A guard that bails when <code>&lt;storybookConfig&gt;</code> resolves
+  to zero files converts F1, F2, F8 and the <code>-c</code> mismatch from four separate silent blind spots into one
+  named, auditable bail — and it is in the safe direction, so it cannot under-capture.
+</p>
+</div>
+
+<div class="gap" id="f3">
+<header>
+  <h3>F3 — a <code>BuildUploadHashesFailure</code> response is discarded</h3>
+  <span class="sev sev-p1">P1</span>
+  <span class="tag">contract violation</span>
+</header>
+<p>
+  <code>determineChangedFiles</code> returns <code>result.buildUploadHashes</code> — a union that carries either
+  <code>build</code> (success) or <code>errors</code> (failure) — and <strong>never throws on the failure member</strong>
+  (<code>v2/api.ts:70-82</code>). The caller discards the return value entirely:
+  <code>await determineChangedFiles(input.graphqlClient, input.buildId, manifest)</code>
+  (<code>v2/index.ts:133</code>). The surrounding <code>try</code> only catches a <em>thrown</em> error, which is a
+  transport failure.
+</p>
+<p>
+  So a server-side rejection is indistinguishable from success: no bail, no named reason, no Sentry event, and
+  <code>indexUnavailable</code> never fires. The CLI⇄Index contract decided on the predecessor map requires the
+  opposite — the three self-inflicted cases (<code>InvalidStoryFileHashes</code>,
+  <code>InvalidUploadHashesBuildStatus</code>, and a response matching <em>neither</em> union member) must capture to
+  Sentry under distinct fingerprints, while network and timeout failures only log. Today all three are silent, and
+  the "neither union member" case is exactly the one the contract singles out as
+  <em>"indistinguishable from success"</em>.
+</p>
+<p class="footnote">
+  Related and worth stating on the record: <code>api.ts</code> still queries <code>turboSnapMechanism</code> and its
+  doc comment still describes the Index <em>writing</em> <code>onlyStoryFiles</code> onto the build. The settled
+  contract renames the field <code>onlyStoryFilesSource</code> and has the Index <em>return</em> its list and write
+  nothing. That drift is expected — consumption is a separate ticket — but the mutation shape is what F4 depends on.
+</p>
+</div>
+
+<div class="gap" id="f4">
+<header>
+  <h3>F4 — v2 aims a write mutation at the <em>baseline</em> build</h3>
+  <span class="sev sev-p1">P1</span>
+  <span class="tag">sequencing hazard</span>
+</header>
+<p>
+  <code>buildId: ctx.build.id</code> (<code>turbosnap/index.ts:56</code>), and the comment above it says plainly:
+  <em>"The current mutation writes to the build. Keep targeting the baseline until the settled return-only Index
+  contract lands."</em> At prepare time <code>ctx.build</code> is the <strong>baseline / ancestor</strong> build,
+  assigned from <code>gitInfo</code>'s output (<code>gitInfo.ts:444</code>, from
+  <code>baselineBuilds.sort(...)[0]</code> at <code>:329</code>); it is only overwritten with the real build much
+  later, in <code>snapshot.ts:268</code>.
+</p>
+<p>
+  This is inert <em>today</em> — the deployed mutation returns <code>Boolean</code> and #11644 is unmerged. It stops
+  being inert the moment the Index ships the write. At that point a monitoring-only run, which by contract
+  <em>influences no build</em>, writes <code>onlyStoryFiles</code> and <code>turboSnapStatus</code> onto somebody's
+  <strong>ancestor</strong> build — corrupting the baseline that later builds compare against, from a code path whose
+  entire premise is that it is observation-only.
+</p>
+<p>
+  The ordering constraint this implies is worth writing down explicitly on the successor map: the target must move to
+  the announced build <strong>before or with</strong> the Index write landing, and the two cannot be sequenced
+  independently.
+</p>
+</div>
+
+<div class="gap" id="f5">
+<header>
+  <h3>F5 — the harness derives v2's inputs differently from production</h3>
+  <span class="sev sev-p1">P1</span>
+  <span class="tag">measurement validity</span>
+</header>
+<p>
+  Every harness script goes through <code>gen.sh</code> → <code>chromatic turbosnap-manifest</code>
+  (<code>bin-src/turbosnapManifest.ts</code>). That subcommand calls <code>buildManifest</code> directly and derives
+  the four inputs <strong>itself</strong>, and it does so differently from
+  <code>compareChangedFiles</code>:
+</p>
+<div class="scroll">
+<table>
+<thead><tr><th>Input</th><th>Production (<code>turbosnap/index.ts</code>)</th><th>Harness (<code>turbosnapManifest.ts</code>)</th><th>Effect</th></tr></thead>
+<tbody>
+<tr>
+  <td>main config regex</td>
+  <td><code>/^main\.[jt]sx?$/</code> (<code>getStorybookMetadata.ts:245</code>)</td>
+  <td><code>/^main\.[cm]?[jt]sx?$/</code> (<code>:128</code>)</td>
+  <td><span class="v v-miss">hides F1</span> — harness finds <code>main.mjs</code>/<code>main.cjs</code> that production cannot</td>
+</tr>
+<tr>
+  <td><code>v7</code> / parse path</td>
+  <td>require-then-AST; <code>v7</code> only in the AST branch</td>
+  <td>always passes <code>true</code> (<code>:134</code>)</td>
+  <td><span class="v v-miss">hides F1</span> — harness never takes the <code>v7 = false</code> branch</td>
+</tr>
+<tr>
+  <td>build-script flags</td>
+  <td>merges <code>-c</code> and <code>-s</code> from the package.json build script</td>
+  <td>never reads them (<code>:69-96</code>)</td>
+  <td><span class="v v-over">divergent</span> — hides the <code>-c</code> mismatch in F2</td>
+</tr>
+<tr>
+  <td><code>projectRoot</code></td>
+  <td><code>resolve(gitRoot, storybook.baseDir)</code>, baseDir defaulting to cwd-relative-to-git-root</td>
+  <td><code>resolve(gitRoot, flags.storybookBaseDir)</code>, defaulting to <code>'.'</code> (<code>:67,89</code>)</td>
+  <td><span class="v v-unex">benign here</span> — harness always passes <code>-b</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>
+  The first two rows are why F1 went unnoticed through two audits: the harness is <em>more</em> capable than
+  production at exactly the step that fails. This does not invalidate the algorithm findings — those are all
+  downstream of the inputs, and the fixtures feed both paths the same values. It does mean
+  <strong>no harness result can be read as evidence about input derivation</strong>, and the static and config
+  coverage claims need the F1 caveat attached.
+</p>
+</div>
+
+<div class="gap" id="f6">
+<header>
+  <h3>F6 — an inner concatenated-module file can be hashed but attributed nowhere</h3>
+  <span class="sev sev-p2">P2</span>
+  <span class="tag">under-capture, latent</span>
+  <span class="tag">measured</span>
+</header>
+<p>
+  <code>buildManifest</code> creates a <code>files</code> entry via <code>ensureFile</code> for the concatenation
+  root and for every <em>importer</em>, but the other files inside a concatenated module are added only as
+  <code>dependencies</code> of the root — they never get an entry of their own
+  (<code>manifest.ts:146-154</code>). Meanwhile <code>collectStorybookFiles</code> derives the
+  <code>&lt;storybookGlobals&gt;</code> catch-all by filtering <code>files.keys()</code>
+  (<code>storybookFiles.ts:77-80</code>).
+</p>
+<p>
+  So the catch-all is closed over <code>files</code>, not over <code>hashes</code>. When a concatenated module's root
+  is itself an orphan global, its inner files are in <em>none</em> of the three attribution homes — not
+  story-reachable, not in a preview subtree, not in the bucket — and their hashes are rolled into nothing.
+</p>
+<dl class="kv">
+<dt>Measured — synthetic stats, real files on disk, real <code>buildManifest</code></dt>
+<dd>
+<pre><code>files keys:          [ './src/lib/Badge/Badge.stories.tsx', './src/__probe/orphanRoot.tsx' ]
+storyReachable:      [ './src/lib/Badge/Badge.stories.tsx' ]
+previewSubtree:      [ ]
+storybookGlobals:    [ './src/__probe/orphanRoot.tsx' ]
+hiddenInner attributed?   false
+hiddenInner in files?     false
+orphanRoot.dependencies:  [ './src/__probe/hiddenInner.tsx' ]   &lt;-- dangling
+
+edit hiddenInner.tsx, rebuild manifest
+=&gt; manifest BYTE-IDENTICAL   (silent under-capture)</code></pre>
+</dd>
+<dt>Reachability on real fixtures</dt>
+<dd>
+<p>
+  Not live. On every webpack and rspack fixture, each inner concatenated file <em>also</em> appears as a
+  <code>reason</code> somewhere, so it picks up a <code>files</code> entry incidentally and lands in the bucket
+  correctly. But the class is one stats shape away — <strong>3 to 5 concatenated modules per fixture already have
+  their root in <code>&lt;storybookGlobals&gt;</code></strong>:
+</p>
+<pre><code>ui-webpack       concatModulesWhoseRootIsAGlobal= 3  ofThoseWithUnsavedInnerFiles= 0  danglingDepRefs= 0
+ui-sb9-webpack   concatModulesWhoseRootIsAGlobal= 3  ofThoseWithUnsavedInnerFiles= 0  danglingDepRefs= 0
+ui-sb8-webpack   concatModulesWhoseRootIsAGlobal= 1  ofThoseWithUnsavedInnerFiles= 0  danglingDepRefs= 0
+ui-rsbuild       concatModulesWhoseRootIsAGlobal= 5  ofThoseWithUnsavedInnerFiles= 0  danglingDepRefs= 0
+ui-sb9-rsbuild   concatModulesWhoseRootIsAGlobal= 2  ofThoseWithUnsavedInnerFiles= 0  danglingDepRefs= 0
+ui-sb8-rsbuild   concatModulesWhoseRootIsAGlobal= 2  ofThoseWithUnsavedInnerFiles= 0  danglingDepRefs= 0</code></pre>
+<p>
+  Webpack concatenates <code>node_modules</code> aggressively and the bucket is mostly <code>node_modules</code>, so
+  the two populations overlap by construction; the fixtures are simply too small for one to land in the other.
+</p>
+</dd>
+</dl>
+<div class="panel warn">
+  <h3>The same mechanism falsifies a stated invariant</h3>
+  <p>
+    The pruning ticket records that <em>"serialization is closed over <code>files</code>"</em>.
+    <code>pruneSyntheticFiles</code> drops a dependency when it is missing from <strong><code>hashes</code></strong>
+    (<code>manifest.ts:342</code>) — not when it is missing from <code>files</code>. A real file with no
+    <code>files</code> entry therefore survives as a dangling reference, which the probe above shows directly
+    (<code>orphanRoot.dependencies</code> names a path that is not a key). Measured <code>danglingDepRefs = 0</code>
+    across all six concatenating fixtures, so the invariant currently holds — <strong>by luck, not by
+    construction</strong>. A one-line assertion in <code>manifest.test.ts</code> would pin it.
+  </p>
+</div>
+</div>
+
+<div class="gap" id="f7">
+<header>
+  <h3>F7 — <code>ctx.build.id</code> is dereferenced before any <code>try</code></h3>
+  <span class="sev sev-p2">P2</span>
+  <span class="tag">robustness</span>
+</header>
+<p>
+  <code>compareChangedFiles</code> reads <code>ctx.build.id</code> while assembling v2's input
+  (<code>turbosnap/index.ts:56</code>), outside every guard. <code>ctx.build</code> is assigned conditionally —
+  <code>if (output.build) ctx.build = ...</code> (<code>gitInfo.ts:444</code>) — from
+  <code>baselineBuilds.sort(...)[0]</code>, which is <code>undefined</code> for an empty array
+  (<code>:329</code>). In that same branch <code>git.changedFiles</code> is set to <code>[]</code>, which is
+  <strong>truthy</strong> and so passes the <code>if (!ctx.git.changedFiles) return</code> guard at <code>:30</code>,
+  and no <code>bailReason</code> is set. A <code>TypeError</code> there propagates out of
+  <code>compareChangedFiles</code> and <code>tasks/prepare/traceChangedFiles.ts:87-94</code> rethrows it as
+  "Could not retrieve dependent story files" — <strong>failing the build, with v1 never running</strong>.
+</p>
+<p>
+  <strong>Stated honestly: I could not prove reachability.</strong> <code>parentCommits</code> is derived from
+  commits that <em>have</em> builds, so an empty <code>baselineBuilds</code> alongside a non-empty
+  <code>parentCommits</code> requires <code>getBaselineBuilds</code> to filter everything out, which I did not manage
+  to construct. What is certain is the asymmetry: <strong>v1 never touches <code>ctx.build</code></strong>, so this
+  is a build-failure mode that exists only because v2 runs, in a phase whose contract says v2 must never fail a
+  build. The guard is two lines.
+</p>
+<p class="footnote">
+  For completeness, I checked the other candidate: <code>readStatsFile</code> at <code>v2/index.ts:59</code> is also
+  outside every <code>try</code>, and <code>index.test.ts:85-96</code> deliberately pins that a v2 stats-read failure
+  fails the build rather than falling back. That one is <strong>parity, not a defect</strong> — v1 reads the same file
+  just as unguarded at <code>v1/index.ts:87</code>, so the outcome is identical either way, and a missing stats file
+  is a terminal user error by decision. No ticket.
+</p>
+</div>
+
+<div class="gap" id="f8">
+<header>
+  <h3>F8 — prebuilt Storybooks lose both out-of-graph sections</h3>
+  <span class="sev sev-p2">P2</span>
+  <span class="tag">under-capture, silent</span>
+</header>
+<p>
+  With <code>--storybook-build-dir</code> and a <code>project.json</code> present,
+  <code>getStorybookInfo</code> short-circuits to <code>getStorybookMetadataFromProjectJson</code>
+  (<code>getStorybookInfo.ts:21-30</code>), which returns <strong>only</strong> <code>{ version, builder }</code>
+  (<code>getPrebuiltStorybookMetadata.ts:46-49</code>). No <code>configDir</code>, no <code>staticDir</code>. So v2
+  gets <code>configDir = '.storybook'</code> (usually right, silently wrong for a custom config dir) and
+  <code>staticDirs = []</code> — the F1 outcome, reached by a different route, on what is a very common CI shape.
+</p>
+<p>
+  This is the same missing guard as F2, and F2's fix covers the <code>&lt;storybookConfig&gt;</code> half of it. The
+  <code>&lt;staticFiles&gt;</code> half needs either a static-dir source that survives the prebuilt path or an
+  explicit, recorded acceptance.
+</p>
+</div>
+
+<hr>
+
+<h2 id="closed">Closed as safe — five previously-unmeasured risks</h2>
+
+<p>
+  Each of these was on the record as untested, untestable or code-read only. All five are now measured, and all five
+  are fine. Recording them is the point: they should not be re-audited.
+</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>Risk</th><th>Prior status</th><th>Measurement</th><th>Verdict</th></tr></thead>
+<tbody>
+<tr>
+  <td><strong>Partial story-index loss.</strong> The zero-story guard only fires at exactly 0. What if 1 of 5 stories is detected?</td>
+  <td>"no such fixture state exists; needs a fixture or synthetic stats test" — the one guard with zero measurement</td>
+  <td>Synthetic stats: 5 real story files, only <code>Badge</code> reachable from the stories entry</td>
+  <td><span class="v v-ok">safe</span> The other four land in <code>&lt;storybookGlobals&gt;</code>, so any edit to them moves the catch-all and forces a full recapture. Over-capture in the safe direction, not a miss.</td>
+</tr>
+<tr>
+  <td><strong>Story keys vs <code>importPath</code>.</strong> <code>paths.ts:11-15</code> asserts manifest story keys are byte-identical to Storybook's <code>importPath</code> — the property that lets the Index write them into <code>onlyStoryFiles</code>.</td>
+  <td>Asserted from code, never measured</td>
+  <td><code>storyFiles</code> keys vs <code>storybook-static/index.json</code> <code>entries[].importPath</code>, all 10 fixtures</td>
+  <td><span class="v v-ok">exact</span> 0 indexed-but-missing, 0 manifest-but-unindexed on all 9 story-detecting fixtures. <code>ui-rsbuild</code> is 3/0 for the known zero-story reason.</td>
+</tr>
+<tr>
+  <td><strong><code>moduleFileNames</code> "root first".</strong> The code takes <code>module.modules[0]</code> as the concatenation root and treats the rest as its dependencies, ignoring <code>module.name</code>.</td>
+  <td>Comment only; webpack documents no such ordering</td>
+  <td>Compared <code>modules[0]</code> against <code>name</code>/<code>nameForCondition</code> minus the suffix, every concatenated module on 3 webpack fixtures</td>
+  <td><span class="v v-ok">holds</span> 0 of 18 mismatched. Unenforced but true; deriving the root from <code>module.name</code> instead would remove the assumption for free.</td>
+</tr>
+<tr>
+  <td><strong>Is the builder-vite gate silently inert?</strong> <code>isBuilderViteStats</code> looks for a module name containing <code>@storybook/builder-vite/</code>. If the unpatched builder omits those, the gate never fires and unpatched vite is trusted.</td>
+  <td>Never probed; the gate's premise depends on it</td>
+  <td>Replicated <code>isBuilderViteStats</code> against all 10 fixture stats files</td>
+  <td><span class="v v-ok">fires</span> <code>true</code> on all four vite fixtures <em>including the unpatched <code>marketing-ui</code> control</em>, <code>false</code> on all six webpack/rspack. The signal is the <code>/virtual:/@storybook/builder-vite/*</code> entry names, which both builders emit.</td>
+</tr>
+<tr>
+  <td><strong>First-party files in the bucket.</strong> A first-party file in <code>&lt;storybookGlobals&gt;</code> means attribution failed and any edit to it recaptures everything.</td>
+  <td>Claimed for 3 fixtures; rspack silently absent from the claim</td>
+  <td><code>attribution.storybookGlobals</code> filtered for non-<code>node_modules</code> paths, all 10 fixtures</td>
+  <td><span class="v v-ok">zero on 9</span> Extends the claim from 3 fixtures to 9. <code>ui-rsbuild</code> has 7, all explained by its zero-story detection.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<hr>
+
+<h2 id="corrections">Corrections to the record</h2>
+
+<div class="panel">
+  <h3>1. There are ten fixtures, not four — and six have never been audited</h3>
+  <p>
+    Both audits and both maps work from four fixtures (<code>ui</code>, <code>ui-webpack</code>,
+    <code>marketing-ui</code>, <code>ui-rsbuild</code>). The repo has ten: the six Storybook-version variants
+    <code>ui-sb8</code>, <code>ui-sb9</code>, <code>ui-sb8-webpack</code>, <code>ui-sb9-webpack</code>,
+    <code>ui-sb8-rsbuild</code>, <code>ui-sb9-rsbuild</code> are absent from every report. I generated manifests for
+    all ten; the six new ones are structurally sound, which is itself a useful result — it means
+    <code>resolveStorybookVersion</code>'s <code>@storybook/core</code> fallback and the Storybook 8 entry-file names
+    in <code>STORIES_ENTRY_FILES</code> both work, neither of which had been exercised.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>2. "rspack currently indexes 0 stories" is true of one fixture, not of rspack</h3>
+  <p>
+    The out-of-scope rationale for rspack on both maps rests on this claim. Measured:
+    <code>ui-sb8-rsbuild</code> and <code>ui-sb9-rsbuild</code> each detect <strong>2 story files</strong>, produce a
+    complete <code>storyFiles</code> map that matches <code>index.json</code> exactly, and put
+    <strong>zero</strong> first-party files in the bucket. Only <code>ui-rsbuild</code> detects 0.
+  </p>
+  <p>
+    So the zero-story failure is specific to that fixture's configuration or version, not to the builder. rspack
+    stays out of scope by decision and I am not reopening it — but the <em>reason</em> recorded for that decision is
+    no longer accurate, and the predecessor's unclaimed "verify/fix rspack story-detection against bare entry names"
+    ticket now has a working control to diff against.
+  </p>
+</div>
+
+<div class="panel">
+  <h3>3. <code>marketing-ui</code> has no graph-rolled <code>preview.*</code> entry at all</h3>
+  <p>
+    Nine of ten fixtures carry a <code>./.storybook/preview.ts</code> key in <code>storybookFiles</code>.
+    <code>marketing-ui</code> carries none — its <code>preview.ts</code> is empty (0 bytes) and never becomes a
+    module, so there is no subtree to roll up. Its bytes are still covered by <code>&lt;storybookConfig&gt;</code>,
+    and files it would have imported would fall into the bucket, so <strong>coverage is intact</strong>.
+  </p>
+  <p>
+    The correction is to the framing: <code>preview.*</code>'s "double coverage" is described on the record as
+    load-bearing redundancy, and on the unpatched-vite control it is not redundant at all —
+    <code>&lt;storybookConfig&gt;</code> is carrying it alone. Any future change that narrows the config section
+    needs to know that.
+  </p>
+</div>
+
+<hr>
+
+<h2>Method notes and what this audit did not cover</h2>
+<ul class="tight">
+  <li>
+    <strong>Traps observed.</strong> <code>yarn build</code> was re-run before the first measurement and no harness
+    script was invoked against a stale <code>dist</code> (trap 1). No fixture file was left modified — the
+    <code>src/__probe/</code> directory used for F6 was created and removed, and
+    <code>git status</code> was verified clean afterwards (trap 3). No raw stats name was compared against a module
+    name without normalizing both sides with the same logic the code uses (trap 5). <code>marketing-ui</code> was
+    read but never rebuilt (trap 4).
+  </li>
+  <li>
+    <strong>Synthetic stats are the new instrument here.</strong> F6 and the partial-index measurement both use a
+    hand-written <code>preview-stats.json</code> fed through <code>turbosnap-manifest -s</code> against real files on
+    disk. That reaches graph shapes no fixture produces and no rebuild can be coaxed into producing, and it is
+    considerably cheaper than a Storybook rebuild. It is the right tool for the remaining unmeasured guards, and
+    F5 is the caveat that comes with it.
+  </li>
+  <li>
+    <strong>Not covered.</strong> The algorithm itself, which the prior audits cover. Cost. rspack. The Index's half
+    of anything. Whether <code>&lt;storybookGlobals&gt;</code> over-capture matters in practice, which still needs a
+    story depending on neither React nor the Storybook runtime. A story that renders a static asset by URL, which
+    would make the static-identity consequence observable for the first time. The four pre-algorithm bail reasons,
+    which still need synthetic git history.
+  </li>
+  <li>
+    <strong>Not chased.</strong> <code>collectTransitiveDependencies</code> is recursive
+    (<code>graph.ts:93-108</code>), so its stack depth is the longest dependency chain in the graph. Fine at 1962
+    modules; I did not establish where it breaks, and I do not think it is worth establishing until something
+    suggests it matters.
+  </li>
+</ul>
+
+<p class="footnote" style="margin-top:2.5rem">
+  Report: <code>docs/turbosnap-v2-harness/input-boundary-audit.html</code>. Tickets chartered on
+  <em>TurboSnap 2.0 — Final Phase</em>.
+</p>
+
+</main>
+</body>
+</html>
