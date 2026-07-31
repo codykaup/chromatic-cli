@@ -556,6 +556,7 @@ interface TurboSnapBailReasonBase {
   changedStorybookVersion?: true;
   untrustedBuilderStats?: true;
   noStoryFiles?: true;
+  noStorybookConfigFiles?: true;
   indexUnavailable?: true;
   indexContractViolation?: true;
   internalError?: true;

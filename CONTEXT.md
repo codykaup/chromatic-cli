@@ -60,6 +60,12 @@ _Avoid_: Unsupported builder
 A manifest condition in which TurboSnap recognizes no story files in the builder graph. It does not
 assert whether the project truly has no stories or the graph failed to expose them.
 
+**No Storybook config files**:
+A manifest condition in which the Storybook configuration directory v2 was handed resolved to zero
+files. It describes the input v2 received, not the project: a real Storybook always has a non-empty
+configuration directory, so the derivation of that directory is what the condition indicts.
+_Avoid_: Missing Storybook config
+
 **Index unavailable**:
 A condition in which the CLI cannot obtain a TurboSnap answer from the Index after the request's
 retry policy is exhausted. It describes communication availability, not the validity of a response.

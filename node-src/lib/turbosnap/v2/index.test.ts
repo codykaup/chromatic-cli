@@ -46,6 +46,10 @@ const input = {
 const manifest = {
   storybookHash: 'hash',
   storyFileHashes: new Map([['./src/Button.stories.tsx', 'story-hash']]),
+  outOfGraphFiles: {
+    storybookConfigFiles: new Map([['.storybook/main.ts', 'config-hash']]),
+    staticFiles: new Map(),
+  },
 };
 
 beforeEach(() => {
@@ -172,8 +176,43 @@ describe('traceChangedFiles', () => {
     expect(determineChangedFiles).not.toHaveBeenCalled();
   });
 
+  it('bails without uploading when the config directory resolves to zero files', async () => {
+    const configless = {
+      ...manifest,
+      outOfGraphFiles: { storybookConfigFiles: new Map(), staticFiles: new Map() },
+    };
+    vi.mocked(buildManifest).mockResolvedValue(configless as any);
+
+    const result = await traceChangedFiles(input);
+
+    expect(result).toEqual({
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          noStorybookConfigFiles: true,
+        },
+      },
+    });
+    expect(determineChangedFiles).not.toHaveBeenCalled();
+    expect(writeManifest).toHaveBeenCalledWith(configless, '/repo/packages/ui/.chromatic');
+  });
+
+  it('reports the empty config directory rather than the empty graph when both hold', async () => {
+    const empty = {
+      ...manifest,
+      storyFileHashes: new Map(),
+      outOfGraphFiles: { storybookConfigFiles: new Map(), staticFiles: new Map() },
+    };
+    vi.mocked(buildManifest).mockResolvedValue(empty as any);
+
+    await expect(traceChangedFiles(input)).resolves.toEqual({
+      status: 'bailed',
+      turboSnap: { bailReason: { noStorybookConfigFiles: true } },
+    });
+  });
+
   it('bails without uploading when the graph contains no story files', async () => {
-    const storyless = { storybookHash: 'hash', storyFileHashes: new Map() };
+    const storyless = { ...manifest, storyFileHashes: new Map() };
     vi.mocked(buildManifest).mockResolvedValue(storyless as any);
 
     const result = await traceChangedFiles(input);
@@ -191,7 +230,7 @@ describe('traceChangedFiles', () => {
   });
 
   it('preserves the no-story bail when writing its diagnostic manifest fails', async () => {
-    const storyless = { storybookHash: 'hash', storyFileHashes: new Map() };
+    const storyless = { ...manifest, storyFileHashes: new Map() };
     const error = new Error('disk is read-only');
     vi.mocked(buildManifest).mockResolvedValue(storyless as any);
     vi.mocked(writeManifest).mockImplementation(() => {

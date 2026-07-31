@@ -115,6 +115,23 @@ export async function traceChangedFiles(
     };
   }
 
+  // A real Storybook always has a non-empty config directory, so resolving zero files there says the
+  // input derivation is wrong rather than that the project has no config. Without this guard the
+  // `<storybookConfig>` entry is simply omitted, making "we looked and found nothing" byte-identical
+  // to "there was nothing to look for". Checked before the no-story guard because a misderived
+  // `configDir` is the more actionable diagnosis when both hold.
+  if (manifest.outOfGraphFiles.storybookConfigFiles.size === 0) {
+    writeDiagnosticManifest(manifest, input.manifestOutputDirectory);
+    return {
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          noStorybookConfigFiles: true,
+        },
+      },
+    };
+  }
+
   // A graph we found no stories in can only ever recapture everything through `<storybookGlobals>`,
   // which is wider than v1. Write the manifest anyway so the degenerate graph is still debuggable.
   if (manifest.storyFileHashes.size === 0) {
