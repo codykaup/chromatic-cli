@@ -1,7 +1,7 @@
 import path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { traceChangedFiles } from '.';
+import { compareChangedFiles, traceChangedFiles } from '.';
 import { traceChangedFiles as traceChangedFilesV1 } from './v1';
 import { traceChangedFiles as traceChangedFilesV2 } from './v2';
 
@@ -20,8 +20,9 @@ function makeContext(overrides: { rootPath?: string; baseDir?: string }) {
     git: { changedFiles: ['./src/Button.tsx'], rootPath: overrides.rootPath },
     fileInfo: { statsPath: '/tmp/stats.json' },
     client: {},
-    build: { id: '1' },
+    build: { id: 'baseline-build' },
     sourceDir: '/repo/project',
+    log: { info: vi.fn(), error: vi.fn() },
     storybook: overrides.baseDir ? { baseDir: overrides.baseDir } : undefined,
   } as any;
 }
@@ -50,6 +51,18 @@ describe('traceChangedFiles', () => {
     expect(result).toStrictEqual({ status: 'skipped' });
   });
 
+  it('copies a pre-algorithm bail into both monitoring results', async () => {
+    const turboSnap = { bailReason: { noAncestorBuild: true as const } };
+    const ctx = { git: {}, turboSnap } as any;
+
+    await expect(compareChangedFiles(ctx)).resolves.toEqual({
+      v1: { status: 'bailed', turboSnap },
+      v2: { status: 'bailed', turboSnap },
+    });
+    expect(traceChangedFilesV1).not.toHaveBeenCalled();
+    expect(traceChangedFilesV2).not.toHaveBeenCalled();
+  });
+
   it('throws if stats file is not found', async () => {
     const packageMetadataChanges = [{ changedFiles: ['./package.json'], commit: 'abcdef' }];
     const ctx = {
@@ -69,11 +82,61 @@ describe('traceChangedFiles', () => {
     expect(ctx.turboSnap.bailReason).toBeUndefined();
   });
 
+  it('does not let v1 replace a v2 stats read failure with a bail', async () => {
+    const ctx = makeContext({ rootPath: '/repo' });
+    const error = new Error('stats file is unreadable');
+    vi.mocked(traceChangedFilesV2).mockRejectedValue(error);
+    vi.mocked(traceChangedFilesV1).mockResolvedValue({
+      status: 'bailed',
+      turboSnap: { bailReason: { changedPackageFiles: ['./package.json'] } },
+    });
+
+    await expect(traceChangedFiles(ctx)).rejects.toBe(error);
+    expect(traceChangedFilesV1).not.toHaveBeenCalled();
+  });
+
+  it('keeps v1 authoritative when v2 bails', async () => {
+    const ctx = makeContext({ rootPath: '/repo' });
+    const v1Result = {
+      status: 'traced' as const,
+      onlyStoryFiles: { button: ['./src/Button.stories.tsx'] },
+      turboSnap: {},
+      untracedFiles: [],
+    };
+    vi.mocked(traceChangedFilesV2).mockResolvedValue({
+      status: 'bailed',
+      turboSnap: { bailReason: { noStoryFiles: true } },
+    });
+    vi.mocked(traceChangedFilesV1).mockResolvedValue(v1Result);
+
+    await expect(traceChangedFiles(ctx)).resolves.toBe(v1Result);
+    expect(traceChangedFilesV1).toHaveBeenCalledWith(ctx);
+  });
+
+  it('exposes both ordinary algorithm results for monitoring', async () => {
+    const ctx = makeContext({ rootPath: '/repo' });
+    const v1 = {
+      status: 'traced' as const,
+      onlyStoryFiles: { button: ['./src/Button.stories.tsx'] },
+      turboSnap: {},
+      untracedFiles: [],
+    };
+    const v2 = {
+      status: 'bailed' as const,
+      turboSnap: { bailReason: { noStoryFiles: true as const } },
+    };
+    vi.mocked(traceChangedFilesV2).mockResolvedValue(v2);
+    vi.mocked(traceChangedFilesV1).mockResolvedValue(v1);
+
+    await expect(compareChangedFiles(ctx)).resolves.toEqual({ v1, v2 });
+  });
+
   describe('projectRoot resolution', () => {
     beforeEach(() => {
       vi.mocked(traceChangedFilesV2).mockReset();
       vi.mocked(traceChangedFilesV2).mockResolvedValue({ status: 'skipped' });
       vi.mocked(traceChangedFilesV1).mockReset();
+      vi.mocked(traceChangedFilesV1).mockResolvedValue({ status: 'skipped' });
     });
 
     it('resolves projectRoot from git.rootPath + storybook.baseDir', async () => {

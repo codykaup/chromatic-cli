@@ -552,8 +552,19 @@ interface TurboSnapBailReasonBase {
   changedStorybookFiles?: string[];
   changedStaticFiles?: string[];
   changedExternalFiles?: string[];
+  changedStorybookGlobals?: true;
+  changedStorybookVersion?: true;
+  untrustedBuilderStats?: true;
+  noStoryFiles?: true;
+  indexUnavailable?: true;
+  indexContractViolation?: true;
+  internalError?: true;
   noAncestorBuild?: true;
   rebuild?: true;
+  bailSubreason?: TurboSnapBailSubreason;
+  builderName?: string;
+  builderVersion?: string;
+  sentryEventId?: string;
 }
 
 export type TurboSnapChangedPackageFilesSubreason =
@@ -571,7 +582,15 @@ export type TurboSnapInvalidChangedFilesSubreason =
 
 export type TurboSnapBailSubreason =
   | TurboSnapChangedPackageFilesSubreason
-  | TurboSnapInvalidChangedFilesSubreason;
+  | TurboSnapInvalidChangedFilesSubreason
+  | 'packageNotFound'
+  | 'invalidVersion'
+  | 'unsupportedVersion'
+  | 'invalidStoryFileHashes'
+  | 'invalidBuildStatus'
+  | 'invalidResponse'
+  | 'builderCompatibilityCheckFailed'
+  | 'manifestBuildFailed';
 
 // All additional fields allowed for the `changedPackageFiles` bail reason
 export type ChangedPackageFilesBailReason = TurboSnapBailReasonBase & {

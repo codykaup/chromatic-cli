@@ -8,18 +8,31 @@ import { traceChangedFiles as traceChangedFilesV1 } from './v1';
 import { traceChangedFiles as traceChangedFilesV2 } from './v2';
 
 /**
- * Determines which story files are affected by the changed git files, bailing out of TurboSnap
- * when necessary.
+ * Runs both TurboSnap algorithms for monitoring while keeping V1 authoritative.
  *
  * @param ctx The context set when executing the CLI.
  *
- * @returns The TurboSnap result.
+ * @returns Both ordinary algorithm results when V2 produced one.
  */
 // TODO: Refactor this function
 // eslint-disable-next-line complexity
-export async function traceChangedFiles(ctx: Context): Promise<TraceChangedFilesResult> {
-  if (!ctx.turboSnap || ctx.turboSnap.unavailable) return { status: 'skipped' };
-  if (!ctx.git.changedFiles) return { status: 'skipped' };
+export async function compareChangedFiles(
+  ctx: Context
+): Promise<{ v1: TraceChangedFilesResult; v2?: TraceChangedFilesResult }> {
+  if (!ctx.turboSnap) {
+    const skipped = { status: 'skipped' as const };
+    return { v1: skipped, v2: skipped };
+  }
+  if (ctx.turboSnap.unavailable) {
+    const unavailable = { status: 'skipped' as const, turboSnap: ctx.turboSnap };
+    return { v1: unavailable, v2: unavailable };
+  }
+  if (!ctx.git.changedFiles) {
+    const shared = ctx.turboSnap.bailReason
+      ? ({ status: 'bailed', turboSnap: ctx.turboSnap } as const)
+      : ({ status: 'skipped' } as const);
+    return { v1: shared, v2: shared };
+  }
   if (!ctx.fileInfo?.statsPath) {
     // If we don't know the SB version, we should assume we don't support `--stats-json`
     const nonLegacyStatsSupported =
@@ -29,32 +42,42 @@ export async function traceChangedFiles(ctx: Context): Promise<TraceChangedFiles
     throw new Error(missingStatsFile({ legacy: !nonLegacyStatsSupported }));
   }
 
-  try {
-    // Anchor at the Storybook base directory when we know it. Without a base directory (e.g. a
-    // non-monorepo where Storybook lives at `<repo>/.storybook`), fall back to the repo root, and
-    // only to the current working directory when even the repo root is unknown.
-    const projectRoot = ctx.git.rootPath
-      ? path.resolve(ctx.git.rootPath, ctx.storybook?.baseDir ?? '.')
-      : process.cwd();
-    const result = await traceChangedFilesV2({
-      graphqlClient: ctx.client,
-      buildId: ctx.build.id,
-      statsPath: ctx.fileInfo.statsPath,
-      manifestOutputDirectory: path.join(ctx.sourceDir, '.chromatic'),
-      projectRoot,
-      // The config and static directories are project-relative, matching how v1 reads them. An
-      // explicit --storybook-config-dir wins over the discovered one, as it does in v1.
-      configDir: ctx.options?.storybookConfigDir ?? ctx.storybook?.configDir ?? '.storybook',
-      staticDirs: ctx.storybook?.staticDir ?? [],
-    });
+  let v2: TraceChangedFilesResult | undefined;
+  // Anchor at the Storybook base directory when we know it. Without a base directory (e.g. a
+  // non-monorepo where Storybook lives at `<repo>/.storybook`), fall back to the repo root, and
+  // only to the current working directory when even the repo root is unknown.
+  const projectRoot = ctx.git.rootPath
+    ? path.resolve(ctx.git.rootPath, ctx.storybook?.baseDir ?? '.')
+    : process.cwd();
+  const result = await traceChangedFilesV2({
+    graphqlClient: ctx.client,
+    // The current mutation writes to the build. Keep targeting the baseline until the settled
+    // return-only Index contract lands; its consumption ticket will switch this to announcedBuild.
+    buildId: ctx.build.id,
+    statsPath: ctx.fileInfo.statsPath,
+    manifestOutputDirectory: path.join(ctx.sourceDir, '.chromatic'),
+    projectRoot,
+    // The config and static directories are project-relative, matching how v1 reads them. An
+    // explicit --storybook-config-dir wins over the discovered one, as it does in v1.
+    configDir: ctx.options?.storybookConfigDir ?? ctx.storybook?.configDir ?? '.storybook',
+    staticDirs: ctx.storybook?.staticDir ?? [],
+  });
 
-    if (result.status !== 'fallback') return result;
-    if (result.reason) {
-      ctx.log.info(`TurboSnap v2 unavailable: ${result.reason}; falling back to v1`);
-    }
-  } catch (error) {
-    ctx.log.error('Error running TurboSnap v2, falling back to v1:', error);
+  if (result.status === 'bailed') {
+    ctx.log.info('TurboSnap v2 bailed; running TurboSnap v1');
+  } else if (result.status === 'fallback') {
+    ctx.log.info('TurboSnap v2 could not produce a result; running TurboSnap v1');
+  } else {
+    v2 = result;
   }
+  if (result.status === 'bailed') v2 = result;
 
-  return await traceChangedFilesV1(ctx);
+  const v1 = await traceChangedFilesV1(ctx);
+  return { v1, ...(v2 && { v2 }) };
+}
+
+/** Returns the V1 result that remains authoritative while V2 runs in monitoring mode. */
+export async function traceChangedFiles(ctx: Context): Promise<TraceChangedFilesResult> {
+  const { v1 } = await compareChangedFiles(ctx);
+  return v1.status === 'skipped' ? { status: 'skipped' } : v1;
 }

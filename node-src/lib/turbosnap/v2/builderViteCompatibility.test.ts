@@ -3,7 +3,7 @@ import { createRequire } from 'module';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Stats } from '../../../types';
-import { getBuilderViteFallbackReason } from './builderViteCompatibility';
+import { getUntrustedBuilderStatsReason } from './builderViteCompatibility';
 
 vi.mock('module', () => ({
   createRequire: vi.fn(),
@@ -51,45 +51,61 @@ beforeEach(() => {
   mockReadFileSync.mockReturnValue(JSON.stringify({ version: '10.6.0-alpha.3' }));
 });
 
-describe('getBuilderViteFallbackReason', () => {
-  it('does not fall back for non-Vite stats', () => {
-    expect(getBuilderViteFallbackReason(webpackStats(), projectRoot)).toBeUndefined();
+describe('getUntrustedBuilderStatsReason', () => {
+  it('does not bail for non-Vite stats', () => {
+    expect(getUntrustedBuilderStatsReason(webpackStats(), projectRoot)).toBeUndefined();
   });
 
-  it('falls back for known-invalid builder-vite versions', () => {
-    expect(getBuilderViteFallbackReason(viteStats(), projectRoot)).toContain(
-      '@storybook/builder-vite@10.6.0-alpha.3'
-    );
+  it('classifies a known-invalid builder-vite version', () => {
+    expect(getUntrustedBuilderStatsReason(viteStats(), projectRoot)).toEqual({
+      reason: 'untrustedBuilderStats',
+      subreason: 'unsupportedVersion',
+      builderName: '@storybook/builder-vite',
+      builderVersion: '10.6.0-alpha.3',
+    });
+  });
+
+  it('classifies a non-semver builder-vite version', () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({ version: 'workspace:next' }));
+
+    expect(getUntrustedBuilderStatsReason(viteStats(), projectRoot)).toEqual({
+      reason: 'untrustedBuilderStats',
+      subreason: 'invalidVersion',
+      builderName: '@storybook/builder-vite',
+      builderVersion: 'workspace:next',
+    });
   });
 
   it('resolves builder-vite from the Storybook project root', () => {
-    getBuilderViteFallbackReason(viteStats(), projectRoot);
+    getUntrustedBuilderStatsReason(viteStats(), projectRoot);
 
     expect(mockCreateRequire).toHaveBeenCalledWith('/repo/packages/ui/package.json');
     expect(mockResolve).toHaveBeenCalledWith('@storybook/builder-vite/package.json');
   });
 
-  it('does not fall back once the stats are from a known-fixed builder-vite', () => {
+  it('does not bail once the stats are from a known-fixed builder-vite', () => {
     mockReadFileSync.mockReturnValue(JSON.stringify({ version: '10.6.0-alpha.4' }));
 
-    expect(getBuilderViteFallbackReason(viteStats(), projectRoot)).toBeUndefined();
+    expect(getUntrustedBuilderStatsReason(viteStats(), projectRoot)).toBeUndefined();
   });
 
-  it('does not fall back when the builder stats are explicitly trusted', () => {
+  it('does not bail when the builder stats are explicitly trusted', () => {
     vi.stubEnv('CHROMATIC_TURBOSNAP_TRUST_BUILDER_STATS', '1');
 
-    expect(getBuilderViteFallbackReason(viteStats(), projectRoot)).toBeUndefined();
+    expect(getUntrustedBuilderStatsReason(viteStats(), projectRoot)).toBeUndefined();
 
     vi.unstubAllEnvs();
   });
 
-  it('falls back when Vite stats are detected but builder-vite cannot be resolved', () => {
+  it('bails when Vite stats are detected but builder-vite cannot be resolved', () => {
     mockResolve.mockImplementation(() => {
       throw new Error('Cannot find module');
     });
 
-    expect(getBuilderViteFallbackReason(viteStats(), projectRoot)).toContain(
-      'could not resolve @storybook/builder-vite'
-    );
+    expect(getUntrustedBuilderStatsReason(viteStats(), projectRoot)).toEqual({
+      reason: 'untrustedBuilderStats',
+      subreason: 'packageNotFound',
+      builderName: '@storybook/builder-vite',
+    });
   });
 });

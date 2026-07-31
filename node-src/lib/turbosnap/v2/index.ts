@@ -1,8 +1,12 @@
+import * as Sentry from '@sentry/node';
+
 import GraphQLClient from '../../../io/graphqlClient';
 import { readStatsFile } from '../../../tasks/readStatsFile';
 import { TraceChangedFilesResult } from '../types';
+import { captureBailException } from '../v1/captureBailException';
+import { isNetworkError } from '../v1/errors';
 import { determineChangedFiles } from './api';
-import { getBuilderViteFallbackReason } from './builderViteCompatibility';
+import { getUntrustedBuilderStatsReason } from './builderViteCompatibility';
 import { buildManifest, writeManifest } from './manifest';
 
 interface TraceChangedFilesInput {
@@ -19,9 +23,20 @@ interface TraceChangedFilesInput {
  * The result of running TurboSnap v2. In addition to the shared trace statuses, v2 can return
  * 'fallback' to tell the caller it can't be trusted to trace this build and v1 should run instead.
  */
-export type TraceChangedFilesV2Result =
-  | TraceChangedFilesResult
-  | { status: 'fallback'; reason?: string };
+export type TraceChangedFilesV2Result = TraceChangedFilesResult | { status: 'fallback' };
+
+function writeDiagnosticManifest(
+  manifest: Parameters<typeof writeManifest>[0],
+  outputDirectory: string
+) {
+  try {
+    writeManifest(manifest, outputDirectory);
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { turbo_snap_v2_diagnostic: 'writeManifest' },
+    });
+  }
+}
 
 /**
  * Determines which story files are affected by the changed source file hashes, bailing out of
@@ -42,29 +57,93 @@ export async function traceChangedFiles(
   input: TraceChangedFilesInput
 ): Promise<TraceChangedFilesV2Result> {
   const stats = await readStatsFile(input.statsPath);
-  // TODO: rename this. We want it to be as generic as possible.
-  const fallbackReason = getBuilderViteFallbackReason(stats, input.projectRoot);
-  if (fallbackReason) {
-    return { status: 'fallback', reason: fallbackReason };
+  let builderStatsReason;
+  try {
+    builderStatsReason = getUntrustedBuilderStatsReason(stats, input.projectRoot);
+  } catch (error) {
+    const bailSubreason = 'builderCompatibilityCheckFailed';
+    return {
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          internalError: true,
+          bailSubreason,
+          sentryEventId: captureBailException(error, {
+            bailSubreason,
+            bailPath: 'getUntrustedBuilderStatsReason',
+          }),
+        },
+      },
+    };
+  }
+  if (builderStatsReason) {
+    return {
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          untrustedBuilderStats: true,
+          bailSubreason: builderStatsReason.subreason,
+          builderName: builderStatsReason.builderName,
+          ...(builderStatsReason.builderVersion && {
+            builderVersion: builderStatsReason.builderVersion,
+          }),
+        },
+      },
+    };
   }
 
-  const manifest = await buildManifest(stats, input.projectRoot, {
-    configDir: input.configDir,
-    staticDirs: input.staticDirs,
-  });
+  let manifest;
+  try {
+    manifest = await buildManifest(stats, input.projectRoot, {
+      configDir: input.configDir,
+      staticDirs: input.staticDirs,
+    });
+  } catch (error) {
+    const bailSubreason = 'manifestBuildFailed';
+    return {
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          internalError: true,
+          bailSubreason,
+          sentryEventId: captureBailException(error, {
+            bailSubreason,
+            bailPath: 'buildManifest',
+          }),
+        },
+      },
+    };
+  }
 
   // A graph we found no stories in can only ever recapture everything through `<storybookGlobals>`,
   // which is wider than v1. Write the manifest anyway so the degenerate graph is still debuggable.
   if (manifest.storyFileHashes.size === 0) {
-    writeManifest(manifest, input.manifestOutputDirectory);
+    writeDiagnosticManifest(manifest, input.manifestOutputDirectory);
     return {
-      status: 'fallback',
-      reason: 'no story files were found in the Storybook module graph',
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          noStoryFiles: true,
+        },
+      },
     };
   }
 
-  await determineChangedFiles(input.graphqlClient, input.buildId, manifest);
-  writeManifest(manifest, input.manifestOutputDirectory);
+  try {
+    await determineChangedFiles(input.graphqlClient, input.buildId, manifest);
+  } catch (error) {
+    writeDiagnosticManifest(manifest, input.manifestOutputDirectory);
+    return {
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          indexUnavailable: true,
+          ...(isNetworkError(error) && { bailSubreason: 'networkError' as const }),
+        },
+      },
+    };
+  }
+  writeDiagnosticManifest(manifest, input.manifestOutputDirectory);
 
   // Until we want to lean on the v2 output, we always fallback to v1.
   return { status: 'fallback' };
