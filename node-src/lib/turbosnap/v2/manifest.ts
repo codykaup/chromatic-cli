@@ -136,7 +136,7 @@ export async function buildManifest(
     // (which is imported by an entry but has no on-disk file).
     if (
       hashes.has(sourceFilePath) &&
-      rawImporters.some((importer) => storyImporters.has(importer))
+      rawImporters.some((importer) => storyImporters.has(stripConcatenatedModuleSuffix(importer)))
     ) {
       storyFileNames.add(sourceFilePath);
     }
@@ -300,7 +300,7 @@ function collectStoryImporters(
       (reason) =>
         reason.moduleName && entryFiles.has(stripConcatenatedModuleSuffix(reason.moduleName))
     );
-    if (importedByEntry) storyImporters.add(module.name);
+    if (importedByEntry) storyImporters.add(stripConcatenatedModuleSuffix(module.name));
   }
   return storyImporters;
 }

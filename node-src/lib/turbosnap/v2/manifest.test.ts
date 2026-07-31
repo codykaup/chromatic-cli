@@ -495,6 +495,25 @@ describe('buildManifest concatenated modules', () => {
   });
 });
 
+describe('buildManifest suffix-equivalent story importer identity', () => {
+  it('serializes the same manifest when only the story-entry reason gains a concatenation suffix', async () => {
+    const story = '/repo/packages/ui/src/Button.stories.tsx';
+    const stats = (storyImporter: string): Stats => ({
+      modules: [{ id: 1, name: story, reasons: [{ moduleName: storyImporter }] }],
+    });
+    fileHashesRef.current = { [story]: 'S' };
+
+    const plain = serializeManifest(
+      await buildManifest(stats('./storybook-stories.js'), projectRoot, outOfGraph)
+    );
+    const concatenated = serializeManifest(
+      await buildManifest(stats('./storybook-stories.js + 1 modules'), projectRoot, outOfGraph)
+    );
+
+    expect(concatenated).toEqual(plain);
+  });
+});
+
 describe('buildManifest concatenated modules with rspack-style child names', () => {
   // rspack labels a concatenated child's `name` with the parent group name (e.g.
   // `./Button.stories.tsx + 1 modules`) rather than the child's own file. The real path is only in
@@ -659,6 +678,27 @@ describe('buildManifest story detection through a require-context', () => {
       const manifest = await buildManifest(stats, projectRoot, outOfGraph);
       const keys = [...manifest.storyFileHashes.keys()];
       expect(keys.some((key) => key.includes('lazy'))).toBe(false);
+    });
+  });
+
+  it('serializes the same manifest when only the require-context identity gains a concatenation suffix', async () => {
+    await withGlobAbsent(async () => {
+      const statsWithContext = (storyImporter: string): Stats => ({
+        modules: [
+          { id: 1, name: storyImporter, reasons: [{ moduleName: './storybook-stories.js' }] },
+          { id: 2, name: story, reasons: [{ moduleName: storyImporter }] },
+        ],
+      });
+      fileHashesRef.current = { [story]: 'S' };
+
+      const plain = serializeManifest(
+        await buildManifest(statsWithContext(glob), projectRoot, outOfGraph)
+      );
+      const concatenated = serializeManifest(
+        await buildManifest(statsWithContext(`${glob} + 1 modules`), projectRoot, outOfGraph)
+      );
+
+      expect(concatenated).toEqual(plain);
     });
   });
 });
