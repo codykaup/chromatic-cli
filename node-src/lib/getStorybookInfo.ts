@@ -23,11 +23,14 @@ export default async function getStorybookInfo(
       // This test makes sure we fall through if the file does not exist.
       if (pathExistsSync(projectJsonPath)) {
         /*
-          This await is needed in order to for the catch block
-          to get the result in the case that this function fails.
+          These awaits are needed in order to for the catch block
+          to get the result in the case that either function fails.
         */
-        const sourceMetadata = await getStorybookMetadata(deps);
-        const prebuiltMetadata = await getStorybookMetadataFromProjectJson(projectJsonPath);
+        const [sourceMetadata, prebuiltMetadata] = await Promise.all([
+          getStorybookMetadata(deps),
+          getStorybookMetadataFromProjectJson(projectJsonPath),
+        ]);
+        // The prebuilt project.json wins: it records what the Storybook was actually built with.
         return { ...sourceMetadata, ...prebuiltMetadata };
       }
     }
