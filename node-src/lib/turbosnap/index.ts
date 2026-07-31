@@ -42,22 +42,6 @@ export async function compareChangedFiles(
     throw new Error(missingStatsFile({ legacy: !nonLegacyStatsSupported }));
   }
 
-  // `ctx.build` is the baseline build and is only assigned when the Index returned one, so it can be
-  // missing here even though `git.changedFiles` is a (possibly empty) array that passes the guard
-  // above. v2's mutation targets that build, so without it v2 has nothing to trace against.
-  if (!ctx.build) {
-    ctx.log.info('TurboSnap v2 has no baseline build to trace against; running TurboSnap v1');
-    return {
-      v1: await traceChangedFilesV1(ctx),
-      v2: {
-        status: 'bailed',
-        turboSnap: {
-          bailReason: { internalError: true, bailSubreason: 'missingBaselineBuild' },
-        },
-      },
-    };
-  }
-
   let v2: TraceChangedFilesResult | undefined;
   // Anchor at the Storybook base directory when we know it. Without a base directory (e.g. a
   // non-monorepo where Storybook lives at `<repo>/.storybook`), fall back to the repo root, and
@@ -67,9 +51,10 @@ export async function compareChangedFiles(
     : process.cwd();
   const result = await traceChangedFilesV2({
     graphqlClient: ctx.client,
-    // The current mutation writes to the build. Keep targeting the baseline until the settled
-    // return-only Index contract lands; its consumption ticket will switch this to announcedBuild.
-    buildId: ctx.build.id,
+    // Hashes always describe the build we are making, so they are always written to the head build.
+    // Whether they can decide anything is the Index's call: it compares them against the baseline's
+    // hashes, and with no baseline everything reads as changed.
+    buildId: ctx.announcedBuild.id,
     statsPath: ctx.fileInfo.statsPath,
     manifestOutputDirectory: path.join(ctx.sourceDir, '.chromatic'),
     projectRoot,

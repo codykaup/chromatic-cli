@@ -21,6 +21,7 @@ function makeContext(overrides: { rootPath?: string; baseDir?: string }) {
     fileInfo: { statsPath: '/tmp/stats.json' },
     client: {},
     build: { id: 'baseline-build' },
+    announcedBuild: { id: 'head-build' },
     sourceDir: '/repo/project',
     log: { info: vi.fn(), error: vi.fn() },
     storybook: overrides.baseDir ? { baseDir: overrides.baseDir } : undefined,
@@ -95,27 +96,17 @@ describe('traceChangedFiles', () => {
     expect(traceChangedFilesV1).not.toHaveBeenCalled();
   });
 
-  it('bails v2 with a named reason when there is no baseline build', async () => {
+  it('uploads hashes to the head build even when there is no baseline build', async () => {
     const ctx = makeContext({ rootPath: '/repo' });
     ctx.build = undefined;
-    const v1 = {
-      status: 'traced' as const,
-      onlyStoryFiles: { button: ['./src/Button.stories.tsx'] },
-      turboSnap: {},
-      untracedFiles: [],
-    };
-    vi.mocked(traceChangedFilesV1).mockResolvedValue(v1);
+    vi.mocked(traceChangedFilesV1).mockResolvedValue({ status: 'skipped' });
+    vi.mocked(traceChangedFilesV2).mockResolvedValue({ status: 'fallback' });
 
-    await expect(compareChangedFiles(ctx)).resolves.toEqual({
-      v1,
-      v2: {
-        status: 'bailed',
-        turboSnap: {
-          bailReason: { internalError: true, bailSubreason: 'missingBaselineBuild' },
-        },
-      },
-    });
-    expect(traceChangedFilesV2).not.toHaveBeenCalled();
+    await compareChangedFiles(ctx);
+
+    expect(traceChangedFilesV2).toHaveBeenCalledWith(
+      expect.objectContaining({ buildId: 'head-build' })
+    );
   });
 
   it('keeps v1 authoritative when v2 bails', async () => {
