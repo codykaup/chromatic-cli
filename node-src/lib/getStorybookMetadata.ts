@@ -114,15 +114,30 @@ const findStorybookVersion = async ({ env, log, options, packageJson }: Storyboo
   ]);
 };
 
-const findConfigFlags = async ({
-  options,
+/**
+ * Reads the `-c` and `-s` flags out of the project's Storybook build script.
+ *
+ * Exported so `chromatic turbosnap-manifest` derives them the same way a real build does, rather
+ * than ignoring the build script and reading a different config directory than production would.
+ *
+ * @param input The project's package.json and the resolved build script name.
+ * @param input.buildScriptName The package.json script that builds Storybook.
+ * @param input.packageJson The project's package.json.
+ *
+ * @returns The config directory and static directories the build script names, if any.
+ */
+export const findConfigFlags = async ({
+  buildScriptName,
   packageJson,
-}: Pick<StorybookInfoDeps, 'options' | 'packageJson'>) => {
+}: {
+  buildScriptName?: string;
+  packageJson: StorybookInfoDeps['packageJson'];
+}) => {
   const { scripts = {} } = packageJson;
-  if (!options.buildScriptName || !scripts[options.buildScriptName]) return {};
+  if (!buildScriptName || !scripts[buildScriptName]) return {};
 
   const { flags } = meow({
-    argv: parseArgsStringToArgv(scripts[options.buildScriptName]),
+    argv: parseArgsStringToArgv(scripts[buildScriptName]),
     flags: {
       configDir: { type: 'string', alias: 'c' },
       staticDir: { type: 'string', alias: 's' },
@@ -131,19 +146,39 @@ const findConfigFlags = async ({
 
   return {
     configDir: flags.configDir,
-    staticDir: flags.staticDir && flags.staticDir.split(','),
+    staticDir: flags.staticDir ? flags.staticDir.split(',') : undefined,
   };
 };
 
-// TODO: refactor this function
-// eslint-disable-next-line complexity
-export const findBuilder = async (mainConfig, v7) => {
+/**
+ * Reads a top-level field out of the main config, whichever representation we happen to hold.
+ *
+ * There are two, and which one we get is decided by whether `require()` of the config succeeded — a
+ * question about the file's module format, not about the Storybook version. A successful `require()`
+ * leaves us the evaluated module, whose fields are plain properties (nested under `default` when the
+ * config is ESM, which `require(esm)` on Node >= 22 now resolves rather than rejecting); a failed one
+ * leaves us a parsed AST that answers `getSafeFieldValue`. Reading through here rather than gating on
+ * the representation is what stops a field being silently unavailable for one module format.
+ *
+ * @param mainConfig The main config, either an evaluated module or a parsed AST.
+ * @param isAstConfig Whether `mainConfig` is a parsed AST rather than an evaluated module.
+ * @param field The top-level field to read.
+ *
+ * @returns The field's value, or `undefined` when it is absent.
+ */
+export const readMainConfigField = (mainConfig: any, isAstConfig: boolean, field: string) => {
+  if (!mainConfig) return undefined;
+  if (isAstConfig) return mainConfig.getSafeFieldValue([field]);
+  return mainConfig.default?.[field] ?? mainConfig[field];
+};
+
+export const findBuilder = async (mainConfig, isAstConfig) => {
   if (!mainConfig) {
     return { builder: { name: 'unknown', packageVersion: '0' } };
   }
 
-  const framework = v7 ? mainConfig.getSafeFieldValue(['framework']) : mainConfig?.framework;
-  const core = v7 ? mainConfig.getSafeFieldValue(['core']) : mainConfig?.core;
+  const framework = readMainConfigField(mainConfig, isAstConfig, 'framework');
+  const core = readMainConfigField(mainConfig, isAstConfig, 'core');
 
   if (framework?.name) {
     const sbV7BuilderName = framework.name;
@@ -177,24 +212,38 @@ export const findBuilder = async (mainConfig, v7) => {
 // TODO: Update this when we start tracking refs within the project.json file; if refs are tracked there, we can skip this logic
 // Only used by Chromatic - surfaces Storybook refs and is used when announcing a build.
 // The refs are consumed by the MCP Addon for hosted Storybooks with composition on Chromatic.
-const findReferences = async (mainConfig, v7) => {
-  // The MCP Addon was first added within version 9; there is no need to check for older versions
-  if (!mainConfig || !v7) {
+const findReferences = async (mainConfig, isAstConfig) => {
+  // The MCP Addon was first added within version 9; there is no need to check for older versions.
+  // Left gated on the AST representation, unlike staticDirs and the builder: refs are announced to
+  // the Index, so widening what reports them is its own decision rather than a filename fix.
+  if (!mainConfig || !isAstConfig) {
     return {};
   }
 
-  const references = mainConfig.getSafeFieldValue(['refs']);
+  const references = readMainConfigField(mainConfig, isAstConfig, 'refs');
   return references ? { refs: references } : {};
 };
 
+/**
+ * Resolves the project-relative static directories declared by the main config.
+ *
+ * Reads through {@link readMainConfigField} rather than only the AST, because gating this on "we hold
+ * an AST" made static-asset coverage depend on the config's *filename*: only `main.ts` reliably fails
+ * `require()`, so `main.js`/`main.mjs`/`main.cjs` projects silently resolved no static directories at
+ * all.
+ *
+ * @param mainConfig The main config, either an evaluated module or a parsed AST.
+ * @param isAstConfig Whether `mainConfig` is a parsed AST rather than an evaluated module.
+ * @param configDirectory The project-relative Storybook config directory entries resolve against.
+ *
+ * @returns The resolved static directories, or `{}` when the config declares none.
+ */
 export const findStaticDirectories = (
   mainConfig: any,
-  v7: boolean,
+  isAstConfig: boolean,
   configDirectory = '.storybook'
 ): { staticDir?: string[] } => {
-  if (!mainConfig || !v7) return {};
-
-  const staticDirectories = mainConfig.getSafeFieldValue(['staticDirs']);
+  const staticDirectories = readMainConfigField(mainConfig, isAstConfig, 'staticDirs');
   if (!Array.isArray(staticDirectories) || staticDirectories.length === 0) return {};
 
   // staticDirs entries can be plain strings or { from, to } DirectoryMapping objects
@@ -221,47 +270,70 @@ export const findStorybookConfigFile = async (
   return configFile && path.join(configDirectory, configFile);
 };
 
-// TODO: refactor this function
-export const getStorybookMetadata = async (
-  deps: StorybookInfoDeps
-  // eslint-disable-next-line complexity
-): Promise<Partial<Storybook>> => {
-  const configDirectory = deps.options.storybookConfigDir ?? '.storybook';
-
+/**
+ * Loads the Storybook main config, as either an evaluated module or a parsed AST.
+ *
+ * Exported so every consumer takes the same path: which representation we get is decided by whether
+ * `require()` succeeds, and a consumer that skipped straight to the AST would be reading a config
+ * production cannot. `chromatic turbosnap-manifest` used to do exactly that.
+ *
+ * @param configDirectory The Storybook config directory, absolute or relative to the cwd.
+ * @param log The logger to report the parse path to.
+ *
+ * @returns The config and whether it is a parsed AST; no config when neither path succeeded.
+ */
+export const readMainConfig = async (
+  configDirectory: string,
+  log: StorybookInfoDeps['log']
+): Promise<{ mainConfig?: any; isAstConfig: boolean }> => {
   // @ts-expect-error __non_webpack_require__ is only defined when bundled with webpack, and allows us to bypass webpack's module system to require files at runtime
   // eslint-disable-next-line unicorn/prefer-module
   const r = typeof __non_webpack_require__ === 'undefined' ? require : __non_webpack_require__;
 
-  let mainConfig;
-  let v7 = false;
   try {
-    mainConfig = await r(path.resolve(configDirectory, 'main'));
-    deps.log.debug({ configDirectory, mainConfig });
+    const mainConfig = await r(path.resolve(configDirectory, 'main'));
+    log.debug({ configDirectory, mainConfig });
+    return { mainConfig, isAstConfig: false };
   } catch (err) {
-    deps.log.debug({ storybookV6error: err });
-    try {
-      const storybookConfig = await findStorybookConfigFile(
-        deps.options.storybookConfigDir,
-        /^main\.[jt]sx?$/
-      );
-      if (!storybookConfig) {
-        throw new Error('Failed to locate Storybook config file');
-      }
-
-      mainConfig = await readConfig(storybookConfig);
-      deps.log.debug({ configDirectory, mainConfig: printConfig(mainConfig) });
-      v7 = true;
-    } catch (err) {
-      deps.log.debug({ storybookV7error: err });
-    }
+    log.debug({ storybookV6error: err });
   }
 
+  try {
+    // `.mjs` and `.cjs` are matched too: the CJS resolver above only tries `.js`/`.json`/`.node`,
+    // so those two always land here, and a narrower pattern left them with no config at all.
+    const storybookConfig = await findStorybookConfigFile(configDirectory, /^main\.[cm]?[jt]sx?$/);
+    if (!storybookConfig) {
+      throw new Error('Failed to locate Storybook config file');
+    }
+
+    const mainConfig = await readConfig(storybookConfig);
+    log.debug({ configDirectory, mainConfig: printConfig(mainConfig) });
+    return { mainConfig, isAstConfig: true };
+  } catch (err) {
+    log.debug({ storybookV7error: err });
+    return { isAstConfig: false };
+  }
+};
+
+// TODO: refactor this function
+export const getStorybookMetadata = async (
+  deps: StorybookInfoDeps
+): Promise<Partial<Storybook>> => {
+  const configDirectory = deps.options.storybookConfigDir ?? '.storybook';
+  // Whether we hold a parsed AST rather than an evaluated module — decided by the config's module
+  // format, not its Storybook version. Field reads go through readMainConfigField so neither
+  // representation loses a field.
+  const { mainConfig, isAstConfig } = await readMainConfig(configDirectory, deps.log);
+
   const info = await Promise.allSettled([
-    findConfigFlags(deps),
+    findConfigFlags({
+      buildScriptName: deps.options.buildScriptName,
+      packageJson: deps.packageJson,
+    }),
     findStorybookVersion(deps),
-    findBuilder(mainConfig, v7),
-    findReferences(mainConfig, v7),
-    findStaticDirectories(mainConfig, v7, configDirectory),
+    findBuilder(mainConfig, isAstConfig),
+    findReferences(mainConfig, isAstConfig),
+    findStaticDirectories(mainConfig, isAstConfig, configDirectory),
   ]);
 
   deps.log.debug(info);
