@@ -21,6 +21,7 @@ see which stories *would* be recaptured. Full findings: [`../turbosnap-v2-test-r
 | `resolution-probe.sh [pkg]` | Vite-only probe: removes `jsnext:main` from installed `moment` so it resolves a different build, and asserts v2 notices a *resolution*-only manifest change and scopes it to the importer. See [Resolution changes](#resolution-changes). |
 | `attribution-matrix.sh <pkg>` | Probes **every** manifest entry for over- and under-capture — graph hashes, `<storybookConfig>`, `<staticFiles>`, `<storybookVersion>`, the bucket — against a fixed stats snapshot. One JSON line per probe. Backs [`attribution-audit.html`](./attribution-audit.html). |
 | `static-identity-probe.sh [pkg]` | The static-file cases the matrix can't express: rename, content swap, symlinked asset, symlinked directory. See [Static file identity](#static-file-identity). |
+| `dangling.mjs <stats.json> <project-root> [manifest.json] [--strip <out.json>]` | List every `reasons` entry whose named parent is not itself a module, so `ensureFile` roots it as a parentless node — split into real files (hashed into `<storybookGlobals>`) and no-file names (pruned, never written). `--strip` writes a stats copy without them; feed it to `gen.sh` and diff to measure what dropping them costs, without touching the fixture. Normalizes via the CLI's own `paths.ts`; see trap 4. |
 | `structural-probe.sh <pkg> [case…]` | The cases that need the module graph to change shape: a new import, a new/deleted story file, a moved module, a moved story file, a first import of an unused dependency, a removed import. **Rebuilds Storybook per case** so the stats regenerate. See [Structural changes](#structural-changes) and [`structural-audit.md`](./structural-audit.md). |
 
 ### Cost, rather than correctness
@@ -374,7 +375,7 @@ harness is wrong.
 > The fixture repo may be edited by concurrent sessions. If a baseline you took earlier disagrees
 > with a fresh one, regenerate the baseline immediately before the probe rather than reusing it.
 
-## Three traps that have already produced wrong conclusions
+## Four traps that have already produced wrong conclusions
 
 1. **The fixture is shared and gets rebuilt mid-run.** A concurrent `build-storybook` swaps the module
    graph underneath a running probe and silently changes results — `preview-stats.json` changed three
@@ -392,3 +393,11 @@ harness is wrong.
    verdicts, so the run did not fail, and the contamination was only visible as `<storybookConfig>`
    moving on an unrelated `moment` bump. **Commit fixture changes in the monorepo before running
    either script.**
+4. **Comparing *raw* stats names when asking what the code sees.** `normalizeStatsPath` strips the
+   ` + N modules` concatenation suffix and relativizes absolute paths before any comparison the
+   manifest builder makes, so a probe that matches `reason.moduleName` against `module.name` verbatim
+   counts every webpack concatenated-module root as a stranger. That produced a false "webpack invents
+   7 parentless roots, including two story files and `preview.ts`", which chartered a ticket around a
+   defect that does not exist — the real count on webpack is **0**. Normalize both sides with the
+   CLI's own `paths.ts` (load it through `cost-lib.mjs`, as `dangling.mjs` does) rather than
+   reimplementing it, and `existsSync` before believing a stats path names a real file.
