@@ -107,3 +107,8 @@ It is not inferred from changed package metadata.
 File bytes exposed at the URL formed by a Storybook static directory's target plus the file's path
 relative to that directory's source. Its browser-visible identity is the served URL, not the source
 path on disk.
+
+**Prebuilt Storybook**:
+A Storybook compiled before Chromatic is invoked and supplied as built output while its source
+checkout and Git history remain available. It is not an artifact-only execution mode.
+_Avoid_: Artifact-only Storybook

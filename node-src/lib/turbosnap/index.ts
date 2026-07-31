@@ -77,6 +77,7 @@ export async function compareChangedFiles(
     // explicit --storybook-config-dir wins over the discovered one, as it does in v1.
     configDir: ctx.options?.storybookConfigDir ?? ctx.storybook?.configDir ?? '.storybook',
     staticDirs: ctx.storybook?.staticDir ?? [],
+    staticDirsDeclared: ctx.storybook?.staticDirsDeclared ?? false,
   });
 
   if (result.status === 'bailed') {

@@ -219,6 +219,7 @@ export interface Storybook {
   baseDir?: string;
   configDir: string;
   staticDir: string[];
+  staticDirsDeclared?: boolean;
   addons: {
     name: string;
     packageName?: string;
@@ -558,6 +559,7 @@ interface TurboSnapBailReasonBase {
   noStoryFiles?: true;
   noStorybookConfigFiles?: true;
   noStaticFiles?: true;
+  unresolvedStaticDirectories?: true;
   indexUnavailable?: true;
   indexContractViolation?: true;
   internalError?: true;

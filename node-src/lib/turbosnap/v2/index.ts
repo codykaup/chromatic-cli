@@ -19,6 +19,7 @@ interface TraceChangedFilesInput {
   projectRoot: string;
   configDir: string;
   staticDirs: string[];
+  staticDirsDeclared: boolean;
 }
 
 /**
@@ -64,6 +65,43 @@ function getEmptyOutOfGraphBail(
   return { status: 'bailed', turboSnap: { bailReason } };
 }
 
+function getPreManifestBail(
+  builderStatsReason: ReturnType<typeof getUntrustedBuilderStatsReason> | undefined,
+  input: Pick<TraceChangedFilesInput, 'staticDirs' | 'staticDirsDeclared'>
+): TraceChangedFilesV2Result | undefined {
+  if (builderStatsReason) {
+    return {
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          untrustedBuilderStats: true,
+          bailSubreason: builderStatsReason.subreason,
+          builderName: builderStatsReason.builderName,
+          ...(builderStatsReason.builderVersion && {
+            builderVersion: builderStatsReason.builderVersion,
+          }),
+        },
+      },
+    };
+  }
+
+  // A prebuilt Storybook's project.json records whether static directories were declared, while
+  // their paths must still be derived from the checked-out source. If those two sources disagree,
+  // continuing would silently omit `<staticFiles>` even though we know the section should exist.
+  if (input.staticDirsDeclared && input.staticDirs.length === 0) {
+    return {
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          unresolvedStaticDirectories: true,
+        },
+      },
+    };
+  }
+
+  return undefined;
+}
+
 /**
  * Determines which story files are affected by the changed source file hashes, bailing out of
  * TurboSnap when necessary.
@@ -76,6 +114,8 @@ function getEmptyOutOfGraphBail(
  * @param input.configDir The project-relative Storybook config directory, hashed off disk because it
  * is never a bundler input.
  * @param input.staticDirs The project-relative static directories, hashed off disk for the same reason.
+ * @param input.staticDirsDeclared Whether the prebuilt Storybook reports that its source config
+ * declared static directories.
  *
  * @returns The TurboSnap result.
  */
@@ -102,21 +142,8 @@ export async function traceChangedFiles(
       },
     };
   }
-  if (builderStatsReason) {
-    return {
-      status: 'bailed',
-      turboSnap: {
-        bailReason: {
-          untrustedBuilderStats: true,
-          bailSubreason: builderStatsReason.subreason,
-          builderName: builderStatsReason.builderName,
-          ...(builderStatsReason.builderVersion && {
-            builderVersion: builderStatsReason.builderVersion,
-          }),
-        },
-      },
-    };
-  }
+  const preManifestBail = getPreManifestBail(builderStatsReason, input);
+  if (preManifestBail) return preManifestBail;
 
   let manifest;
   try {

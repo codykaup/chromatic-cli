@@ -41,6 +41,7 @@ const input = {
   projectRoot: '/repo/packages/ui',
   configDir: '.storybook',
   staticDirs: ['.storybook/static'],
+  staticDirsDeclared: true,
 };
 
 const manifest = {
@@ -271,6 +272,21 @@ describe('traceChangedFiles', () => {
     expect(writeManifest).toHaveBeenCalledWith(configless, '/repo/packages/ui/.chromatic');
   });
 
+  it('bails when the prebuilt metadata declares static directories that source did not resolve', async () => {
+    const result = await traceChangedFiles({ ...input, staticDirs: [] });
+
+    expect(result).toEqual({
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          unresolvedStaticDirectories: true,
+        },
+      },
+    });
+    expect(buildManifest).not.toHaveBeenCalled();
+    expect(determineChangedFiles).not.toHaveBeenCalled();
+  });
+
   it('reports the empty config directory rather than the empty graph when both hold', async () => {
     const empty = {
       ...manifest,
@@ -313,7 +329,9 @@ describe('traceChangedFiles', () => {
     };
     vi.mocked(buildManifest).mockResolvedValue(staticless as any);
 
-    await expect(traceChangedFiles({ ...input, staticDirs: [] })).resolves.toEqual({
+    await expect(
+      traceChangedFiles({ ...input, staticDirs: [], staticDirsDeclared: false })
+    ).resolves.toEqual({
       status: 'fallback',
     });
     expect(determineChangedFiles).toHaveBeenCalledWith(input.graphqlClient, 'build-id', staticless);

@@ -120,13 +120,15 @@ describe('getStorybookInfo', () => {
   });
 
   describe('with --storybook-build-dir', () => {
-    it('returns version from packageJson', async () => {
+    it('combines prebuilt metadata with static directories derived from source', async () => {
       const ctx = getContext({
         options: { storybookBuildDir: 'bin-src/__mocks__/normalProjectJson' },
         packageJson: { dependencies: REACT },
       });
       expect(await getStorybookInfo(ctx)).toEqual({
         builder: { name: '@storybook/builder-webpack5', packageVersion: expect.any(String) },
+        staticDir: ['static'],
+        staticDirsDeclared: true,
         version: expect.any(String),
       });
     });
@@ -146,6 +148,8 @@ describe('getStorybookInfo', () => {
       });
       expect(await getStorybookInfo(ctx)).toEqual({
         builder: { name: 'webpack4', packageVersion: '6.5.16' },
+        staticDir: ['static'],
+        staticDirsDeclared: true,
         version: '6.5.16',
       });
     });
