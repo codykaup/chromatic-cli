@@ -12,9 +12,10 @@
 # `storybookFiles` entry moving — i.e. v2 catches it *and* scopes it, where v1's `changedPackageFiles`
 # Path A bails the whole Storybook.
 #
-# Note: `rollUpHash` is deliberately path-independent (v2/graph.ts:29), so this probe needs the resolved
-# file to differ in *content*, not merely in path. A byte-identical file at a new path is invisible by
-# design, and correctly so.
+# Note: roll-ups were path-independent when this probe was written, so it changes the resolved file's
+# *content* rather than only its path. Roll-ups are path-sensitive now (`rollUpEntryHashes`,
+# v2/graph.ts), so a byte-identical file at a new path would also be caught — but a content change is
+# what a real `resolutions`/`overrides` pin does, so the probe is unchanged.
 #
 # Env overrides:
 #   CHROMATIC_CLI  path to the built CLI entry (default: <this repo>/dist/bin.cjs)

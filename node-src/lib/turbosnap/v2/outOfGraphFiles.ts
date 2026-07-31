@@ -2,7 +2,7 @@ import { readdir, realpath, stat } from 'fs/promises';
 import path from 'path';
 
 import { getFileHashes } from '../../getFileHashes';
-import { FileHash, FilePath, rollUpPathSensitiveHash } from './graph';
+import { FileHash, FilePath, rollUpEntryHashes } from './graph';
 import { normalizeStatsPath } from './paths';
 
 // The synthetic `storybookFiles` keys covering Storybook inputs that are never bundler inputs, so no
@@ -97,8 +97,8 @@ export async function hashOutOfGraphFiles(
  * A section with no files contributes no entry at all, matching how the `<storybookGlobals>` catch-all
  * is omitted when empty.
  *
- * Both roll-ups are path-sensitive, unlike the graph-rolled entries: a static asset is served at its
- * path and a config file is loaded by name, so a byte-preserving rename changes what Storybook
+ * Both roll-ups are path-sensitive, as the graph-rolled entries now are too: a static asset is served
+ * at its path and a config file is loaded by name, so a byte-preserving rename changes what Storybook
  * renders even though the multiset of contents is untouched. The path identity hashed is the
  * canonical manifest key, which is project-relative — so a project move leaves both roll-ups still,
  * the assets being served at the same URLs and the config still loading from the same names, and only
@@ -122,7 +122,7 @@ export function rollUpOutOfGraphFiles(
   return new Map(
     sections
       .filter(([, files]) => files.size > 0)
-      .map(([key, files]) => [key, rollUpPathSensitiveHash([...files], h64ToString)])
+      .map(([key, files]) => [key, rollUpEntryHashes([...files], h64ToString)])
   );
 }
 

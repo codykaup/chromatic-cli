@@ -9,7 +9,7 @@ import {
   FileHash,
   FilePath,
   hashEntryIdentity,
-  rollUpHash,
+  rollUpFileHashes,
   TurboSnapFile,
 } from './graph';
 import {
@@ -158,7 +158,7 @@ export async function buildManifest(
   const storyFileHashes = new Map<FilePath, FileHash>();
   for (const storyFile of storyFileNames) {
     const subtree = collectTransitiveDependencies(files, storyFile);
-    storyFileHashes.set(storyFile, rollUpHash(hashes, subtree, h64ToString));
+    storyFileHashes.set(storyFile, rollUpFileHashes(hashes, subtree, h64ToString));
   }
 
   const { storybookFiles, attribution } = collectStorybookFiles(
@@ -180,9 +180,10 @@ export async function buildManifest(
   }
 
   // The backend's top-level "did Storybook change at all?" gate: every story hash plus every
-  // `storybookFiles` entry. Story file paths stay out of the gate, so a rename that preserves bytes
-  // does not move it; Storybook-wide entries include their keys so additions, removals and renames
-  // are visible before the backend drills into the maps.
+  // `storybookFiles` entry. Story file paths reach the gate through their roll-ups, which cover each
+  // file's path, so a rename that preserves bytes still moves it; Storybook-wide entries include
+  // their keys as well, so additions and removals are visible before the backend drills into the
+  // maps.
   const storybookHash = h64ToString(
     [...storyFileHashes.values()].sort().join('') +
       [...storybookFiles.entries()]

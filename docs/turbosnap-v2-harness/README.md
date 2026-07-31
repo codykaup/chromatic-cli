@@ -124,12 +124,13 @@ Two constraints are enforced by the script rather than left to the reader: it **
 fixture tree**, because restoring uses `git checkout` + `git clean`. Set `FORCE_DIRTY=1` only to
 discard those changes deliberately.
 
-Full results and verdicts: [`structural-audit.md`](./structural-audit.md). Headline: attribution is
-correct for every case where some file's bytes change, and **blind to every move that changes no
-bytes** — `rollUpHash` is path-independent by design (`v2/graph.ts:29`) and `storybookHash` excludes
-story file paths on purpose (`v2/manifest.ts`), so a directory-index rename leaves the entire manifest
-gate bit-identical. Measured on both builders, including one case where that silently renames a
-story ID.
+Full results and verdicts: [`structural-audit.md`](./structural-audit.md). Headline: all 13 cases are
+correct on both builders. The audit's one finding — v2 was **blind to every move that changed no
+bytes**, including one that silently renamed a story ID — was measured to its mechanism (a module's
+path reaches the output via `import.meta.url` and emitted chunk names) and fixed: every roll-up is now
+path-sensitive (`rollUpEntryHashes`, `v2/graph.ts`), so a byte-preserving move recaptures exactly the
+stories a tracing v1 recaptures. Keys are project-root-relative, so moving the whole project still
+moves nothing.
 
 ## Doing a one-off manual test
 
@@ -194,24 +195,21 @@ section is empty, as `<storybookGlobals>` is.
 ### Static file identity
 
 `<staticFiles>` catches an asset's **bytes** changing, plus additions and deletions, on every fixture with a
-static dir. One class it does *not* catch, measurable with `static-identity-probe.sh`:
+static dir — and also its **URL** changing, which `static-identity-probe.sh` measures:
 
-- **Renames and content swaps are invisible** — `rollUpHash` is path-independent by design
-  (`graph.ts:29`), so the roll-up depends only on the multiset of contents. Swapping two assets' bytes
-  leaves `<staticFiles>` and `storybookHash` unmoved even though the bytes served at each URL changed.
-  This is a **knowingly accepted** gap: correct for modules (identical bytes render identically), wrong for
-  static files (the URL is the identity), but exotic enough, and almost always accompanied by a source edit
-  that moves a story hash. v1 *does* bail on it, so it is a knowing parity exception. Note that "correct
-  for modules" holds only for modules whose path does not reach the output — see
-  [`structural-audit.md`](./structural-audit.md) for the two exceptions, one of them measured.
+- **Renames and content swaps used to be invisible**, because the roll-up depended only on the multiset
+  of contents: swapping two assets' bytes left `<staticFiles>` and `storybookHash` unmoved even though
+  the bytes served at each URL had changed. Fixed. Roll-ups hash length-prefixed `path + contentHash`
+  pairs (`rollUpEntryHashes`, `graph.ts`), so the URL is part of the identity. The path hashed is the
+  project-root-relative manifest key, so a project move still moves nothing.
 
 **Symlinks used to be skipped entirely** and are now followed, so cases 3 and 4 of the probe report `as
 expected` where they once reported `UNDER-CAPTURES`. A symlinked asset is hashed by its target's bytes and
 keyed by the link's own path (the URL it is served at), and a symlinked *directory* is descended into, so
 `.storybook/static/vendor -> ../../node_modules/pkg/dist` is no longer invisible. The walk resolves each
 directory before descending, so a symlink cycle terminates instead of diverging; a broken symlink
-contributes nothing, like a configured-but-missing `staticDir`. **Cases 1 and 2 must stay
-`UNDER-CAPTURES`** — that is the accepted path-independence gap above, not a regression.
+contributes nothing, like a configured-but-missing `staticDir`. **All four cases must now report `as
+expected`**; any `UNDER-CAPTURES` is a regression.
 
 Note that **no fixture story references a static asset by URL** — the three packages with a static dir hold
 only `mockServiceWorker.js`, and `marketing-ui`, whose components render images by URL prop, has no
@@ -245,11 +243,10 @@ The probe removes `jsnext:main` from installed `moment`, so vite resolves `momen
 importer), and no `storybookFiles` entry moves. It restores the manifest with a trap and rebuilds to
 confirm the manifest returns to baseline. Nothing tracked by git is touched, and there is no install.
 
-Note that `rollUpHash` is **path-independent by design** (`v2/graph.ts:29`) — content hashes are combined
-in sorted-hash order so a project or dependency moving within the repo doesn't churn hashes. So a
-resolution change to a *byte-identical* file at a different path is invisible, correctly: identical bytes
-render identically. The probe therefore has to change the resolved file's **content**, which is also what
-a real `resolutions`/`overrides` pin does.
+Roll-ups were path-independent when this probe was written, so it changes the resolved file's
+**content** rather than only its path. They are path-sensitive now (`rollUpEntryHashes`,
+`v2/graph.ts`), so a byte-identical file at a different path would also be caught — but a content
+change is what a real `resolutions`/`overrides` pin does, so the probe is unchanged.
 
 > **Never reconstruct these sets by walking `files` from the stories.** `pruneSyntheticFiles` runs
 > *after* hashing by design, so the written graph has holes where synthetic nodes (require-context

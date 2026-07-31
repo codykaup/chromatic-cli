@@ -9,9 +9,9 @@
 #   3. symlinked asset, target changes    -> hashed by target bytes (G2, fixed)
 #   4. symlinked directory of assets      -> descended into (G2, fixed)
 #
-# Cases 1-2 were gap G1, a PATH miss: <staticFiles> used the path-independent rollUpHash, which is
-# right for modules (identical bytes render identically) and wrong for static files (the URL is the
-# identity). Fixed — the out-of-graph sections now use rollUpPathSensitiveHash.
+# Cases 1-2 were gap G1, a PATH miss: <staticFiles> rolled up content hashes only, which is wrong for
+# static files (the URL is the identity). Fixed — the out-of-graph sections went path-sensitive first,
+# and every roll-up is path-sensitive now (see rollUpEntryHashes in v2/graph.ts).
 #
 # Cases 3-4 were gap G2, a CONTENT miss rather than a path one, and are FIXED: the walk now follows
 # symlinks.

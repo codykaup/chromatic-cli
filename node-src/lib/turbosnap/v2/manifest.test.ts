@@ -240,15 +240,16 @@ describe('buildManifest relocation stability', () => {
     const before = await manifestWithPreview('preview.ts');
     const after = await manifestWithPreview('preview.tsx');
 
-    // Same bytes, so the entry's own rolled-up hash is unchanged...
-    expect(after.storybookFiles.get('./.storybook/preview.tsx')).toBe(
+    // The roll-up covers each file's path as well as its bytes, so the entry moves under its new
+    // key...
+    expect(after.storybookFiles.get('./.storybook/preview.tsx')).not.toBe(
       before.storybookFiles.get('./.storybook/preview.ts')
     );
-    // ...but the key is part of the gate, so the rename is still visible.
+    // ...and the key is part of the gate too, so the rename is doubly visible.
     expect(after.storybookHash).not.toBe(before.storybookHash);
   });
 
-  it('keeps a story hash stable when a dependency moves and reorders its siblings', async () => {
+  it('moves a story hash when a dependency moves within the project', async () => {
     const story = '/repo/packages/ui/src/Button.stories.tsx';
 
     // Build 1: deps a.ts and b.ts sort as [Button, a, b].
@@ -269,7 +270,9 @@ describe('buildManifest relocation stability', () => {
       outOfGraph
     );
 
-    // Build 2: a.ts moved to z.ts (content unchanged), so paths now sort as [Button, b, z].
+    // Build 2: a.ts moved to z.ts (content unchanged). A module's own path reaches the output — it
+    // is baked into `import.meta.url`, emitted chunk names and CSS-Module class names — so the same
+    // bytes at a new path can render differently and the story has to recapture.
     fileHashesRef.current = {
       [story]: 'S',
       '/repo/packages/ui/src/z.ts': 'HA',
@@ -287,12 +290,12 @@ describe('buildManifest relocation stability', () => {
       outOfGraph
     );
 
-    expect(after.storyFileHashes.get('./src/Button.stories.tsx')).toBe(
+    expect(after.storyFileHashes.get('./src/Button.stories.tsx')).not.toBe(
       before.storyFileHashes.get('./src/Button.stories.tsx')
     );
   });
 
-  it('keeps a story hash stable when an external dependency relocates further from the project', async () => {
+  it('moves a story hash when an external dependency relocates further from the project', async () => {
     const story = '/repo/packages/ui/src/Button.stories.tsx';
 
     // Build 1: theme.ts lives in a sibling package. Anchored at the git root it keys as
@@ -313,7 +316,9 @@ describe('buildManifest relocation stability', () => {
     );
 
     // Build 2: the repo is restructured so theme.ts moves up to the repo root ('shared/theme.ts'),
-    // but its content is unchanged. The story and its internal dependencies don't move.
+    // but its content is unchanged. The story and its internal dependencies don't move. The key
+    // still moves relative to the project root, so the story recaptures — over-capture in the safe
+    // direction, and what a tracing v1 does here too.
     fileHashesRef.current = {
       [story]: 'S',
       '/repo/shared/theme.ts': 'HT',
@@ -329,9 +334,46 @@ describe('buildManifest relocation stability', () => {
       outOfGraph
     );
 
-    expect(after.storyFileHashes.get('./src/Button.stories.tsx')).toBe(
+    expect(after.storyFileHashes.get('./src/Button.stories.tsx')).not.toBe(
       before.storyFileHashes.get('./src/Button.stories.tsx')
     );
+  });
+
+  it('recaptures every dependent and moves the gate when a shared module moves with its bytes intact', async () => {
+    // The measured v1-parity regression: `Badge.tsx` -> `Badge/index.tsx` left the gate SAME and
+    // recaptured 0 stories, while a tracing v1 recaptured both importers. Neither importer's bytes
+    // change — only the moved module's path does.
+    const badgeStory = '/repo/packages/ui/src/Badge.stories.tsx';
+    const cardStory = '/repo/packages/ui/src/UserCard.stories.tsx';
+    const manifestWithBadgeAt = async (badge: string) => {
+      fileHashesRef.current = { [badgeStory]: 'S1', [cardStory]: 'S2', [badge]: 'B' };
+      return buildManifest(
+        {
+          modules: [
+            { id: 1, name: badgeStory, reasons: [{ moduleName: './storybook-stories.js' }] },
+            { id: 2, name: cardStory, reasons: [{ moduleName: './storybook-stories.js' }] },
+            {
+              id: 3,
+              name: badge,
+              reasons: [{ moduleName: badgeStory }, { moduleName: cardStory }],
+            },
+          ],
+        },
+        projectRoot,
+        outOfGraph
+      );
+    };
+
+    const before = await manifestWithBadgeAt('/repo/packages/ui/src/Badge.tsx');
+    const after = await manifestWithBadgeAt('/repo/packages/ui/src/Badge/index.tsx');
+
+    expect(after.storyFileHashes.get('./src/Badge.stories.tsx')).not.toBe(
+      before.storyFileHashes.get('./src/Badge.stories.tsx')
+    );
+    expect(after.storyFileHashes.get('./src/UserCard.stories.tsx')).not.toBe(
+      before.storyFileHashes.get('./src/UserCard.stories.tsx')
+    );
+    expect(after.storybookHash).not.toBe(before.storybookHash);
   });
 
   it('produces the same storybookHash regardless of module iteration order', async () => {

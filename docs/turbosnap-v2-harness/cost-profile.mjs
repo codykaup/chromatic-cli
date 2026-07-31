@@ -12,8 +12,9 @@
 //                         [--runs 5] [--top 25]
 //
 // Read the output as clusters, not single rows: path work (`resolve`, `normalizeString`, `relative`,
-// `posix`, `resolveStatsPath`, `normalizeStatsPath`), roll-up work (`rollUpHash`,
-// `collectTransitiveDependencies`) and I/O (`open`, `read`, `close`, `createUnsafeBuffer`, `wasm-*`).
+// `posix`, `resolveStatsPath`, `normalizeStatsPath`), roll-up work (`rollUpFileHashes`,
+// `rollUpEntryHashes`, `collectTransitiveDependencies`) and I/O (`open`, `read`, `close`,
+// `createUnsafeBuffer`, `wasm-*`).
 
 import { Session } from 'inspector/promises';
 import path from 'path';

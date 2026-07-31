@@ -2,7 +2,7 @@ import {
   collectTransitiveDependencies,
   FileHash,
   FilePath,
-  rollUpHash,
+  rollUpFileHashes,
   TurboSnapFile,
 } from './graph';
 
@@ -63,7 +63,7 @@ export function collectStorybookFiles(
     // Collect each subtree on its own, then union: sharing one accumulator would leak one preview's
     // files into another's rolled-up hash.
     const subtree = collectTransitiveDependencies(files, filePath);
-    storybookFiles.set(filePath, rollUpHash(hashes, subtree, h64ToString));
+    storybookFiles.set(filePath, rollUpFileHashes(hashes, subtree, h64ToString));
     for (const dependency of subtree) {
       previewSubtree.add(dependency);
     }
@@ -79,7 +79,7 @@ export function collectStorybookFiles(
       hashes.has(filePath) && !storyReachable.has(filePath) && !previewSubtree.has(filePath)
   );
   if (orphanGlobals.length > 0) {
-    storybookFiles.set(STORYBOOK_GLOBALS_KEY, rollUpHash(hashes, orphanGlobals, h64ToString));
+    storybookFiles.set(STORYBOOK_GLOBALS_KEY, rollUpFileHashes(hashes, orphanGlobals, h64ToString));
   }
 
   // Report only real files, matching how the catch-all is defined, so the three sets cover exactly
