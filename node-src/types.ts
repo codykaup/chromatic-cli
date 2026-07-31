@@ -594,7 +594,8 @@ export type TurboSnapBailSubreason =
   | 'invalidVersion'
   | 'unsupportedVersion'
   | 'builderCompatibilityCheckFailed'
-  | 'manifestBuildFailed';
+  | 'manifestBuildFailed'
+  | 'missingBaselineBuild';
 
 // All additional fields allowed for the `changedPackageFiles` bail reason
 export type ChangedPackageFilesBailReason = TurboSnapBailReasonBase & {

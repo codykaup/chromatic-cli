@@ -95,6 +95,29 @@ describe('traceChangedFiles', () => {
     expect(traceChangedFilesV1).not.toHaveBeenCalled();
   });
 
+  it('bails v2 with a named reason when there is no baseline build', async () => {
+    const ctx = makeContext({ rootPath: '/repo' });
+    ctx.build = undefined;
+    const v1 = {
+      status: 'traced' as const,
+      onlyStoryFiles: { button: ['./src/Button.stories.tsx'] },
+      turboSnap: {},
+      untracedFiles: [],
+    };
+    vi.mocked(traceChangedFilesV1).mockResolvedValue(v1);
+
+    await expect(compareChangedFiles(ctx)).resolves.toEqual({
+      v1,
+      v2: {
+        status: 'bailed',
+        turboSnap: {
+          bailReason: { internalError: true, bailSubreason: 'missingBaselineBuild' },
+        },
+      },
+    });
+    expect(traceChangedFilesV2).not.toHaveBeenCalled();
+  });
+
   it('keeps v1 authoritative when v2 bails', async () => {
     const ctx = makeContext({ rootPath: '/repo' });
     const v1Result = {

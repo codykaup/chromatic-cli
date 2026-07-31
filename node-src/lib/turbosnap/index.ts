@@ -42,6 +42,22 @@ export async function compareChangedFiles(
     throw new Error(missingStatsFile({ legacy: !nonLegacyStatsSupported }));
   }
 
+  // `ctx.build` is the baseline build and is only assigned when the Index returned one, so it can be
+  // missing here even though `git.changedFiles` is a (possibly empty) array that passes the guard
+  // above. v2's mutation targets that build, so without it v2 has nothing to trace against.
+  if (!ctx.build) {
+    ctx.log.info('TurboSnap v2 has no baseline build to trace against; running TurboSnap v1');
+    return {
+      v1: await traceChangedFilesV1(ctx),
+      v2: {
+        status: 'bailed',
+        turboSnap: {
+          bailReason: { internalError: true, bailSubreason: 'missingBaselineBuild' },
+        },
+      },
+    };
+  }
+
   let v2: TraceChangedFilesResult | undefined;
   // Anchor at the Storybook base directory when we know it. Without a base directory (e.g. a
   // non-monorepo where Storybook lives at `<repo>/.storybook`), fall back to the repo root, and
