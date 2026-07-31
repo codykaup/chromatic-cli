@@ -20,7 +20,7 @@ see which stories *would* be recaptured. Full findings: [`../turbosnap-v2-test-r
 | `cjs-edge-probe.sh [pkg]` | Vite-only structural probe: temporarily imports a CJS-only dependency from one story, rebuilds patched-builder stats, and verifies a dependency edit recaptures only that story. |
 | `resolution-probe.sh [pkg]` | Vite-only probe: removes `jsnext:main` from installed `moment` so it resolves a different build, and asserts v2 notices a *resolution*-only manifest change and scopes it to the importer. See [Resolution changes](#resolution-changes). |
 | `attribution-matrix.sh <pkg>` | Probes **every** manifest entry for over- and under-capture — graph hashes, `<storybookConfig>`, `<staticFiles>`, `<storybookVersion>`, the bucket — against a fixed stats snapshot. One JSON line per probe. Backs [`attribution-audit.html`](./attribution-audit.html). |
-| `static-identity-probe.sh [pkg]` | The static-file cases the matrix can't express: rename, content swap, symlinked asset, symlinked directory. See [Static file identity](#static-file-identity). |
+| `static-identity-probe.sh [pkg]` | The static-file cases the matrix can't express: rename, content swap, symlinked asset, symlinked directory, and a `staticDirs` `to`-only remount. See [Static file identity](#static-file-identity). |
 | `dangling.mjs <stats.json> <project-root> [manifest.json] [--strip <out.json>]` | List every `reasons` entry whose named parent is not itself a module, so `ensureFile` roots it as a parentless node — split into real files (hashed into `<storybookGlobals>`) and no-file names (pruned, never written). `--strip` writes a stats copy without them; feed it to `gen.sh` and diff to measure what dropping them costs, without touching the fixture. Normalizes via the CLI's own `paths.ts`; see trap 4. |
 | `structural-probe.sh <pkg> [case…]` | The cases that need the module graph to change shape: a new import, a new/deleted story file, a moved module, a moved story file, a first import of an unused dependency, a removed import. **Rebuilds Storybook per case** so the stats regenerate. See [Structural changes](#structural-changes) and [`structural-audit.md`](./structural-audit.md). |
 
@@ -196,20 +196,27 @@ section is empty, as `<storybookGlobals>` is.
 ### Static file identity
 
 `<staticFiles>` catches an asset's **bytes** changing, plus additions and deletions, on every fixture with a
-static dir — and also its **URL** changing, which `static-identity-probe.sh` measures:
+static dir. Together with `<storybookConfig>`, it also catches the asset's **served URL** changing, which
+`static-identity-probe.sh` measures:
 
 - **Renames and content swaps used to be invisible**, because the roll-up depended only on the multiset
   of contents: swapping two assets' bytes left `<staticFiles>` and `storybookHash` unmoved even though
   the bytes served at each URL had changed. Fixed. Roll-ups hash length-prefixed `path + contentHash`
-  pairs (`rollUpEntryHashes`, `graph.ts`), so the URL is part of the identity. The path hashed is the
-  project-root-relative manifest key, so a project move still moves nothing.
+  pairs (`rollUpEntryHashes`, `graph.ts`). That key is the project-root-relative source path: within an
+  unchanged static mount, changing its path relative to the source also changes its served URL. A project
+  move still moves nothing.
+- **Changing only an object entry's `to` does not move `<staticFiles>`**, because `to` is not retained in
+  its input. It does change `main.*`, whose bytes move `<storybookConfig>` and therefore the final
+  `storybookHash`. Case 5 pins that composite coverage on both builders while keeping the config and static
+  file counts unchanged. Carrying `{ from, to }` through the metadata pipeline would duplicate an identity
+  the final gate already owns without closing a demonstrated under-capture.
 
 **Symlinks used to be skipped entirely** and are now followed, so cases 3 and 4 of the probe report `as
 expected` where they once reported `UNDER-CAPTURES`. A symlinked asset is hashed by its target's bytes and
 keyed by the link's own path (the URL it is served at), and a symlinked *directory* is descended into, so
 `.storybook/static/vendor -> ../../node_modules/pkg/dist` is no longer invisible. The walk resolves each
 directory before descending, so a symlink cycle terminates instead of diverging; a broken symlink
-contributes nothing, like a configured-but-missing `staticDir`. **All four cases must now report `as
+contributes nothing, like a configured-but-missing `staticDir`. **All five cases must now report `as
 expected`**; any `UNDER-CAPTURES` is a regression.
 
 Note that **no fixture story references a static asset by URL** — the three packages with a static dir hold
