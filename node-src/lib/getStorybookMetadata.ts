@@ -114,15 +114,30 @@ const findStorybookVersion = async ({ env, log, options, packageJson }: Storyboo
   ]);
 };
 
-const findConfigFlags = async ({
-  options,
+/**
+ * Reads the `-c` and `-s` flags out of the project's Storybook build script.
+ *
+ * Exported so `chromatic turbosnap-manifest` derives them the same way a real build does, rather
+ * than ignoring the build script and reading a different config directory than production would.
+ *
+ * @param input The project's package.json and the resolved build script name.
+ * @param input.buildScriptName The package.json script that builds Storybook.
+ * @param input.packageJson The project's package.json.
+ *
+ * @returns The config directory and static directories the build script names, if any.
+ */
+export const findConfigFlags = async ({
+  buildScriptName,
   packageJson,
-}: Pick<StorybookInfoDeps, 'options' | 'packageJson'>) => {
+}: {
+  buildScriptName?: string;
+  packageJson: StorybookInfoDeps['packageJson'];
+}) => {
   const { scripts = {} } = packageJson;
-  if (!options.buildScriptName || !scripts[options.buildScriptName]) return {};
+  if (!buildScriptName || !scripts[buildScriptName]) return {};
 
   const { flags } = meow({
-    argv: parseArgsStringToArgv(scripts[options.buildScriptName]),
+    argv: parseArgsStringToArgv(scripts[buildScriptName]),
     flags: {
       configDir: { type: 'string', alias: 'c' },
       staticDir: { type: 'string', alias: 's' },
@@ -131,7 +146,7 @@ const findConfigFlags = async ({
 
   return {
     configDir: flags.configDir,
-    staticDir: flags.staticDir && flags.staticDir.split(','),
+    staticDir: flags.staticDir ? flags.staticDir.split(',') : undefined,
   };
 };
 
@@ -255,48 +270,66 @@ export const findStorybookConfigFile = async (
   return configFile && path.join(configDirectory, configFile);
 };
 
-// TODO: refactor this function
-export const getStorybookMetadata = async (
-  deps: StorybookInfoDeps
-  // eslint-disable-next-line complexity
-): Promise<Partial<Storybook>> => {
-  const configDirectory = deps.options.storybookConfigDir ?? '.storybook';
-
+/**
+ * Loads the Storybook main config, as either an evaluated module or a parsed AST.
+ *
+ * Exported so every consumer takes the same path: which representation we get is decided by whether
+ * `require()` succeeds, and a consumer that skipped straight to the AST would be reading a config
+ * production cannot. `chromatic turbosnap-manifest` used to do exactly that.
+ *
+ * @param configDirectory The Storybook config directory, absolute or relative to the cwd.
+ * @param log The logger to report the parse path to.
+ *
+ * @returns The config and whether it is a parsed AST; no config when neither path succeeded.
+ */
+export const readMainConfig = async (
+  configDirectory: string,
+  log: StorybookInfoDeps['log']
+): Promise<{ mainConfig?: any; isAstConfig: boolean }> => {
   // @ts-expect-error __non_webpack_require__ is only defined when bundled with webpack, and allows us to bypass webpack's module system to require files at runtime
   // eslint-disable-next-line unicorn/prefer-module
   const r = typeof __non_webpack_require__ === 'undefined' ? require : __non_webpack_require__;
 
-  let mainConfig;
+  try {
+    const mainConfig = await r(path.resolve(configDirectory, 'main'));
+    log.debug({ configDirectory, mainConfig });
+    return { mainConfig, isAstConfig: false };
+  } catch (err) {
+    log.debug({ storybookV6error: err });
+  }
+
+  try {
+    // `.mjs` and `.cjs` are matched too: the CJS resolver above only tries `.js`/`.json`/`.node`,
+    // so those two always land here, and a narrower pattern left them with no config at all.
+    const storybookConfig = await findStorybookConfigFile(configDirectory, /^main\.[cm]?[jt]sx?$/);
+    if (!storybookConfig) {
+      throw new Error('Failed to locate Storybook config file');
+    }
+
+    const mainConfig = await readConfig(storybookConfig);
+    log.debug({ configDirectory, mainConfig: printConfig(mainConfig) });
+    return { mainConfig, isAstConfig: true };
+  } catch (err) {
+    log.debug({ storybookV7error: err });
+    return { isAstConfig: false };
+  }
+};
+
+// TODO: refactor this function
+export const getStorybookMetadata = async (
+  deps: StorybookInfoDeps
+): Promise<Partial<Storybook>> => {
+  const configDirectory = deps.options.storybookConfigDir ?? '.storybook';
   // Whether we hold a parsed AST rather than an evaluated module — decided by the config's module
   // format, not its Storybook version. Field reads go through readMainConfigField so neither
   // representation loses a field.
-  let isAstConfig = false;
-  try {
-    mainConfig = await r(path.resolve(configDirectory, 'main'));
-    deps.log.debug({ configDirectory, mainConfig });
-  } catch (err) {
-    deps.log.debug({ storybookV6error: err });
-    try {
-      // `.mjs` and `.cjs` are matched too: the CJS resolver above only tries `.js`/`.json`/`.node`,
-      // so those two always land here, and a narrower pattern left them with no config at all.
-      const storybookConfig = await findStorybookConfigFile(
-        deps.options.storybookConfigDir,
-        /^main\.[cm]?[jt]sx?$/
-      );
-      if (!storybookConfig) {
-        throw new Error('Failed to locate Storybook config file');
-      }
-
-      mainConfig = await readConfig(storybookConfig);
-      deps.log.debug({ configDirectory, mainConfig: printConfig(mainConfig) });
-      isAstConfig = true;
-    } catch (err) {
-      deps.log.debug({ storybookV7error: err });
-    }
-  }
+  const { mainConfig, isAstConfig } = await readMainConfig(configDirectory, deps.log);
 
   const info = await Promise.allSettled([
-    findConfigFlags(deps),
+    findConfigFlags({
+      buildScriptName: deps.options.buildScriptName,
+      packageJson: deps.packageJson,
+    }),
     findStorybookVersion(deps),
     findBuilder(mainConfig, isAstConfig),
     findReferences(mainConfig, isAstConfig),

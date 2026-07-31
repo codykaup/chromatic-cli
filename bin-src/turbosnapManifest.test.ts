@@ -1,5 +1,7 @@
+import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { getRepositoryRoot } from '../node-src/git/git';
 import { readStatsFile } from '../node-src/tasks/readStatsFile';
 import { Stats } from '../node-src/types';
 import { main } from './turbosnapManifest';
@@ -16,7 +18,7 @@ vi.mock('../node-src/tasks/readStatsFile', () => ({
 }));
 
 vi.mock('../node-src/git/git', () => ({
-  getRepositoryRoot: () => Promise.resolve('/repo'),
+  getRepositoryRoot: vi.fn(() => Promise.resolve('/repo')),
 }));
 
 vi.mock('../node-src/lib/getFileHashes', () => ({
@@ -56,7 +58,7 @@ describe('turbosnap-manifest command', () => {
   });
 
   it('prints the serialized manifest as JSON to stdout', async () => {
-    await main(['-s', 'preview-stats.json']);
+    await main(['-s', 'preview-stats.json', '-b', '.']);
 
     expect(stdout).toHaveBeenCalledTimes(1);
     const written = stdout.mock.calls[0][0] as string;
@@ -77,6 +79,16 @@ describe('turbosnap-manifest command', () => {
     // only --storybook-base-dir finds <root>/<baseDir>/storybook-static/preview-stats.json.
     expect(readStatsFile).toHaveBeenCalledWith(
       '/repo/packages/ui/storybook-static/preview-stats.json'
+    );
+  });
+
+  it('defaults the base directory the way production does, from the cwd and the repo root', async () => {
+    vi.mocked(getRepositoryRoot).mockResolvedValue(path.dirname(process.cwd()));
+
+    await main([]);
+
+    expect(readStatsFile).toHaveBeenCalledWith(
+      path.join(process.cwd(), 'storybook-static/preview-stats.json')
     );
   });
 });

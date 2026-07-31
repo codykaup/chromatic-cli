@@ -190,8 +190,10 @@ only, where v1 bails. Static dirs win over the config dir (they nest under `.sto
 mirroring v1 testing `isStaticFile` before `isStorybookFile`. Each key is omitted entirely when its
 section is empty, as `<storybookGlobals>` is.
 
-`gen.sh` reads `staticDirs` out of `main.*` the same way a real build does. Pass
-`--static-dir a,b` to `turbosnap-manifest` to override, and `-c` for a non-default config dir.
+`gen.sh` derives the config and static directories by calling the same functions a real build calls —
+the build script's `-c`/`-s` plus `staticDirs` out of `main.*` — so they are shared, not reimplemented
+(see trap 5). Pass `--static-dir a,b` to `turbosnap-manifest` to override the static directories, and
+`-c` for a non-default config dir; both replace the derivation rather than exercising it.
 
 ### Static file identity
 
@@ -408,13 +410,30 @@ harness is wrong.
    defect that does not exist — the real count on webpack is **0**. Normalize both sides with the
    CLI's own `paths.ts` (load it through `cost-lib.mjs`, as `dangling.mjs` does) rather than
    reimplementing it, and `existsSync` before believing a stats path names a real file.
-5. **This harness does not derive v2's inputs the way production does, so it cannot see an
-   input-derivation bug.** `gen.sh` goes through `chromatic turbosnap-manifest`, which finds the
-   Storybook config with `/^main\.[cm]?[jt]sx?$/` and always assumes v7; production uses
-   `/^main\.[jt]sx?$/` and only sets `v7` when `require()` of the config *fails*
-   (`getStorybookMetadata.ts:243-256`). The harness is therefore **more capable than production at
-   exactly the step that fails**: production resolves `staticDirs` for `main.ts` and for nothing else,
-   so `<staticFiles>` is silently absent on `main.js`/`main.mjs`/`main.cjs` projects — and every
-   fixture here uses `main.ts`. The subcommand also never reads the build script's `-c`/`-s`. Any claim
-   about *input derivation* must be measured against `getStorybookMetadata` directly, never through
-   `gen.sh`. See [`input-boundary-audit.html`](./input-boundary-audit.html).
+5. **The harness used to derive v2's inputs differently from production, so it could not see an
+   input-derivation bug — and that is why one survived two audits.** `gen.sh` goes through `chromatic
+   turbosnap-manifest`, which found the Storybook config with its own `/^main\.[cm]?[jt]sx?$/` and
+   always claimed to hold a parsed AST, while production used `/^main\.[jt]sx?$/` and only held one
+   when `require()` of the config *failed*. The harness was therefore **more capable than production
+   at exactly the step that fails**: production resolved `staticDirs` for `main.ts` and for nothing
+   else, so `<staticFiles>` was silently absent on `main.js`/`main.mjs`/`main.cjs` projects — and
+   every fixture here uses `main.ts`, so no fixture result could show it. See
+   [`input-boundary-audit.html`](./input-boundary-audit.html).
+
+   **Both halves are now fixed and the derivation is shared, not merely matched.** Production reads
+   either representation through `readMainConfigField`, and the subcommand calls the *same*
+   `readMainConfig` + `findStaticDirectories` + `findConfigFlags` production calls, including the
+   build script's `-c`/`-s` and production's cwd-relative base-directory default. A manifest for the
+   `ui` fixture is byte-identical across that change, so the alignment moved the mechanism, not the
+   results. What is still **not** shared, and still bounds what a harness run can claim:
+
+   - **`statsPath`** comes from `-s`, where production takes it from `ctx.fileInfo` after a build.
+     That is the point of the subcommand — synthetic stats — and not fixable.
+   - **`-c` and `--static-dir` are overrides** with no production equivalent. Passing either replaces
+     the derivation you were trying to measure; omit both when input derivation is the subject.
+   - **`require()` of `main.*` runs from the harness's cwd**, not the project directory, so a config
+     importing project-local packages can fall to the AST branch here where production evaluates the
+     module. Both branches now yield the same `staticDirs`, so this changes the path taken, not the
+     value — but record it before concluding anything about *which branch* production takes.
+   - **Trap 2 on the map still applies:** `require(esm)` behaviour is Node-version dependent, so
+     record the Node version in any measurement of config discovery.
