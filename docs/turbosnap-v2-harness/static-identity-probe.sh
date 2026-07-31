@@ -8,6 +8,7 @@
 #   2. swap two assets' contents          -> same hash multiset, different URLs (G1, fixed)
 #   3. symlinked asset, target changes    -> hashed by target bytes (G2, fixed)
 #   4. symlinked directory of assets      -> descended into (G2, fixed)
+#   5. staticDirs `to`-only remount        -> config roll-up carries served-URL identity
 #
 # Cases 1-2 were gap G1, a PATH miss: <staticFiles> rolled up content hashes only, which is wrong for
 # static files (the URL is the identity). Fixed — the out-of-graph sections went path-sensitive first,
@@ -16,9 +17,14 @@
 # Cases 3-4 were gap G2, a CONTENT miss rather than a path one, and are FIXED: the walk now follows
 # symlinks.
 #
-# All four must report `as expected`; a regression in any of them shows up as UNDER-CAPTURES.
+# Case 5 deliberately leaves <staticFiles> alone: changing `to` changes main.ts, so
+# <storybookConfig> already moves the final gate. Giving <staticFiles> a second copy of that identity
+# would require a wider `{ from, to }` metadata contract without closing a demonstrated miss.
 #
-# Nothing tracked by git is touched: every asset this creates is untracked and removed by the trap.
+# All five must report `as expected`; a regression in any of them shows up as UNDER-CAPTURES.
+#
+# Cases 1-4 create only untracked assets. Case 5 temporarily edits main.ts from a byte-for-byte backup,
+# restored before the verdict and again by the trap on interruption. The fixture must start clean.
 # Env overrides: CHROMATIC_CLI, MONOREPO (see gen.sh).
 set -uo pipefail
 
@@ -27,8 +33,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MONOREPO="${MONOREPO:-$HOME/Projects/turbosnap-monorepo}"
 W="$(mktemp -d)"
 S="$MONOREPO/packages/$PKG/.storybook/static"
+MAIN="$MONOREPO/packages/$PKG/.storybook/main.ts"
 
 cleanup() {
+  [[ -f "$W/main.ts" ]] && cp "$W/main.ts" "$MAIN"
   rm -f "$S/probe-light.txt" "$S/probe-dark.txt" "$S/probe-link.txt" "$S/probe-linkdir" "$S/probe-renamed.js"
   # The rename probe stages the real asset outside the static dir; put it back if still displaced.
   [[ -f "$W/moved-aside" && ! -f "$S/mockServiceWorker.js" ]] && mv "$W/moved-aside" "$S/mockServiceWorker.js"
@@ -37,12 +45,20 @@ cleanup() {
 trap cleanup EXIT
 
 [[ -d "$S" ]] || { echo "$PKG has no .storybook/static — nothing to probe." >&2; exit 1; }
+[[ -f "$MAIN" ]] || { echo "$PKG has no .storybook/main.ts — nothing to probe." >&2; exit 1; }
+[[ -z "$(git -C "$MONOREPO" status --porcelain)" ]] || {
+  echo "$MONOREPO must be clean before the probe edits main.ts." >&2
+  exit 1
+}
+cp "$MAIN" "$W/main.ts"
 
 cp "$MONOREPO/packages/$PKG/storybook-static/preview-stats.json" "$W/stats.json"
 gen() { bash "$HERE/gen.sh" "$PKG" "$1" "$W/stats.json" >/dev/null; }
 h()   { jq -r '.storybookHash' "$1"; }
 sf()  { jq -r '.storybookFiles["<staticFiles>"] // "ABSENT"' "$1"; }
+sc()  { jq -r '.storybookFiles["<storybookConfig>"] // "ABSENT"' "$1"; }
 cnt() { jq -r '.staticFiles | length' "$1"; }
+ccnt() { jq -r '.storybookConfigFiles | length' "$1"; }
 
 verdict() { # <base> <cur> <expected-to-move: yes|no>
   local moved=CHANGED
@@ -90,6 +106,32 @@ ln -s "$W/realdir" "$S/probe-linkdir"
 gen "$W/4b.json"
 rm -f "$S/probe-linkdir"
 verdict "$W/4a.json" "$W/4b.json" yes
+
+echo
+echo "### 5. staticDirs to-only remount — config roll-up owns mount identity"
+gen "$W/5a.json"
+perl -0pi -e "s#staticDirs: \['\./static'\],#staticDirs: [{ from: './static', to: '/remounted' }],#" "$MAIN"
+if cmp -s "$W/main.ts" "$MAIN"; then
+  echo "Could not replace $PKG's expected staticDirs declaration." >&2
+  exit 1
+fi
+gen "$W/5b.json"
+cp "$W/main.ts" "$MAIN"
+
+printf '  config files hashed: %s -> %s\n' "$(ccnt "$W/5a.json")" "$(ccnt "$W/5b.json")"
+printf '  static files hashed: %s -> %s\n' "$(cnt "$W/5a.json")" "$(cnt "$W/5b.json")"
+printf '  <staticFiles>:       %s -> %s\n' "$(sf "$W/5a.json")" "$(sf "$W/5b.json")"
+printf '  <storybookConfig>:   %s -> %s\n' "$(sc "$W/5a.json")" "$(sc "$W/5b.json")"
+printf '  storybookHash:       %s -> %s\n' "$(h "$W/5a.json")" "$(h "$W/5b.json")"
+if [[ "$(ccnt "$W/5a.json")" == "$(ccnt "$W/5b.json")" &&
+      "$(cnt "$W/5a.json")" == "$(cnt "$W/5b.json")" &&
+      "$(sf "$W/5a.json")" == "$(sf "$W/5b.json")" &&
+      "$(sc "$W/5a.json")" != "$(sc "$W/5b.json")" &&
+      "$(h "$W/5a.json")" != "$(h "$W/5b.json")" ]]; then
+  echo "  => as expected (served-URL identity carried by <storybookConfig>)"
+else
+  echo "  => UNDER-CAPTURES (expected only the config roll-up and final gate to move)"
+fi
 
 echo
 echo "### fixture repo clean?"

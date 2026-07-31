@@ -90,3 +90,8 @@ _Avoid_: Changed Storybook files
 **Changed Storybook version**:
 A change to the installed Storybook core version tracked independently of the builder's module graph.
 It is not inferred from changed package metadata.
+
+**Served static asset**:
+File bytes exposed at the URL formed by a Storybook static directory's target plus the file's path
+relative to that directory's source. Its browser-visible identity is the served URL, not the source
+path on disk.
