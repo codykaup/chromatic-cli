@@ -14,6 +14,10 @@
 #   delete-story      an existing story file removed
 #   move-module       src/theme.ts -> src/theme/index.ts, bytes intact, no importer edits
 #                     (directory-index resolution keeps `../../theme` byte-identical)
+#   move-path-derived the same byte-preserving move, but of a component whose *path reaches the
+#                     emitted output*: a CSS Module class name and a `new URL(..., import.meta.url)`
+#                     asset. This is the case that decides whether "identical bytes render
+#                     identically" survives, so read its emitted-output diff, not just its hashes.
 #   move-component    Badge.tsx -> Badge/index.tsx, bytes intact, story-side importers only
 #   move-package      Badge.tsx moved from packages/<pkg> into packages/shared, importers updated
 #   move-story        a story file renamed with its bytes intact and its explicit `title` unchanged
@@ -52,6 +56,7 @@ ALL_CASES=(
   delete-story
   move-module
   move-component
+  move-path-derived
   move-package
   move-story
   move-story-autotitle
@@ -122,6 +127,23 @@ build() {
 }
 gen() { bash "$HERE/gen.sh" "$PKG" "$1"; }
 stats_sha() { shasum -a 256 "$MONOREPO/$STATS" | cut -c1-12; }
+
+# Every file a browser would actually fetch, hashed. Sourcemaps carry source paths and so change on
+# any move without affecting a render; the stats file and the index are measured on their own; the
+# manager bundle is never captured by Chromatic. Excluding those four leaves the render's own bytes.
+out_manifest() {
+  (
+    cd "$MONOREPO/$PKG_DIR/storybook-static"
+    find . -type f \
+      ! -name '*.map' ! -name 'preview-stats.json' ! -name 'index.json' \
+      ! -path './sb-manager/*' -exec shasum -a 256 {} + | sed 's#\./##' | sort -k2
+  ) > "$1"
+}
+
+# v1's verdict for the same change, so a v2 "recaptures nothing" can be read against it.
+v1_trace() {
+  (cd "$MONOREPO" && node "$CLI" trace -b "$PKG_DIR" -s "$STATS" --json "$@")
+}
 
 # The story IDs Storybook actually indexed. A hash verdict only means something next to these: an
 # autotitled story file changes every ID it holds without changing a byte.
@@ -195,6 +217,33 @@ apply_move-module() {
 apply_move-component() {
   mkdir -p "$MONOREPO/$SRC/lib/Badge/Badge"
   mv "$MONOREPO/$SRC/lib/Badge/Badge.tsx" "$MONOREPO/$SRC/lib/Badge/Badge/index.tsx"
+}
+
+# The one case where "identical bytes render identically" can actually fail. `PathDerived` imports a
+# CSS Module (whose class names a bundler may hash from the stylesheet's path) and resolves an asset
+# with `new URL('./logo.svg', import.meta.url)`. Moving the component to a directory index takes both
+# along, so no importer byte changes and the story file stays put — only paths move. The verdict here
+# is the emitted-output diff, not the hashes: hashes only say what v2 recaptures, and the question is
+# whether there was anything to recapture.
+apply_move-path-derived() {
+  mkdir -p "$MONOREPO/$SRC/lib/PathDerived/PathDerived"
+  mv "$MONOREPO/$SRC/lib/PathDerived/PathDerived.tsx" \
+    "$MONOREPO/$SRC/lib/PathDerived/PathDerived/index.tsx"
+  mv "$MONOREPO/$SRC/lib/PathDerived/styles.module.css" \
+    "$MONOREPO/$SRC/lib/PathDerived/PathDerived/styles.module.css"
+  mv "$MONOREPO/$SRC/lib/PathDerived/logo.svg" \
+    "$MONOREPO/$SRC/lib/PathDerived/PathDerived/logo.svg"
+}
+
+# v1 works from changed *paths*, so a move is two changes: the old path gone and the new one added.
+v1_paths_move-path-derived() {
+  echo "$SRC/lib/PathDerived/PathDerived.tsx"
+  echo "$SRC/lib/PathDerived/PathDerived/index.tsx"
+}
+
+v1_paths_move-component() {
+  echo "$SRC/lib/Badge/Badge.tsx"
+  echo "$SRC/lib/Badge/Badge/index.tsx"
 }
 
 apply_move-package() {
@@ -303,6 +352,7 @@ build
 echo "stats sha: $(stats_sha)"
 gen "$WORK/clean-base.json"
 story_ids "$WORK/clean-base.ids"
+out_manifest "$WORK/clean-base.out"
 node "$HERE/bucket.mjs" "$WORK/clean-base.json" | head -5
 
 for CASE in "${CASES[@]}"; do
@@ -317,14 +367,17 @@ for CASE in "${CASES[@]}"; do
 
   BASE="$WORK/clean-base.json"
   BASE_IDS="$WORK/clean-base.ids"
+  BASE_OUT="$WORK/clean-base.out"
   if declare -F "setup_$CASE" >/dev/null; then
     echo "-- setup (case-specific baseline) --"
     "setup_$CASE"
     build
     BASE="$WORK/$CASE-base.json"
     BASE_IDS="$WORK/$CASE-base.ids"
+    BASE_OUT="$WORK/$CASE-base.out"
     gen "$BASE"
     story_ids "$BASE_IDS"
+    out_manifest "$BASE_OUT"
     echo "baseline stats sha: $(stats_sha)"
   fi
 
@@ -334,6 +387,7 @@ for CASE in "${CASES[@]}"; do
   CUR_SHA="$(stats_sha)"
   gen "$WORK/$CASE-cur.json"
   story_ids "$WORK/$CASE-cur.ids"
+  out_manifest "$WORK/$CASE-cur.out"
   echo "stats sha: $BASE_SHA -> $CUR_SHA $([[ "$BASE_SHA" == "$CUR_SHA" ]] && echo '(UNCHANGED - the rebuild saw no graph change)' || echo '(regenerated)')"
 
   echo "-- tsdiff (what recaptures) --"
@@ -347,6 +401,13 @@ for CASE in "${CASES[@]}"; do
     # `diff` exits non-zero precisely when it found the difference we are asking for, and pipefail
     # would turn that into a fatal error.
     { diff "$BASE_IDS" "$WORK/$CASE-cur.ids" || true; } | grep -E '^[<>]' | sed 's/^/  /'
+  fi
+  echo "-- emitted output (what a browser would fetch) --"
+  node "$HERE/outdiff.mjs" "$BASE_OUT" "$WORK/$CASE-cur.out" | sed 's/^/  /'
+  if declare -F "v1_paths_$CASE" >/dev/null; then
+    echo "-- v1 on the same change --"
+    # shellcheck disable=SC2046  # each line is one path argument, so word splitting is the point.
+    v1_trace $("v1_paths_$CASE") | sed 's/^/  /'
   fi
 
   restore_tree
