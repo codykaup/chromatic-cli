@@ -106,6 +106,7 @@ describe('createTurboSnapComparisonEvent', () => {
           turboSnap: {
             bailReason: {
               noStorybookConfigFiles: true,
+              noStaticFiles: true,
               noStoryFiles: true,
             },
           },
@@ -119,6 +120,35 @@ describe('createTurboSnapComparisonEvent', () => {
       v1_outcome: 'UNUSED',
       v2_outcome: 'BAILED',
       v2_reason: 'noStorybookConfigFiles',
+    });
+  });
+
+  it('reports an empty configured static section in preference to the empty graph', () => {
+    expect(
+      createTurboSnapComparisonEvent({
+        schemaVersion: 1,
+        buildId: 'build-id',
+        mode: 'monitoring',
+        onlyStoryFilesSource: 'V1',
+        v1: { status: 'skipped' },
+        v2: {
+          status: 'bailed',
+          turboSnap: {
+            bailReason: {
+              noStaticFiles: true,
+              noStoryFiles: true,
+            },
+          },
+        },
+      })
+    ).toEqual({
+      schema_version: 1,
+      build_id: 'build-id',
+      mode: 'monitoring',
+      only_story_files_source: 'V1',
+      v1_outcome: 'UNUSED',
+      v2_outcome: 'BAILED',
+      v2_reason: 'noStaticFiles',
     });
   });
 

@@ -20,6 +20,7 @@ export type TurboSnapV2Reason =
   | 'untrustedBuilderStats'
   | 'noStoryFiles'
   | 'noStorybookConfigFiles'
+  | 'noStaticFiles'
   | 'indexUnavailable'
   | 'indexContractViolation'
   | 'changedStorybookGlobals'
@@ -103,7 +104,8 @@ type BailReasonKey =
   | 'indexUnavailable'
   | 'untrustedBuilderStats'
   | 'noStoryFiles'
-  | 'noStorybookConfigFiles';
+  | 'noStorybookConfigFiles'
+  | 'noStaticFiles';
 
 function selectReason<T extends string>(
   reason: TurboSnapBailReason | undefined,
@@ -132,6 +134,7 @@ const V2_REASON_PRECEDENCE = [
   ['indexUnavailable', 'indexUnavailable'],
   ['untrustedBuilderStats', 'untrustedBuilderStats'],
   ['noStorybookConfigFiles', 'noStorybookConfigFiles'],
+  ['noStaticFiles', 'noStaticFiles'],
   ['noStoryFiles', 'noStoryFiles'],
   ['invalidChangedFiles', 'invalidChangedFiles'],
   ['changedExternalFiles', 'changedExternalFiles'],

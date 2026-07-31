@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/node';
 
 import GraphQLClient from '../../../io/graphqlClient';
 import { readStatsFile } from '../../../tasks/readStatsFile';
+import type { TurboSnapBailReason } from '../../../types';
 import { TraceChangedFilesResult } from '../types';
 import { captureBailException } from '../v1/captureBailException';
 import { isNetworkError } from '../v1/errors';
@@ -37,6 +38,30 @@ function writeDiagnosticManifest(
       tags: { turbo_snap_v2_diagnostic: 'writeManifest' },
     });
   }
+}
+
+function getEmptyOutOfGraphBail(
+  manifest: Parameters<typeof writeManifest>[0],
+  staticDirectories: string[],
+  outputDirectory: string
+): TraceChangedFilesResult | undefined {
+  let bailReason: TurboSnapBailReason | undefined;
+
+  // A real Storybook always has a non-empty config directory, so resolving zero files there says the
+  // input derivation is wrong rather than that the project has no config. It remains the first and
+  // most actionable diagnosis when several manifest sections are empty.
+  if (manifest.outOfGraphFiles.storybookConfigFiles.size === 0) {
+    bailReason = { noStorybookConfigFiles: true };
+  } else if (staticDirectories.length > 0 && manifest.outOfGraphFiles.staticFiles.size === 0) {
+    // An empty static section is only suspicious when static directories were explicitly configured.
+    // A configured-but-empty directory deliberately bails in the safe direction rather than sharing
+    // the same silent evidence as a missing or unreadable directory.
+    bailReason = { noStaticFiles: true };
+  }
+
+  if (!bailReason) return undefined;
+  writeDiagnosticManifest(manifest, outputDirectory);
+  return { status: 'bailed', turboSnap: { bailReason } };
 }
 
 /**
@@ -116,22 +141,12 @@ export async function traceChangedFiles(
     };
   }
 
-  // A real Storybook always has a non-empty config directory, so resolving zero files there says the
-  // input derivation is wrong rather than that the project has no config. Without this guard the
-  // `<storybookConfig>` entry is simply omitted, making "we looked and found nothing" byte-identical
-  // to "there was nothing to look for". Checked before the no-story guard because a misderived
-  // `configDir` is the more actionable diagnosis when both hold.
-  if (manifest.outOfGraphFiles.storybookConfigFiles.size === 0) {
-    writeDiagnosticManifest(manifest, input.manifestOutputDirectory);
-    return {
-      status: 'bailed',
-      turboSnap: {
-        bailReason: {
-          noStorybookConfigFiles: true,
-        },
-      },
-    };
-  }
+  const emptyOutOfGraphBail = getEmptyOutOfGraphBail(
+    manifest,
+    input.staticDirs,
+    input.manifestOutputDirectory
+  );
+  if (emptyOutOfGraphBail) return emptyOutOfGraphBail;
 
   // A graph we found no stories in can only ever recapture everything through `<storybookGlobals>`,
   // which is wider than v1. Write the manifest anyway so the degenerate graph is still debuggable.

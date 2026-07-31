@@ -48,7 +48,7 @@ const manifest = {
   storyFileHashes: new Map([['./src/Button.stories.tsx', 'story-hash']]),
   outOfGraphFiles: {
     storybookConfigFiles: new Map([['.storybook/main.ts', 'config-hash']]),
-    staticFiles: new Map(),
+    staticFiles: new Map([['./.storybook/static/logo.svg', 'static-hash']]),
   },
 };
 
@@ -283,6 +283,40 @@ describe('traceChangedFiles', () => {
       status: 'bailed',
       turboSnap: { bailReason: { noStorybookConfigFiles: true } },
     });
+  });
+
+  it('bails without uploading when configured static directories resolve to zero files', async () => {
+    const staticless = {
+      ...manifest,
+      outOfGraphFiles: { ...manifest.outOfGraphFiles, staticFiles: new Map() },
+    };
+    vi.mocked(buildManifest).mockResolvedValue(staticless as any);
+
+    const result = await traceChangedFiles(input);
+
+    expect(result).toEqual({
+      status: 'bailed',
+      turboSnap: {
+        bailReason: {
+          noStaticFiles: true,
+        },
+      },
+    });
+    expect(determineChangedFiles).not.toHaveBeenCalled();
+    expect(writeManifest).toHaveBeenCalledWith(staticless, '/repo/packages/ui/.chromatic');
+  });
+
+  it('allows an empty static section when no static directories are configured', async () => {
+    const staticless = {
+      ...manifest,
+      outOfGraphFiles: { ...manifest.outOfGraphFiles, staticFiles: new Map() },
+    };
+    vi.mocked(buildManifest).mockResolvedValue(staticless as any);
+
+    await expect(traceChangedFiles({ ...input, staticDirs: [] })).resolves.toEqual({
+      status: 'fallback',
+    });
+    expect(determineChangedFiles).toHaveBeenCalledWith(input.graphqlClient, 'build-id', staticless);
   });
 
   it('bails without uploading when the graph contains no story files', async () => {

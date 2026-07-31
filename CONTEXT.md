@@ -66,6 +66,12 @@ files. It describes the input v2 received, not the project: a real Storybook alw
 configuration directory, so the derivation of that directory is what the condition indicts.
 _Avoid_: Missing Storybook config
 
+**No static files**:
+A manifest condition in which at least one configured static directory collectively resolved to zero
+files. It describes the evidence v2 received, not whether the directories are missing or legitimately
+empty.
+_Avoid_: Missing static files
+
 **Index unavailable**:
 A condition in which the CLI cannot obtain a TurboSnap answer from the Index after the request's
 retry policy is exhausted. It describes communication availability, not the validity of a response.
