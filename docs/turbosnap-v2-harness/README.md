@@ -384,7 +384,7 @@ harness is wrong.
 > The fixture repo may be edited by concurrent sessions. If a baseline you took earlier disagrees
 > with a fresh one, regenerate the baseline immediately before the probe rather than reusing it.
 
-## Five traps that have already produced wrong conclusions
+## Seven traps that have already produced wrong conclusions
 
 1. **The fixture is shared and gets rebuilt mid-run.** A concurrent `build-storybook` swaps the module
    graph underneath a running probe and silently changes results — `preview-stats.json` changed three
@@ -437,3 +437,18 @@ harness is wrong.
      value — but record it before concluding anything about *which branch* production takes.
    - **Trap 2 on the map still applies:** `require(esm)` behaviour is Node-version dependent, so
      record the Node version in any measurement of config discovery.
+6. **Reading a webpack result about *module names* as though it transferred to vite.** `moduleFileNames`
+   prefers `nameForCondition`, which is the undecorated absolute path, and that is the only reason a
+   loader-decorated name like
+   `../../node_modules/css-loader/dist/cjs.js??ruleSet[1].rules[4].use[1]!./src/lib/PathDerived/styles.module.css`
+   costs nothing on webpack. `nameForCondition` is present on **349/375 `ui-webpack` modules and on zero
+   modules in all four vite packages** — on vite, `name` is a module's only spelling. So "decorated names
+   are harmless" is a webpack fact, not a v2 fact, and the same applies to any conclusion drawn from
+   concatenated-module shapes. Check the builder before generalising.
+7. **Treating the emptiness guards as coverage.** `noStoryFiles`, `noStorybookConfigFiles`,
+   `noStaticFiles` and `unresolvedStaticDirectories` all detect a *specific absence*. They cannot detect a
+   manifest that is complete and **wrong**: anchoring one package's stats at a structurally similar sibling
+   yields 5 stories, 3 config files, every section populated, no bail, and story hashes read off the wrong
+   package. Relatedly, the fixture packages are near-identical siblings, so a wrong-anchor probe shows
+   nothing unless you deliberately diverge their content first. See
+   [`unseen-inputs-audit.html`](./unseen-inputs-audit.html).

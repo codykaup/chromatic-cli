@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TurboSnap v2 unseen-inputs audit — what the manifest cannot see</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1d21; --muted: #5d666f; --line: #dfe3e8;
+    --panel: #f7f8fa; --code: #f1f3f5;
+    --ok: #1a7f4b; --ok-bg: #e6f4ec;
+    --miss: #a4262c; --miss-bg: #fbeaea;
+    --over: #8a5a00; --over-bg: #fdf3e2;
+    --unex: #4b5563; --unex-bg: #eef0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a; --fg: #e8eaed; --muted: #9aa3ad; --line: #2c3237;
+      --panel: #1b1f23; --code: #22272c;
+      --ok: #6cd39a; --ok-bg: #14301f;
+      --miss: #ff9b9b; --miss-bg: #3a1a1c;
+      --over: #f0c26b; --over-bg: #362a12;
+      --unex: #aab2bb; --unex-bg: #24292e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1.25rem 5rem;
+    background: var(--bg); color: var(--fg);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 68rem; margin: 0 auto; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .35rem; }
+  h2 { font-size: 1.25rem; margin: 2.75rem 0 .75rem; padding-bottom: .35rem; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 1rem; margin: 1.75rem 0 .5rem; }
+  p, li { max-width: 62rem; }
+  .sub { color: var(--muted); margin: 0 0 1.5rem; font-size: .9rem; }
+  code, kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .86em;
+    background: var(--code); padding: .1em .35em; border-radius: 3px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: .75rem .9rem;
+    overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1rem 0; border: 1px solid var(--line); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; min-width: 52rem; font-size: .87rem; }
+  th, td { text-align: left; vertical-align: top; padding: .5rem .65rem; border-bottom: 1px solid var(--line); }
+  thead th { background: var(--panel); font-weight: 600; white-space: nowrap; position: sticky; top: 0; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .v { display: inline-block; padding: .1rem .45rem; border-radius: 4px; font-size: .78rem;
+    font-weight: 600; white-space: nowrap; }
+  .v-ok { color: var(--ok); background: var(--ok-bg); }
+  .v-miss { color: var(--miss); background: var(--miss-bg); }
+  .v-over { color: var(--over); background: var(--over-bg); }
+  .v-unex { color: var(--unex); background: var(--unex-bg); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--muted);
+    border-radius: 6px; padding: .85rem 1rem; margin: 1.25rem 0; }
+  .panel.warn { border-left-color: var(--miss); }
+  .panel.good { border-left-color: var(--ok); }
+  .panel h3 { margin-top: 0; }
+  .gap { border: 1px solid var(--line); border-radius: 6px; padding: .9rem 1.1rem; margin: 1.1rem 0; background: var(--panel); }
+  .gap header { display: flex; flex-wrap: wrap; gap: .6rem; align-items: baseline; margin-bottom: .4rem; }
+  .gap h3 { margin: 0; font-size: 1rem; }
+  .sev { font-size: .72rem; font-weight: 700; letter-spacing: .04em; padding: .15rem .45rem; border-radius: 4px; }
+  .sev-p1 { color: var(--miss); background: var(--miss-bg); }
+  .sev-p2 { color: var(--over); background: var(--over-bg); }
+  .sev-p3 { color: var(--unex); background: var(--unex-bg); }
+  .tag { font-size: .72rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: .12rem .4rem; }
+  dl.kv { margin: .5rem 0 0; }
+  dl.kv dt { font-weight: 600; font-size: .82rem; color: var(--muted); margin-top: .55rem; text-transform: uppercase; letter-spacing: .03em; }
+  dl.kv dd { margin: .15rem 0 0; }
+  ul.tight { margin: .4rem 0; padding-left: 1.3rem; }
+  ul.tight li { margin: .2rem 0; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 2.5rem 0; }
+  .footnote { font-size: .85rem; color: var(--muted); }
+  s { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>TurboSnap v2 unseen-inputs audit</h1>
+<p class="sub">
+  Independent pass, 2026-07-31 · <code>chromatic-cli@cody/turbosnap-v2</code> (<code>2df56c7c</code>) ·
+  fixtures <code>~/Projects/turbosnap-monorepo@main</code>, clean before and after ·
+  <code>yarn build</code> re-run after the tree moved (trap 1) · <code>ui</code>'s Storybook rebuilt twice and
+  restored.
+</p>
+
+<div class="panel warn">
+  <h3>Read this first — the tree moved underneath the previous audit</h3>
+  <p>
+    <code>HEAD</code> is now <code>2df56c7c</code>, and it contains fixes for
+    <strong>every P1 the input-boundary audit raised</strong>. That audit read a 150-line
+    <code>v2/index.ts</code>; the file is now 233 lines. So before reporting anything new I re-baselined
+    against current <code>HEAD</code> and re-tested each prior finding. All seven are closed —
+    see <a href="#absorbed">What the previous audit's findings look like now</a>.
+  </p>
+  <p>
+    That matters for reading this report: <strong>nothing below is a restatement.</strong> The prior audits
+    cover the algorithm; the last one covered how the four inputs are <em>derived</em>. This one asks a
+    different question — <strong>what real rendering inputs does the manifest never see at all,
+    and what does v2 do that v1 refuses to do?</strong> The method is a systematic diff of v1's consumed
+    context against v2's seven-field input struct, plus a survey of every stats name that fails to resolve
+    to a file on disk.
+  </p>
+</div>
+
+<h2>Findings at a glance</h2>
+
+<div class="scroll">
+<table>
+<thead>
+<tr><th>#</th><th>Finding</th><th>Class</th><th>Status</th><th>Sev</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td>G1</td>
+  <td>Assets referenced via <code>new URL('./x', import.meta.url)</code> are invisible — a rendered, emitted, first-party asset that changes nothing</td>
+  <td>under-capture, <strong>live</strong></td>
+  <td><span class="v v-miss">measured on a real fixture</span></td>
+  <td><span class="sev sev-p1">P1</span></td>
+</tr>
+<tr>
+  <td>G2</td>
+  <td>Nothing checks that the stats file and <code>projectRoot</code> belong together — a mismatched anchor hashes the wrong package with no bail</td>
+  <td>silently wrong</td>
+  <td><span class="v v-miss">measured</span></td>
+  <td><span class="sev sev-p1">P1</span></td>
+</tr>
+<tr>
+  <td>G3</td>
+  <td><code>--untraced</code> is silently inert in v2</td>
+  <td>ignored user config</td>
+  <td><span class="v v-over">code-decisive</span></td>
+  <td><span class="sev sev-p1">P1</span></td>
+</tr>
+<tr>
+  <td>G4</td>
+  <td>v1's two dependency fail-safes have no v2 analogue, exactly where v2's dependency coverage is blindest</td>
+  <td>under-capture</td>
+  <td><span class="v v-miss">code-decisive</span></td>
+  <td><span class="sev sev-p2">P2</span></td>
+</tr>
+<tr>
+  <td>G5</td>
+  <td>Decorated stats names drop real files; <strong>v1 strips query params on purpose, v2 does not</strong></td>
+  <td>under-capture, latent</td>
+  <td><span class="v v-over">mechanism measured, not live</span></td>
+  <td><span class="sev sev-p2">P2</span></td>
+</tr>
+<tr>
+  <td>G6</td>
+  <td><code>--externals</code> becomes narrower the moment v2 is authoritative</td>
+  <td>latent under-capture</td>
+  <td><span class="v v-over">code-decisive</span></td>
+  <td><span class="sev sev-p2">P2</span></td>
+</tr>
+<tr>
+  <td>G7</td>
+  <td><code>PREVIEW_CONFIG_PATTERN</code> hardcodes <code>.storybook</code>, so a custom config dir loses keyed preview attribution</td>
+  <td>over-capture</td>
+  <td><span class="v v-over">measured</span></td>
+  <td><span class="sev sev-p3">P3</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<hr>
+
+<h2>The findings</h2>
+
+<div class="gap" id="g1">
+<header>
+  <h3>G1 — <code>new URL('./x', import.meta.url)</code> assets are invisible</h3>
+  <span class="sev sev-p1">P1</span>
+  <span class="tag">live on <code>ui</code></span>
+  <span class="tag">measured</span>
+</header>
+
+<p>
+  <code>packages/ui/src/lib/PathDerived/PathDerived.tsx:6</code> does this:
+</p>
+<pre><code>const logoUrl = new URL('./logo.svg', import.meta.url).href;</code></pre>
+<p>
+  <code>logo.svg</code> is a real 4 346-byte first-party file. It is rendered by the story. Vite emits it into
+  the build output as <code>storybook-static/assets/logo-DOxA0yNj.svg</code>, so the browser genuinely
+  fetches those bytes. And it appears <strong>nowhere in the manifest</strong>:
+</p>
+<pre><code>in files?                false
+attributed?              false      (not storyReachable, not previewSubtree, not storybookGlobals)
+in staticFiles?          false
+in storybookConfigFiles? false
+
+edit logo.svg, regenerate manifest
+=&gt; manifest BYTE-IDENTICAL</code></pre>
+<p>
+  The reason is structural, not a bug in any one function: <code>new URL(..., import.meta.url)</code> never
+  becomes a module in <code>preview-stats.json</code>, so it is not in the graph. It is not under
+  <code>configDir</code>. It is not under a <code>staticDir</code>. v2 hashes exactly those three sets, so
+  the file is outside all of them — and because the asset is referenced at runtime rather than imported,
+  <strong><code>PathDerived.tsx</code>'s own source bytes do not change when the asset does</strong>. There is
+  no hash anywhere in the manifest that moves.
+</p>
+
+<div class="panel warn">
+  <h3>Why this is worth a ticket even though v1 is equally blind</h3>
+  <p>
+    I checked v1 rather than assuming. A changed <code>logo.svg</code> reaches v1's
+    <code>traceName</code>, which calls <code>shouldBail</code> first — <code>isStaticFile</code> does not
+    match (not under a static dir), <code>isStorybookFile</code> does not match (not under
+    <code>.storybook/</code>) — then looks the path up in <code>modulesByName</code>, finds nothing because
+    it is not a module, and <code>return</code>s silently
+    (<code>v1/getDependentStoryFiles.ts:302-309</code>). So this is <strong>parity</strong>, not a v2
+    regression.
+  </p>
+  <p>
+    It is on the list anyway for three reasons. First, <strong>this is the class v2 exists to fix</strong> —
+    content-hashing every build input is the whole premise, and here it hashes nothing. Second, it is a
+    <strong>guaranteed missed snapshot</strong>, not a probabilistic one: the emitted asset filename is
+    content-addressed, so the bytes a browser fetches provably change while every hash stays still. Third,
+    and most usefully: the prior audits list <em>"a story that renders a static asset by URL"</em> as the
+    one probe that would make the static-identity consequence observable, and record it as
+    <strong>unexercised because no fixture had one</strong>. A fixture <em>does</em> have one — it was added
+    for the <code>PathDerived</code> path-sensitivity work — and the answer is negative. That closes a
+    listed gap with a measurement.
+  </p>
+  <p>
+    Worth noting what the structural audit did and did not ask. It studied
+    <code>new URL(..., import.meta.url)</code> carefully, and correctly concluded that the emitted URL is
+    <em>basename + content hash</em> on both builders. That answered "does the module's path reach the
+    output?". Nobody asked the adjacent question: "are the referenced asset's <em>bytes</em> hashed at
+    all?" They are not.
+  </p>
+</div>
+</div>
+
+<div class="gap" id="g2">
+<header>
+  <h3>G2 — nothing checks that the stats file and <code>projectRoot</code> belong together</h3>
+  <span class="sev sev-p1">P1</span>
+  <span class="tag">silently wrong</span>
+  <span class="tag">measured</span>
+</header>
+<p>
+  v1 validates this explicitly. <code>checkStorybookBaseDirectory</code> hard-fails the build with
+  <code>INVALID_OPTIONS</code> when no source module in the stats resolves under the configured base
+  directory (<code>lib/checkStorybookBaseDirectory.ts:36-58</code>, called from
+  <code>v1/index.ts:89</code>). v2 folds the same value into <code>projectRoot</code>
+  (<code>turbosnap/index.ts:49-50</code>) and validates nothing.
+</p>
+<p>
+  The gross case is covered — by accident, but covered. Anchoring one package's stats at an
+  <em>unrelated</em> package makes every <code>./src/...</code> path fail <code>existsSync</code>, so no
+  story is detected and the new <code>noStoryFiles</code> guard fires. Measured: <code>ui</code>'s stats
+  anchored at <code>packages/marketing-ui</code> → <strong>0 stories</strong>.
+</p>
+<p>
+  The dangerous case is a <em>structurally similar</em> anchor, which is exactly what a monorepo produces.
+  <code>ui</code> and <code>ui-webpack</code> have byte-identical story paths (verified with
+  <code>diff</code>). Anchoring <code>ui</code>'s stats at <code>packages/ui-webpack</code>:
+</p>
+<pre><code>stories detected:    5        (correct anchor: 5)
+config files:        3
+storybookFiles:      ./.storybook/preview.ts, &lt;storybookGlobals&gt;, &lt;storybookVersion&gt;,
+                     &lt;storybookConfig&gt;, &lt;staticFiles&gt;
+BAIL SIGNALS:        none — stories &gt; 0 and configFiles &gt; 0
+
+with the sibling's Badge.tsx made to differ:
+Badge story hash — wrong anchor:  9b545b4e9226af47
+Badge story hash — correct     :  b6b7b86d1cec56fb
+=&gt; hashes computed from the WRONG package's bytes, no bail</code></pre>
+<p>
+  The output is a complete, well-formed, entirely plausible manifest whose story hashes were read off the
+  wrong package. Every existing guard passes: stories were found, the config directory resolved, static
+  files resolved. The failure is invisible by construction because <code>existsSync</code> answers
+  "a file exists here" and no one asks "is it <em>the</em> file".
+</p>
+<p>
+  This is <strong>v2-narrower</strong> in the strict sense: v1 refuses to run, v2 produces confident
+  nonsense. Note also that it survives the two guards added since the previous audit — the fix for silent
+  section loss does not help here, because the sections are not empty, just wrong.
+</p>
+<p class="footnote">
+  A subagent proposed a related but different hypothesis — that a <em>partial</em> base-dir mismatch would
+  under-capture by dropping some files while keeping others. That is <strong>refuted</strong>:
+  <code>projectRoot</code> is a single anchor, so first-party resolution is all-or-nothing, and the
+  all-fail case lands on <code>noStoryFiles</code>. The sibling case above is the real shape. The
+  <code>../../node_modules/*</code> paths do survive a wrong anchor, because they resolve to the same
+  absolute path from either package — which is why 32 files still hash even in the gross case.
+</p>
+</div>
+
+<div class="gap" id="g3">
+<header>
+  <h3>G3 — <code>--untraced</code> is silently inert in v2</h3>
+  <span class="sev sev-p1">P1</span>
+  <span class="tag">ignored user config</span>
+</header>
+<p>
+  v1 takes <code>--untraced</code> seriously in two places: <code>untrace()</code> removes matching files
+  from the seed list, <em>and</em> from every reason it traverses while walking upward
+  (<code>v1/getDependentStoryFiles.ts:219-227, 242, 345</code>). The consequence is stronger than "skip the
+  file" — an untraced file never propagates to its importers, and a changed untraced file under
+  <code>.storybook/</code> never even reaches <code>shouldBail</code>, because that is only called from the
+  traced set.
+</p>
+<p>
+  v2 has no <code>untraced</code> input. The file is a graph module, so it is hashed
+  (<code>v2/manifest.ts:369-395</code>) and rolled into every story subtree that reaches it
+  (<code>v2/graph.ts:22-32, 93-108</code>). Its bytes changing moves those story hashes and the Index
+  recaptures.
+</p>
+<p>
+  Direction is <strong>v2 wider</strong> — safe, in the over-capture direction. It is a P1 anyway because
+  it is a <strong>documented, user-facing option that silently stops working</strong>, and the reason people
+  reach for it is precisely that they have a noisy generated file that would otherwise recapture the world
+  on every build. For those users v2 does not degrade gracefully; it undoes the thing they configured. Whether
+  v2 should honour it, or refuse to run with it, or document its removal, is a decision — but silently
+  ignoring it is not one of the three.
+</p>
+</div>
+
+<div class="gap" id="g4">
+<header>
+  <h3>G4 — v1's dependency fail-safes have no v2 analogue</h3>
+  <span class="sev sev-p2">P2</span>
+  <span class="tag">under-capture</span>
+</header>
+<p>
+  v2's dependency story is deliberate and documented: don't hash <code>package.json</code> or lockfiles,
+  content-hash the installed files that are in the graph instead
+  (<code>v2/outOfGraphFiles.ts:12-15</code>). That is a better mechanism for the ordinary case and I am not
+  reopening it. What it does not carry over is v1's two <em>fail-safes</em>, both of which fire exactly when
+  the ordinary mechanism has no evidence:
+</p>
+<ul class="tight">
+  <li>
+    <strong><code>changedPackageFiles</code></strong> — when lockfile analysis itself fails, v1 falls back to
+    diffing <code>package.json</code> dependency fields and bails (<code>v1/index.ts:44-83</code>,
+    <code>v1/findChangedPackageFiles.ts:91-104</code>). v2 has no fallback: a dependency change it cannot see
+    through installed bytes produces a byte-identical manifest and captures nothing.
+  </li>
+  <li>
+    <strong><code>nodeModulesMissingInStats</code></strong> — when dependencies changed but the stats contain
+    no <code>node_modules</code> module at all, v1 treats that as evidence the stats are incomplete and bails
+    (<code>v1/getDependentStoryFiles.ts:263-272</code>). This is the sharper one, because
+    <em>hashing <code>node_modules</code> graph modules is v2's entire dependency coverage</em> — so the
+    precise condition under which v1 declares the stats untrustworthy is the condition under which v2
+    silently covers nothing.
+  </li>
+</ul>
+<p>
+  Neither is reachable from the harness (v1's own bail audit records both as untestable there), so this is
+  code-decisive rather than measured. The second one is worth a guard on its own terms: "the graph contains
+  zero <code>node_modules</code> modules" is a cheap, self-contained check on v2's side that needs no git
+  diff, and it is the same shape as the <code>noStorybookConfigFiles</code> guard that already shipped.
+</p>
+</div>
+
+<div class="gap" id="g5">
+<header>
+  <h3>G5 — decorated stats names drop real files, and v1 defends against it while v2 does not</h3>
+  <span class="sev sev-p2">P2</span>
+  <span class="tag">latent</span>
+  <span class="tag">mechanism measured</span>
+</header>
+<p>
+  <code>hashFiles</code> drops any stats name that fails <code>existsSync</code>
+  (<code>v2/manifest.ts:388</code>). Because <code>hashes.has(path)</code> is also the test for
+  "this is a real file" — gating story detection, the catch-all, and every attribution set — a dropped file
+  is hashed into <strong>nothing</strong>.
+</p>
+<p>
+  <strong>v1 handles this deliberately and v2 has no equivalent.</strong> v1's <code>normalize</code> strips
+  URL query params, with a comment naming a real-world case:
+</p>
+<pre><code>const URL_PARAM_REGEX = /(\?.*)/g;
+// Trim query params such as `?ngResource` which are sometimes present
+return URL_PARAM_REGEX.test(newPath) &amp;&amp; !CSF_REGEX.test(newPath)
+  ? newPath.replaceAll(URL_PARAM_REGEX, '')
+  : newPath;</code></pre>
+<p>(<code>v1/getDependentStoryFiles.ts:104-112</code>.) <code>normalizeStatsPath</code> has no such step.</p>
+
+<dl class="kv">
+<dt>Mechanism — measured with synthetic stats against real files on disk</dt>
+<dd>
+<pre><code>stats names:  ./src/__q/plain.ts
+              ./src/__q/icon.svg?url
+              ./src/__q/styles.css?inline
+              ./node_modules/css-loader/dist/cjs.js!./src/__q/styles.css
+
+files keys:   [ './src/lib/Badge/Badge.stories.tsx', './src/__q/plain.ts' ]
+Badge deps:   [ './src/__q/plain.ts' ]                 &lt;-- the other three are gone
+plain.ts      attributed? true
+icon.svg      attributed? false
+styles.css    attributed? false
+
+edit icon.svg AND styles.css, regenerate
+=&gt; manifest BYTE-IDENTICAL</code></pre>
+</dd>
+<dt>Reachability — not live on any of the ten fixtures</dt>
+<dd>
+<p>I went looking, and the honest answer is that nothing currently triggers it:</p>
+<ul class="tight">
+  <li>
+    <strong>Vite strips the query itself.</strong> I added
+    <code>import badgeIconUrl from './badge-icon.svg?url'</code> to a real component and rebuilt
+    <code>ui</code>'s Storybook. The stats name came out clean:
+    <code>"./src/lib/Badge/badge-icon.svg"</code>, and the manifest captured it
+    (<code>in files? true</code>, <code>storyReachable? true</code>). So the patched
+    <code>builder-vite</code> emits no <code>?</code>-bearing names at all. My initial P0 call was wrong,
+    and this is what corrected it.
+  </li>
+  <li>
+    <strong>Webpack's one decorated name is rescued.</strong> Across all ten fixtures there is exactly one
+    "real file plus decoration":
+    <code>../../node_modules/css-loader/dist/cjs.js??ruleSet[1].rules[4].use[1]!./src/lib/PathDerived/styles.module.css</code>.
+    That CSS file is <em>also</em> named cleanly 24 times in the same stats, and
+    <code>moduleFileNames</code> prefers <code>nameForCondition</code>, which is the undecorated absolute
+    path. It is captured (<code>storyReachable</code>). The prior "dangling reasons" work called this name
+    inert — correct verdict, slightly wrong reason: it is <em>rescued</em>, not absent.
+  </li>
+</ul>
+<p>
+  One number sharpens the severity, though. <code>nameForCondition</code> — the accidental defence — is
+  present on 349/375 <code>ui-webpack</code> modules, but on <strong>zero modules in all four vite
+  packages</strong>. On vite, <code>name</code> is the only spelling a module has, so any decoration that
+  ever does appear there is unrecoverable. The current safety is one builder-plugin change away from
+  evaporating, and it would evaporate silently.
+</p>
+</dd>
+</dl>
+</div>
+
+<div class="gap" id="g6">
+<header>
+  <h3>G6 — <code>--externals</code> becomes narrower the moment v2 is authoritative</h3>
+  <span class="sev sev-p2">P2</span>
+  <span class="tag">latent</span>
+</header>
+<p>
+  <strong>Refuted as a live defect, confirmed as a latent one.</strong> I expected this to be v2's worst
+  parity violation and it is not, today. The externals check does not live in v1's tracer at all — it is in
+  <code>gitInfo</code> (<code>tasks/gitInfo.ts:394-405</code>), and on a match it sets
+  <code>changedExternalFiles</code> <em>and clears <code>git.changedFiles</code></em>.
+  <code>compareChangedFiles</code> sees the missing list first (<code>turbosnap/index.ts:30-35</code>) and
+  returns the same bailed result for both algorithms, so v2 is never invoked. No difference.
+</p>
+<p>
+  The latent problem is real. An externals file — the canonical example being a
+  <code>.scss</code> bundle compiled outside Storybook — is in none of v2's three hashed sets: not a stats
+  module, not under <code>configDir</code>, not under a <code>staticDir</code>. It contributes to no hash.
+  The bail exists today only because the CLI still takes a git diff. The thing that makes v2 attractive is
+  not needing one — and at that point <code>--externals</code> has nothing left to evaluate against and the
+  bail silently disappears. The same reasoning applies to <code>invalidChangedFiles</code>, which is
+  likewise a fail-safe over a diff v2 does not take.
+</p>
+<p>
+  This belongs on the record now rather than at cutover, because it is an argument about what the CLI must
+  keep computing, and that is a design constraint on the switch.
+</p>
+</div>
+
+<div class="gap" id="g7">
+<header>
+  <h3>G7 — <code>PREVIEW_CONFIG_PATTERN</code> hardcodes <code>.storybook</code></h3>
+  <span class="sev sev-p3">P3</span>
+  <span class="tag">over-capture</span>
+  <span class="tag">measured</span>
+</header>
+<p>
+  <code>storybookFiles.ts:12</code> finds the preview config by path match:
+</p>
+<pre><code>const PREVIEW_CONFIG_PATTERN = /(^|\/)\.storybook\/preview\.[cm]?[jt]sx?$/;</code></pre>
+<p>
+  The literal <code>.storybook</code> is baked in, even though <code>configDir</code> is passed into
+  <code>buildManifest</code> a few lines away. Measured with a custom config directory
+  (<code>-c config</code>, synthetic stats naming <code>./config/preview.ts</code> importing
+  <code>./config/customTheme.ts</code>):
+</p>
+<pre><code>storybookFiles keys : [ &lt;storybookGlobals&gt;, &lt;storybookVersion&gt;, &lt;storybookConfig&gt; ]
+previewSubtree      : []                                    &lt;-- no keyed preview entry
+storybookGlobals    : [ ./config/customTheme.ts, ./config/preview.ts ]
+storybookConfigFiles: [ ./config/customTheme.ts, ./config/main.ts, ./config/preview.ts ]</code></pre>
+<p>
+  <strong>Coverage is intact</strong> — the files land in the catch-all and <code>&lt;storybookConfig&gt;</code>
+  covers their bytes — so this is over-capture in the safe direction. What is lost is attribution
+  granularity: a preview-subtree change recaptures everything through the bucket instead of being
+  attributed to the preview entry. Low severity, but it is a hardcoded assumption sitting next to the value
+  that would remove it, and it is the kind of thing that reads as a bug the first time someone with a
+  custom config dir looks at their manifest.
+</p>
+</div>
+
+<hr>
+
+<h2 id="absorbed">What the previous audit's findings look like now</h2>
+<p>
+  Re-tested against <code>2df56c7c</code>. All seven are closed. Recording this so nobody re-audits them,
+  and so the new bail vocabulary is discoverable.
+</p>
+<div class="scroll">
+<table>
+<thead><tr><th>Prior finding</th><th>Now</th><th>Evidence</th></tr></thead>
+<tbody>
+<tr>
+  <td>Zero-file out-of-graph section omitted silently</td>
+  <td><span class="v v-ok">fixed</span></td>
+  <td><code>getEmptyOutOfGraphBail</code> (<code>v2/index.ts:44-66</code>) → <code>noStorybookConfigFiles</code> / <code>noStaticFiles</code></td>
+</tr>
+<tr>
+  <td><code>&lt;staticFiles&gt;</code> only resolved for <code>main.ts</code></td>
+  <td><span class="v v-ok">fixed</span></td>
+  <td>Regex widened to <code>/^main\.[cm]?[jt]sx?$/</code> (<code>getStorybookMetadata.ts:304</code>) and <code>readMainConfigField</code> now reads the field from an evaluated config too (<code>:169-172</code>), so <code>findStaticDirectories</code> no longer depends on the require having failed</td>
+</tr>
+<tr>
+  <td><code>BuildUploadHashesFailure</code> discarded</td>
+  <td><span class="v v-ok">fixed</span></td>
+  <td><code>classifyUploadHashesFailure</code> → <code>indexContractViolation</code> + Sentry (<code>v2/index.ts:210-228</code>); transport failures deliberately get no Sentry event</td>
+</tr>
+<tr>
+  <td>Mutation aimed at the baseline build</td>
+  <td><span class="v v-ok">fixed</span></td>
+  <td><code>buildId: ctx.announcedBuild.id</code> (<code>turbosnap/index.ts:57</code>)</td>
+</tr>
+<tr>
+  <td>Prebuilt Storybooks lose both out-of-graph sections</td>
+  <td><span class="v v-ok">fixed</span></td>
+  <td>New <code>staticDirsDeclared</code> input + <code>unresolvedStaticDirectories</code> bail when the prebuilt config declared static dirs but none resolved (<code>v2/index.ts:88-100</code>)</td>
+</tr>
+<tr>
+  <td>Harness derived inputs differently from production</td>
+  <td><span class="v v-ok">fixed</span></td>
+  <td>Commit <code>4b1bdf2f</code>; production and the subcommand now share the same config regex</td>
+</tr>
+<tr>
+  <td>Attribution closed over <code>files</code>, not <code>hashes</code></td>
+  <td><span class="v v-ok">fixed</span></td>
+  <td><code>ensureFile(files, dependency, hashes)</code> for each concatenated inner file (<code>v2/manifest.ts:322</code>)</td>
+</tr>
+<tr>
+  <td><code>ctx.build</code> unguarded</td>
+  <td><span class="v v-ok">fixed</span></td>
+  <td>Commit <code>f2365ef1</code>, plus the target move to <code>announcedBuild</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="panel">
+  <h3>One follow-up owed on the <code>main.*</code> fix</h3>
+  <p>
+    The fix is correct by inspection and the code comment names the exact resolver behaviour it works
+    around. But the regression test that would pin it is the five-way filename matrix from the previous
+    audit (<code>main.ts</code> / ESM <code>main.js</code> / CJS <code>main.js</code> /
+    <code>main.mjs</code> / <code>main.cjs</code>, against the real <code>getStorybookMetadata</code>), and
+    I did not re-run it here. Worth adding as a test rather than leaving as a one-time measurement,
+    especially since one of the five cases only regressed because Node 22 changed
+    <code>require(esm)</code> — an external trigger no code review would catch.
+  </p>
+</div>
+
+<hr>
+
+<h2>Closed as safe, and things I refuted</h2>
+<div class="scroll">
+<table>
+<thead><tr><th>Question</th><th>Verdict</th><th>Evidence</th></tr></thead>
+<tbody>
+<tr>
+  <td>Do query-suffixed module names cost anything on the real fixtures?</td>
+  <td><span class="v v-ok">no</span></td>
+  <td>Rebuilt <code>ui</code> with a <code>?url</code> import; builder-vite strips the query. One decorated name corpus-wide, on webpack, and it is rescued by <code>nameForCondition</code>. My initial P0 call was wrong.</td>
+</tr>
+<tr>
+  <td>Does a <em>partial</em> base-dir mismatch under-capture?</td>
+  <td><span class="v v-ok">refuted</span></td>
+  <td><code>projectRoot</code> is a single anchor, so first-party resolution is all-or-nothing → 0 stories → <code>noStoryFiles</code>. Replaced by the sharper sibling-package case (G2).</td>
+</tr>
+<tr>
+  <td>Is <code>--externals</code> a live parity violation?</td>
+  <td><span class="v v-ok">refuted</span></td>
+  <td><code>gitInfo</code> clears <code>git.changedFiles</code>, so both algorithms share one bail before v2 runs. Latent only (G6).</td>
+</tr>
+<tr>
+  <td>Can <code>existsSync</code> let a <em>directory</em> into <code>getFileHashes</code>?</td>
+  <td><span class="v v-ok">no</span></td>
+  <td>No stats name in any of the ten fixtures resolves to a directory. The require-context names that look like directories (<code>./src/lib/ lazy ^…</code>) fail to resolve as written.</td>
+</tr>
+<tr>
+  <td>Does <code>--only-story-names</code> interact with TurboSnap?</td>
+  <td><span class="v v-ok">no</span></td>
+  <td>Never read by either algorithm; mutually exclusive with <code>--only-changed</code> (<code>lib/getOptions.ts:266</code>).</td>
+</tr>
+<tr>
+  <td>Do the pre-algorithm bail reasons diverge between v1 and v2?</td>
+  <td><span class="v v-ok">no</span></td>
+  <td>Every pre-seed path (<code>noAncestorBuild</code>, <code>rebuild</code>, <code>invalidChangedFiles</code>, <code>changedExternalFiles</code>) leaves <code>git.changedFiles</code> undefined, and <code>turbosnap/index.ts:30-35</code> returns one shared bail for both before v2 is called.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<hr>
+
+<h2>Method notes and what this audit did not cover</h2>
+<ul class="tight">
+  <li>
+    <strong>Traps observed.</strong> <code>yarn build</code> re-run after discovering the tree had moved
+    (trap 1) — every measurement above is against <code>2df56c7c</code>'s compiled output.
+    <code>ui</code>'s Storybook was rebuilt twice and its baseline stats restored; <code>marketing-ui</code>
+    was read but never rebuilt (trap 4). All fixture edits were reverted and
+    <code>git status</code> verified clean after each (trap 3). Stats names were normalized with the CLI's
+    own <code>paths.ts</code> logic, never compared raw (trap 5). The harness's own derivation divergence —
+    trap 5's new sibling, added to the README last round — is now moot, since commit
+    <code>4b1bdf2f</code> aligned it.
+  </li>
+  <li>
+    <strong>The instrument that found most of this</strong> was not a probe script but a systematic diff of
+    v1's consumed context against v2's input struct. Seven of v2's fields against roughly twenty of v1's
+    reads; each omission classified as wider / narrower / no difference and justified from the code. That is
+    where G3, G4 and G6 came from, and it is repeatable as v2's input list grows — worth doing again the
+    next time a field is added.
+  </li>
+  <li>
+    <strong>Not covered.</strong> The algorithm itself. Cost. rspack. The Index's half of anything. Whether
+    <code>&lt;storybookGlobals&gt;</code> over-capture matters in practice, which still needs a story
+    depending on neither React nor the Storybook runtime. The four pre-algorithm bail reasons, which still
+    need synthetic git history — though I have now established they cannot diverge between v1 and v2, which
+    lowers the value of testing them.
+  </li>
+  <li>
+    <strong>Not chased.</strong> Whether other <code>?</code>-forms (<code>?raw</code>,
+    <code>?inline</code>, <code>?worker</code>) survive builder-vite's stats plugin. Only
+    <code>?url</code> was measured end-to-end. They go through the same plugin path, so I expect the same
+    answer, but I did not spend a second rebuild on it.
+  </li>
+</ul>
+
+<p class="footnote" style="margin-top:2.5rem">
+  Report: <code>docs/turbosnap-v2-harness/unseen-inputs-audit.html</code>. Predecessor:
+  <code>input-boundary-audit.html</code>. Tickets chartered on <em>TurboSnap 2.0 — Next Phase 2</em>.
+  Probe scripts left at <code>~/.claude/jobs/67fe4d4c/tmp/probe-unresolved.mjs</code> and
+  <code>probe-invisible.mjs</code>.
+</p>
+
+</main>
+</body>
+</html>
