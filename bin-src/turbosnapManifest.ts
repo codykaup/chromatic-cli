@@ -16,10 +16,6 @@ import {
  * referenced by the stats file and derives the per-story and whole-Storybook hashes, without the
  * GraphQL step used during a real build.
  *
- * Command:
- *   chromatic turbosnap-manifest [-s|--stats-file] [-b|--storybook-base-dir] [-c|--config-dir]
- *                                [--static-dir] [--build-script-name]
- *
  * The stats file path is resolved relative to the Storybook base directory, so a monorepo project
  * only needs to pass the base directory:
  *   npx chromatic turbosnap-manifest -b packages/ui > turbosnap-manifest.json
