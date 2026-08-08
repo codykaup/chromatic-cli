@@ -151,13 +151,12 @@ export const findConfigFlags = async ({
  * A loaded Storybook main config, which answers field reads in whichever form the config took.
  *
  * An evaluated module exposes its fields as plain properties, nested under `default` for ESM. A
- * parsed AST answers `getSafeFieldValue` instead. Only `readMainConfig` knows which it got.
+ * parsed AST answers `getSafeFieldValue` instead. `readMainConfig` hides that behind `readField`, so
+ * callers read fields the same way without caring which form the config took.
  */
 export interface MainConfigReader {
   /** Reads a top-level field, returning `undefined` when it is absent. */
   readField: (field: string) => unknown;
-  /** Whether the config was parsed as an AST rather than evaluated as a module. */
-  isAstConfig: boolean;
 }
 
 /**
@@ -283,9 +282,8 @@ export function mergeStaticDirectories(
  * on a Node without `require(esm)` (unflagged from 22.12, and this package supports >=22.0). That is
  * pre-existing behaviour, not a widening.
  *
- * `main.mjs` and `main.cjs` are deliberately absent: parsing them would newly populate `builder`,
- * `refs` and `staticDir` on `ctx.storybook`, and TurboSnap v1 reads `staticDir` to decide its
- * static-file bails. Callers that only feed TurboSnap v2 pass a wider pattern of their own.
+ * `main.mjs` and `main.cjs` are outside this pattern, so the shared metadata path does not parse
+ * them. Callers that only feed TurboSnap v2 pass a wider pattern of their own.
  */
 const SHARED_MAIN_CONFIG_PATTERN = /^main\.[jt]sx?$/;
 
@@ -326,10 +324,7 @@ export async function readMainConfig(
     log.debug({ configDirectory, mainConfig });
     // An evaluated module that exports nothing is treated the same as no config at all.
     if (!mainConfig) return undefined;
-    return {
-      readField: (field) => mainConfig.default?.[field] ?? mainConfig[field],
-      isAstConfig: false,
-    };
+    return { readField: (field) => mainConfig.default?.[field] ?? mainConfig[field] };
   } catch (err) {
     log.debug({ storybookV6error: err });
   }
@@ -342,7 +337,7 @@ export async function readMainConfig(
 
     const mainConfig = await readConfig(storybookConfig);
     log.debug({ configDirectory, mainConfig: printConfig(mainConfig) });
-    return { readField: (field) => mainConfig.getSafeFieldValue([field]), isAstConfig: true };
+    return { readField: (field) => mainConfig.getSafeFieldValue([field]) };
   } catch (err) {
     log.debug({ storybookV7error: err });
     return undefined;
@@ -356,11 +351,6 @@ export const getStorybookMetadata = async (
   const configDirectory = deps.options.storybookConfigDir ?? '.storybook';
   const mainConfig = await readMainConfig(configDirectory, deps.log, SHARED_MAIN_CONFIG_PATTERN);
 
-  // `refs` and `staticDir` land on `ctx.storybook`, which TurboSnap v1 reads to decide its
-  // static-file bails, so both stay restricted to AST-parsed configs as they were before the reader
-  // existed. Callers that only feed TurboSnap v2 read the config themselves, unrestricted.
-  const astConfig = mainConfig?.isAstConfig ? mainConfig : undefined;
-
   const info = await Promise.allSettled([
     findConfigFlags({
       buildScriptName: deps.options.buildScriptName,
@@ -368,8 +358,8 @@ export const getStorybookMetadata = async (
     }),
     findStorybookVersion(deps),
     findBuilder(mainConfig),
-    findReferences(astConfig),
-    findStaticDirectories(astConfig, configDirectory),
+    findReferences(mainConfig),
+    findStaticDirectories(mainConfig, configDirectory),
   ]);
 
   deps.log.debug(info);
