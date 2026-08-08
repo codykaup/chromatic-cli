@@ -117,9 +117,6 @@ const findStorybookVersion = async ({ env, log, options, packageJson }: Storyboo
 /**
  * Reads the `-c` and `-s` flags out of the project's Storybook build script.
  *
- * Takes the build script name directly so `chromatic turbosnap-manifest` derives the flags the same
- * way a real build does, rather than reading a different config directory than production would.
- *
  * @param input The project's package.json and the resolved build script name.
  * @param input.buildScriptName The package.json script that builds Storybook.
  * @param input.packageJson The project's package.json.

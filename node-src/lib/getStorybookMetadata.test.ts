@@ -91,7 +91,8 @@ function getDeps(project: string) {
 }
 
 describe('getStorybookMetadata staticDirs discovery', () => {
-  // `main.ts` is the only extension `require()` misses that the shared pattern still parses.
+  // `require()` resolves `main.js` but misses `main.ts`/`main.tsx`/`main.jsx`, which the shared
+  // pattern still parses. `main.ts` stands in for that parsed group here.
   it('resolves staticDirs from a parsed main.ts', async () => {
     const metadata = await getStorybookMetadata(getDeps('ts-esm'));
 
