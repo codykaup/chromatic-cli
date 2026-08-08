@@ -205,7 +205,14 @@ export async function findBuilder(mainConfig?: MainConfigReader) {
   ]);
 }
 
-/** Reads a field only when it holds a plain object, which is all `findBuilder` can use. */
+/**
+ * Reads a field only when it holds a plain object, which is all `findBuilder` can use.
+ *
+ * @param mainConfig The loaded main config to read from.
+ * @param field The top-level field to read.
+ *
+ * @returns The field's value when it is a plain object, otherwise `undefined`.
+ */
 function objectField(
   mainConfig: MainConfigReader,
   field: string
