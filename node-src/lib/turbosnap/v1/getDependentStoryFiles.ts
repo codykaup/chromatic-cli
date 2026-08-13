@@ -24,7 +24,7 @@ const isUserModule = (module_: Module | Reason) =>
   !INTERNALS.some((re) => re.test((module_ as Module).name || (module_ as Reason).moduleName));
 
 // For any path in node_modules, return the package name, including scope prefix if any.
-const getPackageName = (modulePath: string) => {
+export const getPackageName = (modulePath: string) => {
   const [, scopedName] = modulePath.match(/\/node_modules\/(@[\w-]+\/[\w-]+)\//) || [];
   if (scopedName) return scopedName;
   const [, unscopedName] = modulePath.match(/\/node_modules\/([\w-]+)\//) || [];

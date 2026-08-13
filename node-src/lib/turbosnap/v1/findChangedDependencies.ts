@@ -7,16 +7,29 @@ import { checkoutFile, findFilesFromRepositoryRoot, getRepositoryRoot } from '..
 import { Context } from '../../../types';
 import { matchesFile } from '../../utilities';
 import { compareBaseline } from './compareBaseline';
+import { BuildPackages, isManifestRelevant } from './getBuildPackages';
 import { getDependencies } from './getDependencies';
 
 const PACKAGE_JSON = 'package.json';
 export const SUPPORTED_LOCK_FILES = ['yarn.lock', 'pnpm-lock.yaml', 'package-lock.json'];
 
+// Reads the `name` field from a manifest on disk, returning `undefined` if it can't be read.
+const readManifestName = (absoluteManifestPath: string): string | undefined => {
+  try {
+    const { name } = JSON.parse(fs.readFileSync(absoluteManifestPath, 'utf8'));
+    return typeof name === 'string' ? name : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 // Yields a list of dependency names which have changed since the baseline.
 // E.g. ['react', 'react-dom', '@storybook/react']
+// When `buildPackages` is provided, manifests that can't affect the Storybook build are pruned
+// before diffing, avoiding unnecessary work in monorepos with many unrelated packages.
 // TODO: refactor this function
 // eslint-disable-next-line complexity,max-statements
-export const findChangedDependencies = async (ctx: Context) => {
+export const findChangedDependencies = async (ctx: Context, buildPackages?: BuildPackages) => {
   const { packageMetadataChanges } = ctx.git;
   const { untraced = [] } = ctx.options;
 
@@ -102,8 +115,27 @@ export const findChangedDependencies = async (ctx: Context) => {
     `Found ${filteredPathPairs.length} manifest/lockfile pairs to diff`
   );
 
+  // Prune manifests that can't affect the Storybook build (e.g. unrelated packages in a monorepo).
+  // Skipped when we couldn't derive build info, to avoid dropping relevant manifests.
+  const relevantPathPairs = buildPackages
+    ? filteredPathPairs.filter(([manifestPath]) => {
+        const manifestName = readManifestName(path.join(rootPath, manifestPath));
+        const relevant = isManifestRelevant(manifestPath, manifestName, buildPackages);
+        if (!relevant) {
+          ctx.log.debug({ manifestPath }, 'Skipping package.json not used by the Storybook build');
+        }
+        return relevant;
+      })
+    : filteredPathPairs;
+
+  if (buildPackages && relevantPathPairs.length !== filteredPathPairs.length) {
+    ctx.log.debug(
+      `Filtered ${filteredPathPairs.length} to ${relevantPathPairs.length} manifest/lockfile pairs relevant to the build`
+    );
+  }
+
   // Short circuit
-  if (filteredPathPairs.length === 0) {
+  if (relevantPathPairs.length === 0) {
     return [];
   }
 
@@ -117,7 +149,7 @@ export const findChangedDependencies = async (ctx: Context) => {
 
   try {
     await Promise.all(
-      filteredPathPairs.map(([manifestPath, lockfilePath, commits]) =>
+      relevantPathPairs.map(([manifestPath, lockfilePath, commits]) =>
         headDependenciesLimit(async () => {
           // Create a temporary directory for the HEAD dependencies. We do this to isolate the
           // package.json and lock files from the rest of the repository because the `inspect` function

@@ -2,6 +2,7 @@ import snykGraph from '@snyk/dep-graph';
 import {
   copyFileSync as unMockedCopyFileSync,
   mkdtempSync as unMockedMkdtempSync,
+  readFileSync as unMockedReadFileSync,
   statSync as unMockedStatSync,
 } from 'fs';
 import { buildDepTreeFromFiles } from 'snyk-nodejs-lockfile-parser';
@@ -31,6 +32,9 @@ copyFileSync.mockReturnValue(undefined);
 
 const mkdtempSync = unMockedMkdtempSync as Mock;
 mkdtempSync.mockReturnValue(tmpdir);
+
+const readFileSync = unMockedReadFileSync as Mock;
+readFileSync.mockReturnValue('{}');
 
 const getRepositoryRoot = vi.mocked(git.getRepositoryRoot);
 const checkoutFile = vi.mocked(git.checkoutFile);
@@ -398,5 +402,70 @@ describe('findChangedDependencies', () => {
       '/root/subdir/package-lock.json',
       `${tmpdir}/package-lock.json`
     );
+  });
+
+  it('prunes manifests not relevant to the build when buildPackages is provided', async () => {
+    findFilesFromRepositoryRoot.mockImplementation((_, __, file) =>
+      Promise.resolve(file.startsWith('**') ? [file.replace('**', 'subdir')] : [file])
+    );
+
+    mockInspect(/* HEAD / */ ['react@18.2.0'], /* Baseline A / */ ['react@18.3.0']);
+    mockChangedPackagesGraph(['react@18.3.0']);
+
+    const context = getContext({
+      git: {
+        packageMetadataChanges: [
+          { changedFiles: ['package.json', 'subdir/package.json'], commit: 'A' },
+        ],
+      },
+    });
+
+    // The build only contains root source, so the subdir manifest can't affect it.
+    const buildPackages = {
+      packageNames: new Set<string>(['react']),
+      sourceModulePaths: ['src/index.tsx'],
+    };
+
+    await expect(findChangedDependencies(context, buildPackages)).resolves.toEqual(['react']);
+
+    // Only the root manifest/lockfile pair is diffed (HEAD + baseline = 2 inspect calls).
+    expect(inspect).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a subpackage manifest whose directory contains build source', async () => {
+    findFilesFromRepositoryRoot.mockImplementation((_, __, file) =>
+      Promise.resolve(file.startsWith('**') ? [file.replace('**', 'subdir')] : [file])
+    );
+
+    mockInspect(
+      // HEAD /
+      ['react@18.2.0'],
+      // HEAD /subdir/
+      ['lodash@4.17.21'],
+      // Baseline A /
+      ['react@18.3.0'],
+      // Baseline A /subdir/
+      ['lodash@4.18.0']
+    );
+    mockChangedPackagesGraph(['react@18.3.0', 'lodash@4.18.0']);
+
+    const context = getContext({
+      git: {
+        packageMetadataChanges: [
+          { changedFiles: ['package.json', 'subdir/package.json'], commit: 'A' },
+        ],
+      },
+    });
+
+    // The subdir workspace has source in the build, so it must still be diffed.
+    const buildPackages = {
+      packageNames: new Set<string>(),
+      sourceModulePaths: ['subdir/src/index.tsx'],
+    };
+
+    await expect(findChangedDependencies(context, buildPackages)).resolves.toEqual(
+      expect.arrayContaining(['react', 'lodash'])
+    );
+    expect(inspect).toHaveBeenCalledTimes(4);
   });
 });

@@ -11,6 +11,7 @@ import { classifyChangedPackageFilesDetail } from './classifyBailDetail';
 import { classifyTagsFromError } from './classifyBailRootCause';
 import { findChangedDependencies } from './findChangedDependencies';
 import { findChangedPackageFiles } from './findChangedPackageFiles';
+import { getBuildPackages } from './getBuildPackages';
 import { getDependentStoryFiles } from './getDependentStoryFiles';
 
 /**
@@ -37,12 +38,18 @@ export async function traceChangedFiles(ctx: Context): Promise<TraceChangedFiles
   const { statsPath } = ctx.fileInfo;
   const { changedFiles = [], packageMetadataChanges } = ctx.git;
 
+  // Read the stats file once and reuse it, both to scope which package.json files are relevant for
+  // tracing and to trace the changed files into affected story files below.
+  const stats = await readStatsFile(statsPath);
+
   // Only set when lockfile analysis ran and succeeded; an empty array means "no changes found".
   let changedDependencyNames: string[] | undefined;
   let pendingError: unknown;
   let pendingPatch: Partial<ChangedPackageFilesBailReason> | undefined;
   if (packageMetadataChanges?.length) {
-    changedDependencyNames = await findChangedDependencies(ctx).catch((err) => {
+    // Determine which packages are actually part of the build so we only diff relevant manifests.
+    const buildPackages = getBuildPackages(ctx, stats);
+    changedDependencyNames = await findChangedDependencies(ctx, buildPackages).catch((err) => {
       pendingError = err;
       pendingPatch = classifyChangedPackageFilesDetail(err);
 
@@ -83,8 +90,6 @@ export async function traceChangedFiles(ctx: Context): Promise<TraceChangedFiles
       }
     }
   }
-
-  const stats = await readStatsFile(statsPath);
 
   await checkStorybookBaseDirectory(ctx, stats);
 
